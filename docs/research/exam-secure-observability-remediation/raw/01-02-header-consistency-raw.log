@@ -1,0 +1,91 @@
+############ EXP1+EXP2 start 2026-11-08T01:05:51+08:00 ############
+=== E1a forged headers -> unmatched /api route (expect 404 envelope) @2026-11-08T01:05:51+08:00
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"e49d3bc3-b4f6-4349-9b49-fbfc92f217de"}}
+HTTP_STATUS:404
+=== E1b forged headers -> save without auth (expect 401) @2026-11-08T01:05:51+08:00
+{"error":{"code":"AUTH_REQUIRED","message":"请先登录","requestId":"cf9a57c4-bc4d-444c-aa63-a6cb67c7f142"}}
+HTTP_STATUS:401
+=== E1c forged headers claiming ANOTHER request's real requestId -> 401 @2026-11-08T01:05:51+08:00
+{"error":{"code":"AUTH_REQUIRED","message":"请先登录","requestId":"04f96794-d26a-437b-8662-d5364717af2d"}}
+HTTP_STATUS:401
+=== E1d forged headers -> schema-invalid save body (expect 400 envelope) @2026-11-08T01:05:51+08:00
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"clientSeq","code":"INVALID_TYPE","params":{"expected":"number","received":"string"},"message":"Expected number, received string"}]},"requestId":"d3fadd7e-c914-48bd-bd84-6d34ffc9b971"}}
+HTTP_STATUS:400
+=== E1e forged headers -> ACCEPTED save cs=9 bv=4 (expect 200 accepted) @2026-11-08T01:05:52+08:00
+{"accepted":true,"serverVersion":5,"savedAt":"2026-11-07T17:05:52.032Z"}
+HTTP_STATUS:200
+=== E1f forged headers -> business rejection cs=9 diff content (expect 200 CONFLICTING_PAYLOAD + WARN) @2026-11-08T01:05:52+08:00
+{"accepted":false,"reason":"CONFLICTING_PAYLOAD","message":"答案数据冲突，请刷新页面后重试","serverVersion":5,"savedAt":"2026-11-07T17:05:52.100Z"}
+HTTP_STATUS:200
+=== E2a clean 404 (envelope<->pino) @2026-11-08T01:05:52+08:00
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"e2d21fed-61e0-4b37-9ddf-085d1ddd987f"}}
+HTTP_STATUS:404
+=== E2b login FAILURE (envelope<->pino<->audit login.failure) @2026-11-08T01:05:52+08:00
+{"error":{"code":"AUTH_INVALID_CREDENTIALS","message":"用户名或密码错误","requestId":"4b5e09fc-2999-4703-b832-6aa77087095f"}}
+HTTP_STATUS:401
+--- audit login.failure rows (newest first):
+ERROR:  operator does not exist: text ->> unknown
+LINE 1: ...ted_at||'|'||action||'|'||target_id||'|'||metadata->>'reques...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+=== E2c login SUCCESS admin (pino<->audit login.success; 200 body has no requestId) @2026-11-08T01:05:54+08:00
+{"id":"a4bfe6d9-c80a-4089-80d1-871e1b3574d1","username":"admin","name":"Admin","role":"Admin","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","capabilities":["attempt.export","attempt.force_submit","attempt.misconduct.mark","attempt.time.grant","attempt.timeline.view","audit_log.view","candidate.create","candidate.delete","candidate.import","candidate.update","candidate.view","candidate_field.create","candidate_field.delete","candidate_field.update","candidate_field.view","course.create","course.delete","course.teacher_assignment.manage","course.teacher_assignment.view","course.update"
+--- audit login.success rows (newest first):
+ERROR:  operator does not exist: text ->> unknown
+LINE 1: SELECT created_at||'|'||action||'|'||metadata->>'requestId' ...
+                                                     ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+############ EXP1+EXP2 http legs end 2026-11-08T01:05:56+08:00 ############
+############ LOG ANALYSIS 2026-11-08T01:05:56+08:00 ############
+--- canary leak check (expect 0 hits in server.log):
+0
+--- envelope requestIds captured (from raw above), matching pino req/res lines:
+--- audit login.failure rows (fixed cast):
+--- audit login.success rows (fixed cast):
+--- pino pairs for captured envelope requestIds:
+reqId=e49d3bc3-b4f6-4349-9b49-fbfc92f217de lines=2
+    30 incoming request 
+    30 request completed 404
+reqId=cf9a57c4-bc4d-444c-aa63-a6cb67c7f142 lines=2
+    30 incoming request 
+    30 request completed 401
+reqId=04f96794-d26a-437b-8662-d5364717af2d lines=2
+    30 incoming request 
+    30 request completed 401
+reqId=d3fadd7e-c914-48bd-bd84-6d34ffc9b971 lines=2
+    30 incoming request 
+    30 request completed 400
+reqId=e2d21fed-61e0-4b37-9ddf-085d1ddd987f lines=2
+    30 incoming request 
+    30 request completed 404
+reqId=4b5e09fc-2999-4703-b832-6aa77087095f lines=2
+    30 incoming request 
+    30 request completed 401
+--- e7a114e3 (T06b original) line count (must be exactly 2: its own req+res, no adoption by E1c):
+2
+--- audit login.failure rows (parenthesized):
+01:05:52|login.failure|4b5e09fc-2999-4703-b832-6aa77087095f|reason=invalid_password
+00:34:53|login.failure|6fe94433-90d1-4a1d-aed8-71e0f3eccfd3|reason=unknown_user
+--- audit login.success rows:
+01:05:54|login.success|3bd562db-0b7e-473a-836a-bc4c00d5d0e4
+00:41:10|login.success|58abc859-812a-452f-a75e-eeca7cee8205
+--- full metadata of newest login.failure row:
+{"reason": "invalid_password", "requestId": "4b5e09fc-2999-4703-b832-6aa77087095f"}
+--- pino pair for login.success audit requestId 3bd562db:
+    30 incoming request  /api/auth/login
+    30 request completed 200 
+--- WARN lines around E1f (17:05:52) — reqId must be fresh, not canary/claimed:
+{"level":40,"time":1794071050167,"pid":773644,"hostname":"Hu","reqId":"cd2a6f60-713e-4f01-9a99-7aa7b3b1e722","actorId":"5fdcab8e-4709-45d7-92fd-cc8ffbd63e62","actorRole":"Candidate","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"5fdcab8e-4709-45d7-92fd-cc8ffbd63e62","actorRole":"Candidate","attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","clientSeq":4,"reason":"INVALID_ANSWER","serverVersion":2,"msg":"Answer save rejected"}
+{"level":40,"time":1794071152123,"pid":783608,"hostname":"Hu","reqId":"cde05ea4-b2fd-40e3-9115-4dff29e0c77b","actorId":"5fdcab8e-4709-45d7-92fd-cc8ffbd63e62","actorRole":"Candidate","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","actorId":"5fdcab8e-4709-45d7-92fd-cc8ffbd63e62","actorRole":"Candidate","attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","clientSeq":9,"reason":"CONFLICTING_PAYLOAD","serverVersion":5,"msg":"Answer save rejected"}
+--- digest check: sha256('true') and sha256('false') (canonicalAnswerIdentity serialize: bare token):
+true -> b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+false -> fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa
+--- pino pair for force-submit requestId 59b19aff:
+    30 incoming request  POST /api/admin/attempts/ec7730e0-ba44-43da-b026-bc5528b1b275/for
+    30 request completed 200  
+--- full-run canary leak check in server.log:
+0
+--- envelope requestIds observed this session (uniqueness sample):
+aafc5698 e7a114e3 a96a8d50 349b5256 14a695e7 1f5e1b70 e49d3bc3 cf9a57c4 04f96794 d3fadd7e e2d21fed 4b5e09fc 59b19aff
+--- total 'Answer save rejected' WARN lines:
+7

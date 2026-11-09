@@ -1,0 +1,6 @@
+base GET /api/candidate/exams: header_size= body=969 total=969+
+base GET 404: header_size= body=118
+base GET /api/health: header_size= body=15
+int GET /api/candidate/exams: header_size= body=969 total=969+
+int GET 404: header_size= body=118
+int GET /api/health: header_size= body=15

@@ -1,0 +1,48 @@
+E2E evidence — SaveAnswer requestId 真实浏览器链路
+====================================================
+
+对象
+  CWD : /home/hoo/Source/exam-gap-worktrees/integration-final
+  HEAD: a84b416a0c58cd73a7143eef274ef2c68f0f4fcc (final-closure-integration)
+  产品代码 = exact HEAD。工作树另有 2 个未提交测试文件改动：
+    apps/e2e/e2e/investigation-ui-acceptance.spec.ts   (M3 forged id → UUID 形状)
+    apps/api/src/routes/proctorMonitoring.crossOrg.test.ts (5 行)
+  M4/M5 的测试体与产品代码不受该改动影响（diff 仅 :762 的 M3 伪造值）。
+
+环境
+  WSL2 Linux 6.18.54.1-microsoft-standard-WSL2; Node v24.22.1; pnpm 11.1.2
+  PostgreSQL 18.4 (exam-dev-db-1, postgres:18.4-bookworm); Playwright Chromium
+  E2E runner: bash scripts/e2e/run.sh (repo-owned topology; exam_e2e serial DB)
+
+运行 1 — M4（真实 200 业务拒绝）
+  DEV_API_PORT=3520 E2E_WORKERS=1 E2E_PRT_SHOT_DIR=/tmp/m4-evidence2 \
+    bash scripts/e2e/run.sh --grep "M4:" --keep-server
+  Result: 1 passed (8.0s); EXIT=0
+  Test: investigation-ui-acceptance.spec.ts:928 M4
+  Screenshots: 05-save-rejection-request-id.png, 06-timeline-client-claimed-request-id.png
+  Server WARN reqId: e0289b97-f55e-4ee6-8864-6472faf51116
+  UI 请求编号 (05): e0289b97-f55e-4ee6-8864-6472faf51116
+  Admin timeline (06): answer_autosave_failed, "客户端声明，未经服务端核验",
+    metadata 前缀 e0289b97-f55e-4ee6-8864-6472faf511
+
+运行 2 — M5（transport failure → UNKNOWN）
+  DEV_API_PORT=3510 E2E_WORKERS=1 E2E_PRT_SHOT_DIR=/tmp/m5-evidence \
+    bash scripts/e2e/run.sh --grep "M5:" --keep-server
+  Result: 1 passed (4.1s); EXIT=0
+  Test: investigation-ui-acceptance.spec.ts:1064 M5
+  Screenshot: 07-transport-unknown-no-request-id.png（页面无“请求编号”）
+
+未成功的运行（如实记录，不作为证据）
+  05:47 DEV_API_PORT=3400 → API EADDRINUSE，未进入 Playwright
+  05:55 DEV_API_PORT=3460 → API EADDRINUSE，未进入 Playwright
+  两次均为宿主端口被其它进程瞬时占用；换端口后成功。
+
+原始服务器行
+  server-rejection-line.json（单行 JSON，来自 /tmp/e2e-wsl-api.log）
+  {"level":40,...,"reqId":"e0289b97-f55e-4ee6-8864-6472faf51116",...,
+   "reason":"CONFLICTING_PAYLOAD","msg":"Answer save rejected"}
+
+脱敏说明
+  截图与日志来自 E2E 合成 seed（候选人名 "E2E Candidate reqid-rej …"、合成题目
+  "判断题-reqid-rej"），不含真实考生、真实答案、凭据或生产数据。UUID 为本次运行
+  的服务端 request.id（每轮不同）。

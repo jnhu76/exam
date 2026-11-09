@@ -1,0 +1,9 @@
+{
+  "node": "v24.22.1",
+  "constructOnlyNsPerOp": 4669.2,
+  "constructPlusJsonNsPerOp": 5516.4,
+  "constructPlusJsonPlusMetaNsPerOp": 5679,
+  "bMinusANs": 162.7,
+  "bMinusAPercent": 2.95,
+  "note": "B-A isolates: 1 headers.get + 2 object allocations per request, on real undici Response/Headers"
+}

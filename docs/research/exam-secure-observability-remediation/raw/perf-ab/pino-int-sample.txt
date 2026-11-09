@@ -1,0 +1,10 @@
+== int pino log stats ==
+457531610 logs/int.pino.log
+-- first 3 lines --
+{"level":30,"time":1794152048541,"pid":1593552,"hostname":"Hu","publicDir":"/home/hoo/Source/exam-gap-worktrees/integration-final/apps/api/public","exists":true,"msg":"static dir"}
+{"level":30,"time":1794152048566,"pid":1593552,"hostname":"Hu","msg":"Server listening at http://10.255.255.254:3312"}
+{"level":30,"time":1794152048566,"pid":1593552,"hostname":"Hu","msg":"Server listening at http://127.0.0.1:3312"}
+-- sample 'incoming request' (answers phase) --
+{"level":30,"time":1794152390603,"pid":1593552,"hostname":"Hu","reqId":"010440c5-8265-48ed-b327-f7b833eb6786","req":{"route":"/api/auth/login","method":"POST","remoteAddress":"127.0.0.1","remotePort":45492},"msg":"incoming request"}
+-- sample request completed --
+{"level":30,"time":1794152048923,"pid":1593552,"hostname":"Hu","reqId":"4c9cbbbb-fcac-4ea4-a1ac-09a20bbe1aa2","res":{"statusCode":200},"responseTime":5.232867956161499,"msg":"request completed"}

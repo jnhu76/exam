@@ -1,0 +1,2 @@
+curl -sS -o /dev/null -w '%{http_code} %{time_total}\n' -D /tmp/exam-fij/runs/s01-normal/hdr.txt \
+  'http://127.0.0.1:18080/api/ok?token=EXAMAUDIT-CANARY-FIJ-S01E'

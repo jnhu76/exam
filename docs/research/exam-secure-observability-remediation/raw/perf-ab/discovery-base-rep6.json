@@ -1,0 +1,149 @@
+{
+  "variant": "base",
+  "slots": [
+    {
+      "owner": "candidate1",
+      "attemptId": "7bf3d3cd-8896-4c72-b34f-284d922f827f",
+      "questionId": "328756bd-3184-483a-956b-c073edd99f04",
+      "type": "single_choice",
+      "version": 4605,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate1",
+      "attemptId": "7bf3d3cd-8896-4c72-b34f-284d922f827f",
+      "questionId": "28cf7b8a-e6bb-4aa3-a038-d245fcc74144",
+      "type": "multiple_choice",
+      "version": 797,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate1",
+      "attemptId": "7bf3d3cd-8896-4c72-b34f-284d922f827f",
+      "questionId": "ca062ea6-e21c-4ef2-a3d2-3f8ffbb08c60",
+      "type": "true_false",
+      "version": 977,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate1",
+      "attemptId": "7bf3d3cd-8896-4c72-b34f-284d922f827f",
+      "questionId": "4798a2aa-6fe6-400c-8f92-df74e8f030c9",
+      "type": "fill_blank",
+      "version": 806,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate1",
+      "attemptId": "7bf3d3cd-8896-4c72-b34f-284d922f827f",
+      "questionId": "777f0a8b-e990-4e82-9998-7c04d696864f",
+      "type": "single_choice",
+      "version": 1171,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate1",
+      "attemptId": "7bf3d3cd-8896-4c72-b34f-284d922f827f",
+      "questionId": "c01a85ff-a2dd-416c-a614-84433fec621d",
+      "type": "fill_blank",
+      "version": 933,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate2",
+      "attemptId": "b799a944-2e58-408d-8823-77d62279253f",
+      "questionId": "328756bd-3184-483a-956b-c073edd99f04",
+      "type": "single_choice",
+      "version": 1364,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate2",
+      "attemptId": "b799a944-2e58-408d-8823-77d62279253f",
+      "questionId": "28cf7b8a-e6bb-4aa3-a038-d245fcc74144",
+      "type": "multiple_choice",
+      "version": 1115,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate2",
+      "attemptId": "b799a944-2e58-408d-8823-77d62279253f",
+      "questionId": "ca062ea6-e21c-4ef2-a3d2-3f8ffbb08c60",
+      "type": "true_false",
+      "version": 301,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate2",
+      "attemptId": "b799a944-2e58-408d-8823-77d62279253f",
+      "questionId": "4798a2aa-6fe6-400c-8f92-df74e8f030c9",
+      "type": "fill_blank",
+      "version": 298,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate2",
+      "attemptId": "b799a944-2e58-408d-8823-77d62279253f",
+      "questionId": "777f0a8b-e990-4e82-9998-7c04d696864f",
+      "type": "single_choice",
+      "version": 298,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate2",
+      "attemptId": "b799a944-2e58-408d-8823-77d62279253f",
+      "questionId": "c01a85ff-a2dd-416c-a614-84433fec621d",
+      "type": "fill_blank",
+      "version": 298,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate3",
+      "attemptId": "7b93f734-2f07-4705-85a3-eaf6484601b9",
+      "questionId": "328756bd-3184-483a-956b-c073edd99f04",
+      "type": "single_choice",
+      "version": 435,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate3",
+      "attemptId": "7b93f734-2f07-4705-85a3-eaf6484601b9",
+      "questionId": "28cf7b8a-e6bb-4aa3-a038-d245fcc74144",
+      "type": "multiple_choice",
+      "version": 433,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate3",
+      "attemptId": "7b93f734-2f07-4705-85a3-eaf6484601b9",
+      "questionId": "ca062ea6-e21c-4ef2-a3d2-3f8ffbb08c60",
+      "type": "true_false",
+      "version": 431,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate3",
+      "attemptId": "7b93f734-2f07-4705-85a3-eaf6484601b9",
+      "questionId": "4798a2aa-6fe6-400c-8f92-df74e8f030c9",
+      "type": "fill_blank",
+      "version": 431,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate3",
+      "attemptId": "7b93f734-2f07-4705-85a3-eaf6484601b9",
+      "questionId": "777f0a8b-e990-4e82-9998-7c04d696864f",
+      "type": "single_choice",
+      "version": 429,
+      "status": "in_progress"
+    },
+    {
+      "owner": "candidate3",
+      "attemptId": "7b93f734-2f07-4705-85a3-eaf6484601b9",
+      "questionId": "c01a85ff-a2dd-416c-a614-84433fec621d",
+      "type": "fill_blank",
+      "version": 429,
+      "status": "in_progress"
+    }
+  ]
+}

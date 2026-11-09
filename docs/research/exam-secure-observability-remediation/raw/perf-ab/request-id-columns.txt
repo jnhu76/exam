@@ -1,0 +1,2 @@
+pg_stat_checkpointer.num_requested
+attempt_command_receipts.request_payload

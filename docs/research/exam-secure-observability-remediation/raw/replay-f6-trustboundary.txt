@@ -1,0 +1,59 @@
+# R5 client_events reference trust-boundary final state re-verify (2026-11-07T22:39:18Z) — original queries from adversarial/f6-client-events.sh:87-101 (psql read-only)
+          username          |                name                |              attempt_id              |               exam_id                |             question_id              
+----------------------------+------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+ EXAMAUDIT-CANARY-candA1    | examaudit-canary-f6-baseline-a1    | f665c325-f4a1-4547-89f5-5aa97bea026e | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-claims-a1   |                                      | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1
+ EXAMAUDIT-CANARY-candB1    | examaudit-canary-f6-b1-claims-orga |                                      |                                      | 
+ EXAMAUDIT-CANARY-proctorA1 | examaudit-canary-f6-proctor-claims |                                      |                                      | 
+ admin                      | examaudit-canary-f6-admin-claims   |                                      |                                      | 
+ EXAMAUDIT-CANARY-candA1    | examaudit-canary-f6-a1-forged-exam | f665c325-f4a1-4547-89f5-5aa97bea026e | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1
+ EXAMAUDIT-CANARY-candA1    | examaudit-canary-f6-a1-foreign-q   | f665c325-f4a1-4547-89f5-5aa97bea026e | 6b8d0782-cee9-430f-9253-b0de3a905d07 | 
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-own-exam    |                                      | 6b8d0782-cee9-430f-9253-b0de3a905d07 | c9e708fe-a009-4f66-bdec-463f4b336ac1
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-mixed-ok    |                                      | 6b8d0782-cee9-430f-9253-b0de3a905d07 | 
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6-a2-mixed-claim |                                      |                                      | 
+ EXAMAUDIT-CANARY-candA2    | examaudit-canary-f6b-minimal       | d9bc2a50-db93-435e-8cb4-96c2fbf2d704 | 6b8d0782-cee9-430f-9253-b0de3a905d07 | 
+(11 rows)
+
+== f6 row count (expect 10, dedup no new rows) ==
+11
+== victim attempt A1 associated rows (expect only candA1's own) ==
+        username         |                name                
+-------------------------+------------------------------------
+ EXAMAUDIT-CANARY-candA1 | examaudit-canary-f6-baseline-a1
+ EXAMAUDIT-CANARY-candA1 | examaudit-canary-f6-a1-forged-exam
+ EXAMAUDIT-CANARY-candA1 | examaudit-canary-f6-a1-foreign-q
+ EXAMAUDIT-CANARY-candA1 | answer_autosave_failed
+ EXAMAUDIT-CANARY-candA1 | EXAMAUDIT-CANARY-unknown-event
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | EXAMAUDIT-CANARY-RT-18C
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+ EXAMAUDIT-CANARY-candA1 | auditCanaryRT
+(36 rows)
+

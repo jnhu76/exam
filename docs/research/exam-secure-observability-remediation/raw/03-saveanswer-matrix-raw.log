@@ -1,0 +1,165 @@
+=== T00 candA2 start attempt POST /api/attempts/6b8d0782-cee9-430f-9253-b0de3a905d07/start @ 2026-11-08T01:02:18+08:00 ===
+{"id":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","enrollmentId":"53d7f591-027a-4cd3-b0e7-331b6dfba630","candidateId":"9839b440-61cf-4fcb-b329-aaa908ef2fdc","attemptNo":1,"status":"in_progress","questionSnapshot":[{"originalQuestionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","type":"true_false","content":"EXAMAUDIT-CANARY: 2FA 默认启用是安全最佳实践","contentDocument":null,"answerMode":null,"attachments":[],"options":[],"score":5,"order":0}],"answers":[],"startedAt":"2026-11-07T16:41:27.056Z","deadlineAt":"2026-11-07T17:11:27.056Z","lastActivityAt":"2026-11-07T17:02:18.675Z","createdAt":"2026-11-07T16:41:27.067Z","updatedAt":"2026-11-07T17:02:18.697Z","serverNow":"2026-11-07T17:02:18.675Z"}
+HTTP_STATUS:200
+=== T00b admin time-grant +1800s to candA2 attempt @ 2026-11-08T01:02:39+08:00 operationId=e8ebd2d4-1070-4334-ab7d-feced90e030b ===
+{"error":{"code":"INVALID_STATE_TRANSITION","message":"当前状态不允许执行此操作","requestId":"aafc5698-95c6-4ebf-9784-8a3404274414"}}
+HTTP_STATUS:409
+############ MATRIX RUN start 2026-11-08T01:04:08+08:00 attempt=d9bc2a50-db93-435e-8cb4-96c2fbf2d704 ############
+--- DB@2026-11-08T01:04:08+08:00
+disrupted|dl=01:11:27|ans=[]|la=01:02:18
+=== T01 new save cs=1 bv=0 ans=true @2026-11-08T01:04:08+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":1,"clientSavedAt":"2026-11-07T16:50:00.000Z","baseVersion":0}
+{"accepted":true,"serverVersion":1,"savedAt":"2026-11-07T17:04:08.504Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:08+08:00
+1|v1|01:04:08
+disrupted|dl=01:11:27|ans=[{"answer": true, "savedAt": "2026-11-07T17:04:08.504Z", "version": 1, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:08
+=== T02 replay cs=1 ans=true (clientSavedAt differs) @2026-11-08T01:04:08+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":1,"clientSavedAt":"2026-11-07T16:59:00.000Z","baseVersion":0}
+{"accepted":true,"serverVersion":1,"savedAt":"2026-11-07T17:04:08.504Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:08+08:00
+1|v1|01:04:08
+disrupted|dl=01:11:27|ans=[{"answer": true, "savedAt": "2026-11-07T17:04:08.504Z", "version": 1, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:08
+=== T09 conflicting cs=1 ans=false @2026-11-08T01:04:09+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":false,"clientSeq":1,"clientSavedAt":"2026-11-07T17:00:00.000Z","baseVersion":0}
+{"accepted":false,"reason":"CONFLICTING_PAYLOAD","message":"答案数据冲突，请刷新页面后重试","serverVersion":1,"savedAt":"2026-11-07T17:04:09.049Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:09+08:00
+1|v1|01:04:08
+disrupted|dl=01:11:27|ans=[{"answer": true, "savedAt": "2026-11-07T17:04:08.504Z", "version": 1, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:08
+=== T03 new version cs=2 bv=1 ans=false @2026-11-08T01:04:09+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":false,"clientSeq":2,"clientSavedAt":"2026-11-07T17:01:00.000Z","baseVersion":1}
+{"accepted":true,"serverVersion":2,"savedAt":"2026-11-07T17:04:09.342Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:09+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+disrupted|dl=01:11:27|ans=[{"answer": false, "savedAt": "2026-11-07T17:04:09.342Z", "version": 2, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:09
+=== T04 stale cs=3 bv=0 ans=true @2026-11-08T01:04:09+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":3,"clientSavedAt":"2026-11-07T17:02:00.000Z","baseVersion":0}
+{"accepted":false,"reason":"STALE_VERSION","message":"服务器上存在更新的答案版本","serverVersion":2,"savedAt":"2026-11-07T17:04:09.598Z","details":{"serverAnswer":false}}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:09+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+disrupted|dl=01:11:27|ans=[{"answer": false, "savedAt": "2026-11-07T17:04:09.342Z", "version": 2, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:09
+=== T05 future cs=3 bv=5 ans=true @2026-11-08T01:04:09+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":3,"clientSavedAt":"2026-11-07T17:03:00.000Z","baseVersion":5}
+{"accepted":false,"reason":"FUTURE_VERSION","message":"答案版本超前，请刷新页面后重试","serverVersion":2,"savedAt":"2026-11-07T17:04:09.861Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:09+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+disrupted|dl=01:11:27|ans=[{"answer": false, "savedAt": "2026-11-07T17:04:09.342Z", "version": 2, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:09
+=== T06a invalid answer cs=4 ans="yes" @2026-11-08T01:04:10+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":"yes","clientSeq":4,"clientSavedAt":"2026-11-07T17:04:00.000Z","baseVersion":2}
+{"accepted":false,"reason":"INVALID_ANSWER","message":"答案格式不符合此题要求，请检查作答内容","serverVersion":2,"savedAt":"2026-11-07T17:04:10.142Z"}
+HTTP_STATUS:200
+=== T06b schema invalid cs=-1 @2026-11-08T01:04:10+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":-1,"clientSavedAt":"2026-11-07T17:05:00.000Z","baseVersion":2}
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"clientSeq","code":"TOO_SMALL","params":{"minimum":0},"message":"Number must be greater than or equal to 0"}]},"requestId":"e7a114e3-259c-49d4-a455-d9e4ccb94bae"}}
+HTTP_STATUS:400
+=== T06c unknown questionId @2026-11-08T01:04:10+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"00000000-0000-4000-8000-000000000000","answer":true,"clientSeq":5,"clientSavedAt":"2026-11-07T17:06:00.000Z","baseVersion":2}
+{"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","requestId":"a96a8d50-1737-4f1d-8d5c-acc84444a5d7"}}
+HTTP_STATUS:400
+--- DB@2026-11-08T01:04:10+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+disrupted|dl=01:11:27|ans=[{"answer": false, "savedAt": "2026-11-07T17:04:09.342Z", "version": 2, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:09
+=== T07a cross-user candA2->candA1 attempt @2026-11-08T01:04:10+08:00
+REQ body: {"attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":1,"clientSavedAt":"2026-11-07T17:07:00.000Z","baseVersion":1}
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"349b5256-b799-4467-af35-fd2617d9b502"}}
+HTTP_STATUS:404
+=== T07b unauthenticated save @2026-11-08T01:04:10+08:00
+{"error":{"code":"AUTH_REQUIRED","message":"请先登录","requestId":"14a695e7-c78e-4f86-8a1f-a91f8e28e53a"}}
+HTTP_STATUS:401
+=== T07c proctor-role save @2026-11-08T01:04:10+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":6,"clientSavedAt":"2026-11-07T17:09:00.000Z","baseVersion":2}
+{"error":{"code":"PERMISSION_DENIED","message":"无权执行此操作","requestId":"1f5e1b70-b918-4d77-bdf9-65d229ad2b25"}}
+HTTP_STATUS:403
+=== T08 concurrent duplicate cs=7 ans=true start @2026-11-08T01:04:10+08:00
+--- T08 r1:
+{"accepted":true,"serverVersion":3,"savedAt":"2026-11-07T17:04:10.503Z"}
+HTTP_STATUS:200
+--- T08 r2:
+{"accepted":true,"serverVersion":3,"savedAt":"2026-11-07T17:04:10.503Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:10+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+7|v3|01:04:10
+disrupted|dl=01:11:27|ans=[{"answer": true, "savedAt": "2026-11-07T17:04:10.503Z", "version": 3, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:10
+=== T10 ack-loss cs=8 @2026-11-08T01:04:10+08:00
+{"accepted":true,"serverVersion":4,"savedAt":"2026-11-07T17:04:10.818Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:11+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+7|v3|01:04:10
+8|v4|01:04:10
+disrupted|dl=01:11:27|ans=[{"answer": false, "savedAt": "2026-11-07T17:04:10.818Z", "version": 4, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:10
+=== T10b replay cs=8 ans=false (recovery) @2026-11-08T01:04:12+08:00
+REQ body: {"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":false,"clientSeq":8,"clientSavedAt":"2026-11-07T17:12:00.000Z","baseVersion":3}
+{"accepted":true,"serverVersion":4,"savedAt":"2026-11-07T17:04:10.818Z"}
+HTTP_STATUS:200
+--- DB@2026-11-08T01:04:12+08:00
+1|v1|01:04:08
+2|v2|01:04:09
+7|v3|01:04:10
+8|v4|01:04:10
+disrupted|dl=01:11:27|ans=[{"answer": false, "savedAt": "2026-11-07T17:04:10.818Z", "version": 4, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]|la=01:04:10
+=== R1 candA1 replay preexisting cs=1 ans=true (disrupted attempt) @2026-11-08T01:04:12+08:00
+REQ body: {"attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"clientSeq":1,"clientSavedAt":"2026-11-07T17:13:00.000Z","baseVersion":0}
+{"accepted":true,"serverVersion":1,"savedAt":"2026-11-07T16:34:23.258Z"}
+HTTP_STATUS:200
+disrupted|01:04:23
+1|v1|00:34:23
+############ MATRIX RUN end 2026-11-08T01:04:12+08:00 ############
+=== T10v2 raw-socket ACK-loss cs=10 bv=5 @2026-11-08T01:07:15+08:00
+sent+FIN, no response read
+rc=0
+--- DB after ack-loss (cs=10 receipt? version 6?):
+1|v1|01:04:08
+2|v2|01:04:09
+7|v3|01:04:10
+8|v4|01:04:10
+9|v5|01:05:52
+10|v6|01:07:15
+[{"answer": true, "savedAt": "2026-11-07T17:07:15.994Z", "version": 6, "questionId": "c9e708fe-a009-4f66-bdec-463f4b336ac1"}]
+--- recovery replay cs=10 same content via normal HTTP:
+{"accepted":true,"serverVersion":6,"savedAt":"2026-11-07T17:07:15.994Z"}
+HTTP_STATUS:200
+=== candA1 attempt status after deadline (deadline 01:04:23, now 2026-11-08T01:07:31+08:00):
+graded|submitted_at=01:04:25|dl=01:04:23
+=== S1 candA1 save AFTER deadline-terminalized attempt @2026-11-08T01:07:31+08:00
+{"accepted":false,"reason":"ATTEMPT_ALREADY_SUBMITTED","message":"考试已提交，不能继续保存答案","serverVersion":0,"savedAt":"2026-11-07T17:07:31.889Z"}
+HTTP_STATUS:200
+=== S2 candA2 submit own attempt @2026-11-08T01:07:31+08:00
+{"id":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","enrollmentId":"53d7f591-027a-4cd3-b0e7-331b6dfba630","candidateId":"9839b440-61cf-4fcb-b329-aaa908ef2fdc","attemptNo":1,"status":"graded","questionSnapshot":[{"originalQuestionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","type":"true_false","content":"EXAMAUDIT-CANARY: 2FA 默认启用是安全最佳实践","contentDocument":null,"answerMode":null,"attachments":[],"options":[],"score":5,"order":0}],"answers":[{"questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"version":6,"savedAt":"2026-11-07T17:07:15.994Z"}],"score":5,"passed":tr
+=== S3 candA2 save AFTER submit @2026-11-08T01:07:32+08:00
+{"accepted":false,"reason":"ATTEMPT_ALREADY_SUBMITTED","message":"考试已提交，不能继续保存答案","serverVersion":0,"savedAt":"2026-11-07T17:07:32.027Z"}
+HTTP_STATUS:200
+--- DB final states:
+f665c325-f4a1-4547-89f5-5aa97bea026e|graded
+d9bc2a50-db93-435e-8cb4-96c2fbf2d704|graded
+6
+=== O1 candA2 retake start attemptNo2 @2026-11-08T01:08:08+08:00
+{"id":"ec7730e0-ba44-43da-b026-bc5528b1b275","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","enrollmentId":"53d7f591-027a-4cd3-b0e7-331b6dfba630","candidateId":"9839b440-61cf-4fcb-b329-aaa908ef2fdc","attemptNo":2,"status":"in_progress","questionSnapshot":[{"originalQuestionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","type":"true_false","conte
+AT2=ec7730e0-ba44-43da-b026-bc5528b1b275
+=== O2 save one answer cs=1 @2026-11-08T01:08:09+08:00
+{"accepted":true,"serverVersion":1,"savedAt":"2026-11-07T17:08:09.015Z"}
+HTTP_STATUS:200
+=== O3 admin force-submit with operationId=1a7589e2-7c28-4b60-954e-8fd4757ec3ef @2026-11-08T01:08:09+08:00
+{"operationId":"1a7589e2-7c28-4b60-954e-8fd4757ec3ef","commandType":"force_submit","disposition":"applied","outcome":"applied","resultPayload":{"commandType":"force_submit","beforeStatus":"in_progress","afterStatus":"graded","submittedAt":"2026-11-07T17:08:09.062Z","gradedAt":"2026-11-07T17:08:09.062Z","appliedAt":"2026-11-07T17:08:09.062Z"},"createdAt":"2026-11-07T17:08:09.062Z"}
+HTTP_STATUS:200
+
+--- command receipt row (operationId):
+force_submit|1a7589e2-7c28-4b60-954e-8fd4757ec3ef|applied
+--- audit rows for force submit (requestId + operationId both in metadata?):
+attempt.forceSubmit|59b19aff-2617-4215-b32b-c7fd56dd52ae|1a7589e2-7c28-4b60-954e-8fd4757ec3ef
+
+
+--- answer receipt for AT2 (clientSeq/identity):
+1|fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa

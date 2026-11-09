@@ -1,0 +1,344 @@
+source_file: /home/hoo/Source/exam/apps/api/src/routes/clientEvents.ts
+source_file_sha256: 3794a4090b7759baca448fdf4a9bfd7c69677cda7fa1174e5aa2cb0941dcd5d8
+extracted_snippet_sha256: 2b63c772b9146952c67dab2936f1cbe21006c5bdfdb2f9f4bfca740b84a365ad
+extracted_snippet_bytes: 670
+---extracted snippet---
+const USER_AGENT_MAX_LENGTH = 500;
+
+function normalizeRouteForStorage(route: string | undefined): string | null {
+  if (!route) return null;
+  try {
+    const url = new URL(route, "http://client-event.invalid");
+    return url.pathname.slice(0, USER_AGENT_MAX_LENGTH) || null;
+  } catch {
+    // Malformed URL (schema-valid string, unparseable): strip any query or
+    // fragment by hand so this fallback cannot contradict the query-free
+    // guarantee (e.g. "http://[?token=…" throws in URL yet still carries a
+    // credential in its query).
+    const pathOnly = route.split(/[?#]/, 1)[0] ?? "";
+    return pathOnly.slice(0, USER_AGENT_MAX_LENGTH) || null;
+  }
+}
+---end snippet---
+[
+  {
+    "id": "RT-1",
+    "label": "normal SPA route",
+    "inputLength": 28,
+    "output": "/exams/EXAMAUDIT-CANARY-RT-1",
+    "outputLength": 28,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/exams/EXAMAUDIT-CANARY-RT-1",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-2",
+    "label": "UUID in path",
+    "inputLength": 68,
+    "output": "/attempts/2f9c1a4e-8b3d-4c5a-9e6f-7a8b9c0d1e2f/EXAMAUDIT-CANARY-RT-2",
+    "outputLength": 68,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/attempts/2f9c1a4e-8b3d-4c5a-9e6f-7a8b9c0d1e2f/EXAMAUDIT-CANARY-RT-2",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-2B",
+    "label": "non-UUID opaque id",
+    "inputLength": 32,
+    "output": "/u/EXAMAUDIT-CANARY-RT-2B-xyz789",
+    "outputLength": 32,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/u/EXAMAUDIT-CANARY-RT-2B-xyz789",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-3",
+    "label": "token in path",
+    "inputLength": 37,
+    "output": "/password-reset/EXAMAUDIT-CANARY-RT-3",
+    "outputLength": 37,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/password-reset/EXAMAUDIT-CANARY-RT-3",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-4",
+    "label": "token in query",
+    "inputLength": 38,
+    "output": "/exam/list",
+    "outputLength": 10,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/exam/list",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-5",
+    "label": "token in fragment",
+    "inputLength": 38,
+    "output": "/exam/list",
+    "outputLength": 10,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/exam/list",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-6",
+    "label": "percent-encoded secret",
+    "inputLength": 46,
+    "output": "/reset/%45%58%41%4D%41%55%44%49%54-CANARY-RT-6",
+    "outputLength": 46,
+    "threw": false,
+    "secretFormsInOutput": [
+      "pct1"
+    ],
+    "singleDecoded": "/reset/EXAMAUDIT-CANARY-RT-6",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-7",
+    "label": "double-encoded secret",
+    "inputLength": 64,
+    "output": "/reset/%2545%2558%2541%254D%2541%2555%2544%2549%2554-CANARY-RT-7",
+    "outputLength": 64,
+    "threw": false,
+    "secretFormsInOutput": [
+      "pct2"
+    ],
+    "singleDecoded": "/reset/%45%58%41%4D%41%55%44%49%54-CANARY-RT-7",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-8",
+    "label": "encoded slash/qmark/equals smuggles query",
+    "inputLength": 38,
+    "output": "/a%2Fb%3Ftoken%3DEXAMAUDIT-CANARY-RT-8",
+    "outputLength": 38,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/a/b?token=EXAMAUDIT-CANARY-RT-8",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-9",
+    "label": "unicode path",
+    "inputLength": 25,
+    "output": "/%E8%80%83%E8%AF%95/EXAMAUDIT-CANARY-RT-9",
+    "outputLength": 41,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw",
+      "cjk-pct"
+    ],
+    "singleDecoded": "/考试/EXAMAUDIT-CANARY-RT-9",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-9B",
+    "label": "pre-encoded unicode path",
+    "inputLength": 42,
+    "output": "/%E8%80%83%E8%AF%95/EXAMAUDIT-CANARY-RT-9B",
+    "outputLength": 42,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw",
+      "cjk-pct"
+    ],
+    "singleDecoded": "/考试/EXAMAUDIT-CANARY-RT-9B",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-10",
+    "label": "case variation",
+    "inputLength": 28,
+    "output": "/Exam/EXAMAUDIT-canary-rt-10",
+    "outputLength": 28,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/Exam/EXAMAUDIT-canary-rt-10",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-11",
+    "label": "absolute URL",
+    "inputLength": 69,
+    "output": "/exam/EXAMAUDIT-CANARY-RT-11",
+    "outputLength": 28,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/exam/EXAMAUDIT-CANARY-RT-11",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-12",
+    "label": "userinfo URL (http form)",
+    "inputLength": 51,
+    "output": "/path",
+    "outputLength": 5,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/path",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-12B",
+    "label": "opaque-scheme userinfo",
+    "inputLength": 45,
+    "output": "EXAMAUDIT-CANARY-RT-12B@example.com/path",
+    "outputLength": 40,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "EXAMAUDIT-CANARY-RT-12B@example.com/path",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-12C",
+    "label": "data: URL",
+    "inputLength": 38,
+    "output": "text/html,EXAMAUDIT-CANARY-RT-12C",
+    "outputLength": 33,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "text/html,EXAMAUDIT-CANARY-RT-12C",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-13",
+    "label": "malformed URL",
+    "inputLength": 37,
+    "output": "http://[",
+    "outputLength": 8,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "http://[",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-13B",
+    "label": "malformed URL (bad port)",
+    "inputLength": 54,
+    "output": "http://example.com:abc/x",
+    "outputLength": 24,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "http://example.com:abc/x",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-14",
+    "label": "CRLF + NUL control chars",
+    "inputLength": 41,
+    "output": "/exam/ab%00c",
+    "outputLength": 12,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/exam/ab\u0000c",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-14B",
+    "label": "malformed + raw CRLF retention",
+    "inputLength": 37,
+    "output": "http://[\r\nEXAMAUDIT-CANARY-RT-14B",
+    "outputLength": 33,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "http://[\r\nEXAMAUDIT-CANARY-RT-14B",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-15",
+    "label": "499-char route, canary at tail",
+    "inputLength": 493,
+    "output": "/PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPEXAMAUDIT-CANARY-RT-15",
+    "outputLength": 493,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPEXAMAUDIT-CANARY-RT-15",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-15B",
+    "label": "unicode expansion past 500",
+    "inputLength": 326,
+    "output": "/%E8%80%83%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%",
+    "outputLength": 500,
+    "threw": false,
+    "secretFormsInOutput": [
+      "cjk-pct"
+    ],
+    "singleDecoded": "<undecodable>",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-15C",
+    "label": "input >500 (wire schema rejects; unit-only)",
+    "inputLength": 1124,
+    "output": "/PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP",
+    "outputLength": 500,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-X1",
+    "label": "empty-ish path with query only",
+    "inputLength": 29,
+    "output": "/",
+    "outputLength": 1,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/",
+    "canaryReachableAfterDecode": false
+  },
+  {
+    "id": "RT-X2",
+    "label": "backslash path",
+    "inputLength": 29,
+    "output": "/a/EXAMAUDIT-CANARY-RT-X2",
+    "outputLength": 25,
+    "threw": false,
+    "secretFormsInOutput": [
+      "raw"
+    ],
+    "singleDecoded": "/a/EXAMAUDIT-CANARY-RT-X2",
+    "canaryReachableAfterDecode": true
+  },
+  {
+    "id": "RT-X3",
+    "label": "protocol-relative userinfo",
+    "inputLength": 36,
+    "output": "/p",
+    "outputLength": 2,
+    "threw": false,
+    "secretFormsInOutput": [],
+    "singleDecoded": "/p",
+    "canaryReachableAfterDecode": false
+  }
+]

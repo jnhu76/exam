@@ -1,0 +1,18 @@
+===== 7.2b 复现与隔离：proctor-events 500（ResponseSerializationError）=====
+--- page=1 limit=1（A1 attempt, 3 条 client_events）
+{"error":{"code":"INTERNAL_ERROR","message":"服务器内部错误","requestId":"8530d427-4bf7-435b-bc84-945d911be2f6"}}
+>> HTTP_STATUS:500
+--- page=2 limit=1（A1 attempt, 3 条 client_events）
+{"error":{"code":"INTERNAL_ERROR","message":"服务器内部错误","requestId":"d2995352-d70b-43bd-b3bf-7751373e3c3b"}}
+>> HTTP_STATUS:500
+--- page=3 limit=1（A1 attempt, 3 条 client_events）
+{"error":{"code":"INTERNAL_ERROR","message":"服务器内部错误","requestId":"1165f768-14fe-4934-b899-3a02c3464429"}}
+>> HTTP_STATUS:500
+--- 空时间线对照：A2 attempt（无 client_events 行）
+{"items":[],"total":0,"page":1,"pageSize":50,"totalPages":0}
+>> HTTP_STATUS:200
+--- 单事件最小复现：candA2 向自己 attempt 发一条无 metadata 事件，然后 proctor 读取
+{"accepted":1}
+>> HTTP_STATUS:200
+{"error":{"code":"INTERNAL_ERROR","message":"服务器内部错误","requestId":"fa6a7503-6b21-459f-81cf-f57f6cbef6d5"}}
+>> HTTP_STATUS:500
