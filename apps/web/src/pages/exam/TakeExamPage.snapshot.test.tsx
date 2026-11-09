@@ -121,6 +121,13 @@ vi.mock("@/lib/api", () => ({
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
+    // #924: the save path calls postWithMeta; delegate to the same apiPost
+    // mock so url/body assertions stay single-sourced. This harness asserts
+    // no rejection-id behavior, so the header id is a constant null.
+    postWithMeta: async (...args: unknown[]) => ({
+      data: await apiPost(...args),
+      meta: { requestId: null },
+    }),
   },
   setNavigate: () => {},
 }));

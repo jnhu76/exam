@@ -1,0 +1,24 @@
+# pb-s4 raw — 2026-11-07T17:18:34Z — 情形4：伪造/不存在 requestId
+
+## case A: syntactically valid UUIDv4 that never occurred (EXAMAUDIT-CANARY style random)
+$ jq select(.reqId=="00000000-0000-4000-8000-000000000000")
+hits=0
+
+## case B: canary string as claimed requestId (client pastes garbage)
+hits=0
+
+## case C: client claims ANOTHER SUBJECT REAL requestId — candA2 ticket claims proctorA1 request 99442870 (Response serialization error, proctor-events 500)
+$ jq select(.reqId=="99442870-…") full lines
+{"t":"2026-11-07T16:45:49Z","msg":"incoming request","url":"/api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events?limit=50","actorId":null,"actorRole":null,"organizationId":null,"reqId":"99442870-f8ef-4b90-90c0-2623da2bf98a"}
+{"t":"2026-11-07T16:45:49Z","msg":"Response serialization error","url":"/api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events?limit=50","actorId":"4837ff2c-738c-467d-ba09-e4bd1d6be806","actorRole":"Proctor","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","reqId":"99442870-f8ef-4b90-90c0-2623da2bf98a"}
+{"t":"2026-11-07T16:45:49Z","msg":"request completed","url":null,"actorId":null,"actorRole":null,"organizationId":null,"reqId":"99442870-f8ef-4b90-90c0-2623da2bf98a"}
+
+## case C scope check: what the investigator sees vs what the ticket claims
+ticket subject: candA2 userId=5fdcab8e-4709-45d7-92fd-cc8ffbd63e62 (org A)
+found request actor: 4837ff2c-738c-467d-ba09-e4bd1d6be806 = EXAMAUDIT-CANARY-proctorA1 (org A) — SAME org, DIFFERENT subject+role
+
+## case D: log-carrier variance — the 500 line carries actorId+organizationId (enables the mismatch detection above); req/res lines alone would NOT
+## case E: pre-existing E1c evidence (header-influence.md): client declaring someone else real requestId in header does NOT attach to it (server mints new UUID; claimed id keeps its own 2 lines)
+2
+"incoming request"
+"request completed"

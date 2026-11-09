@@ -1,0 +1,71 @@
+############ 族1 跨组织负例 — Org B 主体 vs Org A 资源 (2026-11-07T16:42:18Z) ############
+# 矩阵主体: adminB(userId f642d936, org 17d33b22=Org B, role Admin), candB1(userId 1931b0dd, org B, Candidate)
+# 目标资源: Org A attempt f665c325-f4a1-4547-89f5-5aa97bea026e (owner candA1) / d9bc2a50-db93-435e-8cb4-96c2fbf2d704 (owner candA2), exam 6b8d0782-cee9-430f-9253-b0de3a905d07
+# 所有请求附带伪造 x-request-id: EXAMAUDIT-CANARY-forged-request-id-0001（族7 前置：不得影响授权/不得被采纳为 requestId）
+
+===== 1.1 adminB → attempt 证据/日志端点（期望 404；resolver org 谓词 attemptRepo.ts:290）=====
+--- [adminB→A1 timeline] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"e3fd1e42-be25-4283-bc52-2fc5e45647cb"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.008079
+
+--- [adminB→A1 receipt-summary] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/answer-save-receipt-summary
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"dc344f70-450e-46a3-8dad-c182353b41b4"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006899
+
+--- [adminB→A1 proctor-events] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/proctor-events
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"5ec29c6d-639b-4df9-ba4c-69e48cda0af6"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007377
+
+--- [adminB→A1 export] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/export
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"2abb3380-2be5-4b1e-9111-904fcbf4a89a"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007490
+
+--- [adminB→A1 result] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/result
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"f9121a0a-e7a9-4908-bd9b-9c200c1ae017"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007311
+
+===== 1.2 adminB → exam 端点 =====
+--- [adminB→exam proctor/attempts] GET /api/admin/exams/6b8d0782-cee9-430f-9253-b0de3a905d07/proctor/attempts
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"62a38d30-9fa0-4eb0-9c73-f12edee8fe1a"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006696
+
+--- [adminB→exam incidents] GET /api/admin/exams/6b8d0782-cee9-430f-9253-b0de3a905d07/incidents
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"b6995bc3-be87-45e5-b515-4cd0a23aa60d"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007020
+
+===== 1.3 adminB → audit-logs（AuditLogView org 谓词；不得返回 Org A 行）=====
+--- [adminB→audit-logs(all)] GET /api/admin/audit-logs?limit=50
+{"items":[],"nextCursor":null,"snapshotTo":"2026-11-07T16:42:19.040Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.008475
+
+--- [adminB→audit-logs?targetId=A1attempt] GET /api/admin/audit-logs?targetId=f665c325-f4a1-4547-89f5-5aa97bea026e&limit=50
+{"items":[],"nextCursor":null,"snapshotTo":"2026-11-07T16:42:19.055Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.006937
+
+===== 1.4 candB1 → 候选 own-attempt / score 端点（期望 404）=====
+--- [candB1→GET /attempts/:A1] GET /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"782e3b8c-dc98-4774-adb4-72ba365c40ce"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007305
+
+--- [candB1→take] GET /api/candidate/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/take
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"23e5de77-5270-4bf2-aefd-80585849276e"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007453
+
+--- [candB1→score] GET /api/scores/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"b38d4db5-f23e-40a0-81a8-3d2b90eed5ec"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.006489
+
+===== 1.5 对照组（正例）：Org A 内合法读取，证明端点本身可用 =====
+--- [candA1→GET /attempts/:own] GET /api/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e
+{"id":"f665c325-f4a1-4547-89f5-5aa97bea026e","organizationId":"2b86e7e9-5240-4ca2-a2a5-0d65a8849905","examId":"6b8d0782-cee9-430f-9253-b0de3a905d07","enrollmentId":"4d9c01c6-a770-433f-addb-18870e4f3b73","candidateId":"a073d0af-a3bc-47c3-9046-0aa6bea85e03","attemptNo":1,"status":"disrupted","questionSnapshot":[{"originalQuestionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","type":"true_false","content":"EXAMAUDIT-CANARY: 2FA 默认启用是安全最佳实践","contentDocument":null,"answerMode":null,"attachments":[],"options":[],"score":5,"order":0}],"answers":[{"questionId":"c9e708fe-a009-4f66-bdec-463f4b336ac1","answer":true,"version":1,"savedAt":"2026-11-07T16:34:23.258Z"}],"startedAt":"2026-11-07T16:34:23.179Z","deadlineAt":"2026-11-07T17:04:23.179Z","lastActivityAt":"2026-11-07T16:34:23.258Z","createdAt":"2026-11-07T16:34:23.196Z","updatedAt":"2026-11-07T16:34:40.253Z","serverNow":"2026-11-07T16:42:19.121Z"}
+>> HTTP_STATUS:200 TIME_TOTAL:0.011785
+
+--- [proctorA1(assigned)→A1 timeline] GET /api/admin/attempts/f665c325-f4a1-4547-89f5-5aa97bea026e/timeline
+{"events":[]}
+>> HTTP_STATUS:200 TIME_TOTAL:0.022667
+
+
+--- [proctorA1→GET /api/admin/exams/6b8d0782.../proctor/attempts]（正例对照：金丝雀考试监控列表）
+{"items":[{"attemptId":"d9bc2a50-db93-435e-8cb4-96c2fbf2d704","candidateId":"9839b440-61cf-4fcb-b329-aaa908ef2fdc","candidateName":"Canary Candidate A2","status":"disrupted","onlineState":"offline","lastHeartbeatAt":"2026-11-07T16:41:27.056Z","lastSaveAt":"2026-11-07T16:41:27.056Z","lastClientEventAt":"2026-11-07T16:47:08.042Z","visibilityLostCount":0,"browserOfflineCount":0,"saveFailedCount":0,"submitFailedCount":0,"warningLevel":"critical"},{"attemptId":"f665c325-f4a1-4547-89f5-5aa97bea026e","candidateId":"a073d0af-a3bc-47c3-9046-0aa6bea85e03","candidateName":"Canary Candidate A1","status":"disrupted","onlineState":"offline","lastHeartbeatAt":"2026-11-07T16:34:23.258Z","lastSaveAt":"2026-11-07T16:34:23.258Z","lastClientEventAt":"2026-11-07T16:45:49.716Z","visibilityLostCount":0,"browserOfflineCount":0,"saveFailedCount":0,"submitFailedCount":0,"warningLevel":"critical"}],"total":2}
+>> HTTP_STATUS:200 TIME_TOTAL:0.017269
+（注：此正例对照最初因 cwd 漂移误写至仓库根 run-01-cross-org.txt，已并回本证据文件并删除根副本；git 工作树无本任务残留）

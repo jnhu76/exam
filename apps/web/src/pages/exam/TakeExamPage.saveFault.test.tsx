@@ -82,9 +82,10 @@ function buildSnapshot(
   };
 }
 
-const { apiGet, apiPost } = vi.hoisted(() => ({
+const { apiGet, apiPost, postMeta } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
+  postMeta: { requestId: null as string | null },
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -116,6 +117,14 @@ vi.mock("@/lib/api", () => ({
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
+    // #924: the save path calls postWithMeta; delegating to the same apiPost
+    // mock keeps url/body/throw assertions single-sourced (header id via
+    // postMeta when a test needs one — this file's saves never succeed on
+    // the rejection surfaces under test, so null is the honest default).
+    postWithMeta: async (...args: unknown[]) => ({
+      data: await apiPost(...args),
+      meta: { requestId: postMeta.requestId },
+    }),
   },
   setNavigate: () => {},
 }));

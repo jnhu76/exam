@@ -1,0 +1,40 @@
+# R3 at-rest route re-dump (2026-11-07T22:38:58Z) — original cmd shape from adversarial/db-route-dump.txt (psql read-only)
+   event_id   |                                    route_head                                    | route_len 
+--------------+----------------------------------------------------------------------------------+-----------
+ rtcanary-1   | /exams/EXAMAUDIT-CANARY-RT-1                                                     |        28
+ rtcanary-10  | /Exam/EXAMAUDIT-canary-rt-10                                                     |        28
+ rtcanary-11  | /exam/EXAMAUDIT-CANARY-RT-11                                                     |        28
+ rtcanary-12  | /path                                                                            |         5
+ rtcanary-12b | EXAMAUDIT-CANARY-RT-12B@example.com/path                                         |        40
+ rtcanary-12c | text/html,EXAMAUDIT-CANARY-RT-12C                                                |        33
+ rtcanary-13  | http://[                                                                         |         8
+ rtcanary-14  | /exam/ab%00c                                                                     |        12
+ rtcanary-14b | http://[\r                                                                      +|        33
+              | EXAMAUDIT-CANARY-RT-14B                                                          | 
+ rtcanary-15  | /PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP |       493
+ rtcanary-15b | /%E8%80%83%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF%95%E8%AF% |       500
+ rtcanary-16a | /metadata/case-a                                                                 |        16
+ rtcanary-16b | /metadata/case-b                                                                 |        16
+ rtcanary-16c | /metadata/case-c                                                                 |        16
+ rtcanary-16d | /metadata/case-d                                                                 |        16
+ rtcanary-16e | /metadata/case-e                                                                 |        16
+ rtcanary-16f | /metadata/case-f                                                                 |        16
+ rtcanary-16g | /metadata/case-g                                                                 |        16
+ rtcanary-17  | /metadata/nested                                                                 |        16
+ rtcanary-18c | /name-channel                                                                    |        13
+ rtcanary-18d | /session-plain                                                                   |        14
+ rtcanary-18e | /session-jwt                                                                     |        12
+ rtcanary-2   | /attempts/2f9c1a4e-8b3d-4c5a-9e6f-7a8b9c0d1e2f/EXAMAUDIT-CANARY-RT-2             |        68
+ rtcanary-2b  | /u/EXAMAUDIT-CANARY-RT-2B-xyz789                                                 |        32
+ rtcanary-3   | /password-reset/EXAMAUDIT-CANARY-RT-3                                            |        37
+ rtcanary-4   | /exam/list                                                                       |        10
+ rtcanary-5   | /exam/list                                                                       |        10
+ rtcanary-6   | /reset/%45%58%41%4D%41%55%44%49%54-CANARY-RT-6                                   |        46
+ rtcanary-7   | /reset/%2545%2558%2541%254D%2541%2555%2544%2549%2554-CANARY-RT-7                 |        64
+ rtcanary-8   | /a%2Fb%3Ftoken%3DEXAMAUDIT-CANARY-RT-8                                           |        38
+ rtcanary-9   | /%E8%80%83%E8%AF%95/EXAMAUDIT-CANARY-RT-9                                        |        41
+(31 rows)
+
+
+# R3b UA + session at-rest
+31|31

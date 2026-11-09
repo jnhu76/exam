@@ -1,0 +1,11 @@
+### MAIN-BATCH (30 events)
+status: 200
+body: {"accepted":31}
+
+### RT-18A (route length 501 -> schema reject)
+status: 400
+body: {"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"events.0.route","code":"TOO_BIG","params":{"maximum":500},"message":"String must contain at most 500 character(s)"}]},"requestId":"9a52d5a7-6639-481e-93aa-a058b4b83202"}}
+
+### RT-18A2 (route empty string -> schema reject)
+status: 400
+body: {"error":{"code":"VALIDATION_ERROR","message":"请求参数无效","details":{"fields":[{"field":"events.0.route","code":"TOO_SMALL","params":{"minimum":1},"message":"String must contain at least 1 character(s)"}]},"requestId":"57c3903a-6f75-482f-9364-cd02fd4b821c"}}

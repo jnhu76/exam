@@ -1,0 +1,27 @@
+# pb-s5 raw — 2026-11-07T17:18:52Z — 情形5：receipt 在但请求日志已过期（截断时间窗模拟）
+
+## step1: copy log (no mutation of original)
+-rw-r--r-- 1 hoo hoo 314631 Nov  8 01:18 /tmp/pb-s5-truncated.log
+
+## step2: simulate retention expiry — keep only lines with time >= 17:15:30Z (1794071730000), i.e. drop the 17:14:50 save-request window
+kept lines: 43 (original 1190)
+
+## step3: rerun playbook step B on truncated log — requestId 0c31ea1d (client still reports it from its ticket)
+hits=0
+
+## step4: rerun S3 path B time-window on truncated log — url contains attemptId
+hits=0
+
+## step5: receipt still authoritative in DB
+ client_seq | accepted_version |                         answer_identity                          |          saved_at          |           utc           
+------------+------------------+------------------------------------------------------------------+----------------------------+-------------------------
+          1 |                1 | b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b | 2026-11-08 01:14:50.108+08 | 2026-11-07 17:14:50.108
+          2 |                2 | fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa | 2026-11-08 01:14:50.174+08 | 2026-11-07 17:14:50.174
+(2 rows)
+
+
+## step6: reverse direction — log line exists but receipt does not (log hit without business fact): the 400 request 48fcd633 lines are in ORIGINAL log yet no cs=-1 row can exist
+0
+
+## cleanup
+removed

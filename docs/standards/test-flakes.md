@@ -255,7 +255,7 @@ CLASSIFICATION (non-flake):  NOT_A_FLAKE | MISCLASSIFIED_AS_FLAKE
 | #98-examTransitions | CLOSED_NOT_REPRODUCED | `examTransitions.test.ts` file-schema 全套 8/14 失败（`waitForAuditCount` 1s 超时） | UNKNOWN（再未复现） | HYPOTHESIS（worker-database 实验期 `public.audit_logs` 瞬时污染） | UNKNOWN | NONE | 2026-10-12 | 无（复发再开） |
 | RUN-LEASE-OP-MODE | OPERATIONAL_CONSTRAINT（NOT_A_FLAKE） | 同 PG 并发两个 worker-database run：后启动方 run-lease 测试立即失败（错误即契约） | NO（给定操作模式必现） | CAUSALLY_PROVEN（契约设计 + 复现实验非对称签名） | 不适用 | 不适用 | 2026-10-12 | 无（串行执行即可） |
 | CASE-2026-11-03-CI-COVERAGE-BUDGETS | REPAIRED（#859 已合并 `8deafb46`；2026-11-03 复核） | CI coverage lane：readTrust R1 `editor not mounted`（vi.waitFor 默认 1000ms vs 冷 chunk 挂载 846ms–4.2s，Web 6/7 lane）；UsersPage 双表 `Found multiple elements`（InvitationsCard 晚挂载唯一性竞争）；QuestionPage C1 折叠链超 1000ms；API audit 导出 5/5（10,001 行契约 fixture > 5s）、auth 限流（11×argon2id+二次 buildTestApp 悬崖两侧）、httpSurface I6（体内冷 import 全路由图计入 5s）；共同放大器 = 4 forks/2 vCPU 超订 | YES | CAUSALLY_PROVEN（F1 探针分布操纵+修复前后；F3 列几何算术；F4/F5/F6 成本核算+悬崖两侧分布） | PROVEN_UNRELATED（受害文件在四 PR 分支均零改动，CONTROLLED_EXCLUSION） | CAUSALLY_PROVEN（机制级：固定预算<固有成本） | 2026-11-03（复核：REPAIRED） | 无（禁止把新 occurrence 自动归入本 case；E2E 几何 flake 另立 #878 / OBS-2026-11-03-001） |
-| CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE | REPAIRED | `rich-content-overflow.spec.ts:568` 在 2-shard 全量 E2E 下固定 150ms 采样读到 `scrollLeft = 0`（Chrome 键盘滚动动画未提交）；OBS-2026-11-03-001 / OBS-2026-11-09-001 | YES | HYPOTHESIS（仪器化 witness 证明动画窗口存在；失败轮自身采样序列未捕获） | PLAUSIBLY_UNRELATED（失败 run 的候选改动未触达该 spec 或 ContentScrollViewport；按 STEP 7 不升级 PROVEN） | SUPPORTED（与 OBS-2026-11-03-001 机制级聚合） | 2026-11-09 | 无（5 处固定等待已统一为显式条件等待；禁止把新 occurrence 自动归入） |
+| CASE-2026-11-09-878-KEYSCROLL-ORACLE | REPAIRED（#923 `2a820e78`；#878 待 CI 绿后关闭） | `rich-content-overflow.spec.ts` 固定 `waitForTimeout(150)` 后采样 `scrollLeft=0`（2-shard E2E 负载，CI `:568` 签名）；同族第二竞态 = KaTeX 懒替换瞬态使派生 tab-stop 状态翻转（`role` 读到 `null`） | YES | CAUSALLY_PROVEN（CDP CPU throttle 确定性矩阵 + in-page 定时器采样序列 + oracle 负例验证） | PROVEN_UNRELATED（受害文件不在触发 PR diff 内；修复对象是测试同步策略） | CAUSALLY_PROVEN（机制级：固定采样预算落在测得的动画首帧方差带 59ms–1078ms 内） | 2026-11-09 | CI 绿 → 关 #878（2-shard 连续 5 次本地已全绿，含 4×/8× throttle 矩阵） |
 
 未进入任何 case 的独立 occurrence 见 [Unresolved Occurrence Ledger](#unresolved-occurrence-ledger未解决的发生记录账本)。
 
@@ -1135,75 +1135,82 @@ RESIDUAL = `rich-content-overflow` 几何 flake 属另一机制，登记为 OBS-
 CASE_REPAIRED_AT = 2026-11-03
 ```
 
----
-
-### CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE — `rich-content-overflow.spec.ts` 用固定 150ms 采样读取动画滚动位置（OBS-2026-11-03-001 / OBS-2026-11-09-001）
+### CASE-2026-11-09-878-KEYSCROLL-ORACLE — `rich-content-overflow.spec.ts` 方向键滚动几何断言的固定 150ms 采样竞态（#878）
 
 #### Status
 
 ```text
-CASE_STATE = REPAIRED
-CASE_CREATED_AT = 2026-11-09
+CASE_STATE = REPAIRED（#923 提交 2a820e78；#878 待 CI 绿后关闭）
+CASE_CREATED_AT = 2026-11-09（自 OBS-2026-11-03-001 升级）
 CASE_LAST_REVIEWED_AT = 2026-11-09
-CASE_REPAIRED_AT = 2026-11-09
+CASE_LAST_MODIFIED_AT = 2026-11-09
 
 NONDETERMINISTIC = YES
-ROOT_CAUSE_CONFIDENCE = HYPOTHESIS（非确定性来源 = 固定 150ms 采样与 Chrome 键盘
-  滚动动画提交的竞态；仪器化 witness 直接观测到 keydown 后 25ms scrollLeft 仍为 0、
-  50ms 才首次提交。失败轮自身的采样序列未捕获，故保持 HYPOTHESIS 而非
-  CAUSALLY_PROVEN）
-CURRENT_CHANGE_CAUSALITY = PLAUSIBLY_UNRELATED（失败 run 的候选改动未触达该 spec
-  或 ContentScrollViewport；按 STEP 7 文件级论证不升级 PROVEN_UNRELATED。修复对象
-  是该 spec 自身的固定采样 oracle，见 Repair）
-AGGREGATION_CONFIDENCE = SUPPORTED（机制级：同一 spec + 同一断言 + 同一非确定性
-  来源；两次 occurrence 均为 2-shard 负载下 FAIL、隔离或条件等待下 PASS）
-AGGREGATION_BASIS = OBS-2026-11-03-001（CI 2-shard）与 OBS-2026-11-09-001（本地
-  2-shard，隔离栈 exam-gov927）同签名同机制；不是"同文件/同断言"的签名级聚合。
+ROOT_CAUSE_CONFIDENCE = CAUSALLY_PROVEN
+CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（受害文件不在触发 PR diff 内）
+AGGREGATION_CONFIDENCE = CAUSALLY_PROVEN（机制级）
+AGGREGATION_BASIS = 两个同族机制各自解释其受害面：
+  (a) 固定时间预算采样落在 Chromium 内部 key-scroll 动画首帧提交的
+      负载方差带内（scroll-behavior 为 auto，动画非 CSS smooth）；
+  (b) KaTeX 懒投影（raw fallback → 渲染公式）瞬态改变测量宽度，使
+      派生 tab-stop 状态短暂翻转，非重试型属性读取/键盘走焦跨瞬态采样。
 ```
 
-#### Mechanism
+#### 根因证明（确定性，非"看起来像"）
 
-`ContentScrollViewport` 的 `overflow-x-auto` 原生滚动属于产品语义，不是缺陷。缺陷在
-E2E oracle：Chrome 对键盘 ArrowRight 使用动画滚动（ScrollAnimator）。最小页面 witness
-（2026-11-09，本机 Chrome DevTools，一次性 /tmp 工件不入库）对 `overflow-x: auto;
-tabindex=0` 容器真实按下 ArrowRight，采样 `scrollLeft`：
+在 master 基线（`5140c3dd`）的 spec 内做临时插桩（rAF 采样器 + in-page
+25ms 定时器采样器 + CDP `Emulation.setCPUThrottlingRate`），本地复现 2-shard
+CI 负载特征：
+
+- **首帧方差带**：ArrowRight 按下后首个已提交滚动帧的页面时刻 =
+  59ms（4×）/ 86ms（8×）/ 1078ms（16×）；rAF 帧间隔在负载下膨胀到
+  50–200ms。固定 `waitForTimeout(150)` 采样落在该带内。
+- **CI 签名直接抓取**：16× 下 in-page 定时器序列显示页面时刻 150ms 处
+  `scrollLeft = 0`，动画 249ms 才开始，最终稳定 39 —— 与 CI `:568`
+  `Expected: > 0 / Received: 0` 完全一致。
+- **排除项（全程采样为证）**：`document.activeElement === target` 与
+  `target.isConnected` 在整个失败窗口恒真（排除 focus 抢夺与节点重建）；
+  `scrollWidth/clientWidth` 恒定（排除采样点几何变化）；
+  `documentElement.scrollLeft` 恒 0（排除页面级滚动）。
+- **第二竞态（4× 下暴露）**：`toBeFocused()` 通过后 `getAttribute("role")`
+  读到 `null` —— KaTeX 懒替换瞬间测量宽度收缩，`overflowing` 派生状态
+  翻转，React 重渲染移除 `role`/`tabIndex` 而 focus 已在节点上。非重试型
+  属性读取与 Shift+Tab/Tab 走焦跨该瞬态即 flake。
+- **过载伪影边界**：24×+ 下失败挪到后续 5s UI 断言（reload 后
+  `toBeVisible` 超时）—— 属极端过载超出其它测试预算，非本机制；CI 现实
+  负载带为 4×–16×。
+
+#### 修复（#923 `2a820e78`，单一权威）
+
+- `scrollToHorizontalEnd`：每次按键等待显式条件（位置增长越过已见值，或
+  已钉在右边界），替换"两次相同固定延迟采样 = 到边"（会把"动画未开始"
+  误判为"到边"）。
+- 新 `arrowKeyScrollsLocally`：前置门（聚焦/活节点/真实滚动余量）→ 真实
+  按键 → 增长条件轮询 → 落定采样 → 方向/范围/页面不横向滚动断言。
+- 5 处固定等待点全部替换；4 个公式表面（take 页、320px 结果页、admin
+  预览、公式对话框）的 KaTeX+字体落定前置提升到所有 tab-stop/ARIA 事实
+  与键盘走焦之前。
+
+#### Oracle 负例验证（不会空洞通过）
+
+临时 scratch spec（静态页面 + helper 副本，已删除）证明 helper 在以下
+每一情形都失败：无 overflow（前置门，133ms）/ 未聚焦（5.1s 超时后拒绝）/
+按键被页面 handler 消费（等满 5s 预算后拒绝，证明非侥幸通过）/ 已在右边界
+（前置门）/ 节点分离（拒绝）；正向对照 444ms 通过。
+
+#### Repair evidence
 
 ```text
-keydown 同步 = 0 / t+25ms = 0 / t+50ms = 7 / t+100ms = 28 / t+150ms = 40（settled 40）
+LOCAL_2SHARD_FULL_SPEC = 连续 5/5 全绿（merged blob report 确认 4/4 测试
+  真实执行，非过滤空洞）
+THROTTLE_MATRIX = 4× PASS / 8× PASS（16× 仅剩应用渲染预算伪影）
+NO_TIMEOUT_WIDENED = 断言无放宽、无 skip、无 retry（diff 复核）
+CI_ON_HEAD = PASS — #923 最终复审 head 82aadfe7（含独立 review 两处补修：
+  grader 页 settle 前移到键盘走焦之前、admin 预览 settle 前移到几何快照之前）
+  GitHub Actions 8/8 success（含 E2E shard 1/2 + 2/2；run 42632860153）；
+  中间 head 80f01590 / 3b1ecf96 亦全绿
+CASE_REPAIRED_AT = 2026-11-09
 ```
-
-固定 `waitForTimeout(150)` 在 shard 负载下可能采样于动画首帧提交之前而读到 0，与
-`ArrowRight` 是否有效无关。条件等待（`expect.poll` 到 `scrollLeft > before`）把采样
-绑定到真实条件上，断言本身不变。
-
-#### Repair
-
-```text
-REPAIR_STATUS = IMPLEMENTED_AND_VERIFIED
-REPAIR_MECHANISM = apps/e2e/e2e/rich-content-overflow.spec.ts 新增
-  pressArrowRightUntilScrolled(page, target, before)：一次真实 ArrowRight 后
-  expect.poll(scrollLeft).toBeGreaterThan(before)；替换 :564 / :921 / :998 / :1079 /
-  :1120 五处 waitForTimeout(150) 固定采样。断言（一次真实按键必须推动 viewport）
-  逐字保留。
-REPAIR_EVIDENCE = 集成后验收（2026-11-09）：
-  (a) #929 分支 7110662e：完整 `bash scripts/e2e/run.sh`（隔离栈 exam-review929，
-      E2E_WORKERS=2，DB_HOST_PORT=55434 / REDIS_HOST_PORT=56381，shard API 端口
-      13200/13201）连续 5 轮全部 E2E_EXIT=0；每轮 shard 1/2 与 2/2 均通过
-      （16:57:46–17:11:39，约 2m50s/轮）。
-  (b) 集成树 45d2ac99（#922→#923→#924→#926→#929）：同一 2-shard 拓扑完整
-      E2E 通过（shard 1/2 + 2/2）。集成把 #923 的“采样前等待 settled KaTeX
-      投影 + fonts.ready”并入 prompt 点位；五处几何断言共用同一个
-      pressArrowRightUntilScrolled helper，不保留第二套同步策略。
-  历史证据：修复后首次运行通过（8580ms，errors=[]，全量 26 passed | 1 skipped）。
-FORBIDDEN_WORKAROUNDS_NOT_USED = 未调大 timeout、未加 retry、未减少 shard、未跳过
-  测试、未削弱断言、未 mock 真实依赖。
-```
-
-#### Residual
-
-- 历史归因：失败轮没有 `scrollLeft` 采样序列；witness 是机制能力演示，不是该轮归因。
-- 若该 spec 在条件等待下仍偶发同一断言失败，说明机制不是单纯动画时序，需按 STEP 2 /
-  STEP 5 另立 occurrence，禁止回填到本 case。
 
 ---
 
@@ -3416,72 +3423,29 @@ NONDETERMINISM_CONFIRMED = YES（同 spec 在隔离负载通过、在 2-shard �
 
 INTERPRETATION_AT_RECORD_TIME = HYPOTHESIS：`:568` 是单次 `ArrowRight` + 固定 `waitForTimeout(150)` 后采样；2-shard 负载下 Chrome 平滑滚动首帧尚未提交，采样到 0。依据：同文件 `:334` 的 `scrollToHorizontalEnd` 注释明确 "Chrome animates arrow-key scrolling"，并用"两次相同采样"判定落定；该 helper 只用于 `:755`/`:1193`，另有 5 处固定 150ms（`:564`/`:921`/`:998`/`:1079`/`:1120`）。
 
-CURRENT_INTERPRETATION = 同上（尚未做负载下复现，故不升级为 PROVEN_ROOT_CAUSE）
-CURRENT_INTERPRETATION_UPDATED_AT = 2026-11-03
+CURRENT_INTERPRETATION = PROVEN_ROOT_CAUSE（2026-11-09 #878 调查）：原假设成立并经确定性证据升级 —— CDP CPU throttle 矩阵测得按键后首个已提交滚动帧落在 59ms–1078ms 方差带（rAF 帧间隔负载下膨胀至 50–200ms），固定 150ms 采样落在带内；in-page 定时器序列直接抓取到"页面时刻 150ms 处 scrollLeft=0、动画 249ms 后开始"的 CI 签名。focus/节点身份/采样点几何/页面滚动全程恒定，逐一排除。另暴露同族第二竞态（KaTeX 懒替换瞬态翻转派生 tab-stop 状态）。
+CURRENT_INTERPRETATION_UPDATED_AT = 2026-11-09
 
 CURRENT_CHANGE_CAUSALITY = PROVEN_UNRELATED（CONTROLLED_EXCLUSION）
-ROOT_CAUSE_CONFIDENCE = HYPOTHESIS（机制方向有源码证据；负载下复现未执行）
-FIRST_CAUSAL_DIVERGENCE = 未执行（待 #878：负载下重复失败或 instrumented 采样序列）
+ROOT_CAUSE_CONFIDENCE = CAUSALLY_PROVEN（2026-11-09 升级；插桩+确定性 throttle 复现）
+FIRST_CAUSAL_DIVERGENCE = 已执行（2026-11-09：throttle 4×/8×/16×/24×/32× 矩阵 + rAF/定时器双采样序列）
 
-CASE_ID = NONE（未建 case；登记为独立 occurrence）
-AGGREGATION_BASIS = 不聚合（与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 的 coverage 预算族机制不同：这是 E2E oracle 同步，不是 coverage lane 固定预算）
+CASE_ID = CASE-2026-11-09-878-KEYSCROLL-ORACLE（已升级为 case；修复与验收证据见该条目）
+AGGREGATION_BASIS = 不与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 聚合（coverage lane 固定预算族 vs E2E 浏览器动画 oracle 同步；机制、受害面、修复面均不同）
 
 ### 已知不是的原因（附证据）
 
-- 不是产品滚动语义回归：隔离单 worker 重跑 PASS；PR #851 diff 未触达该 spec 或 `ContentScrollViewport`。
+- 不是产品滚动语义回归：隔离单 worker 重跑 PASS；PR #851 diff 未触达该 spec 或 `ContentScrollViewport`；插桩全程 `activeElement === target` 且 `isConnected` 恒真。
 - 不是 fail-fast 造成的主失败：shard 2 的 cancelled 是 shard 1 failure 的结果，不是并行根因。
+- 不是 focus 抢夺 / 节点重建 / 采样点几何变化 / 页面级滚动：插桩序列逐一恒定（2026-11-09）。
 
 ### 当前缓解
 
-无。禁止用调大 timeout / 加 retry / 减少 shard 掩盖。
+已修复（2026-11-09，#923 `2a820e78`）：`arrowKeyScrollsLocally` 显式条件 oracle + `scrollToHorizontalEnd` 每键显式条件 + KaTeX 落定前置。未调大 timeout、未加 retry、未减 shard、未跳过。
 
 ### 后续动作 / NEXT_DIAGNOSTIC_ACTION
 
-#878：已在 2026-11-09 完成（见 OBS-2026-11-09-001 / CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE）：仪器化 witness 取得动画采样序列（keydown 0 → t+50ms 7 → t+150ms 40），5 处固定等待已统一替换为显式条件等待；修复后 2-shard 全量 E2E 连续 5 轮通过（每轮 E2E_EXIT=0，两个 shard 均 PASS），集成树 45d2ac99 同拓扑再通过 1 轮。历史归因仍为 HYPOTHESIS（失败轮自身采样序列未捕获）。
-
----
-
-### OBS-2026-11-09-001 — 同签名复发：2-shard 全量 E2E 在 `:568` 读到 `scrollLeft = 0`（OBS-2026-11-03-001 第 2 次；修复见 CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE）
-
-```text
-OBSERVED_AT = 2026-11-09（worktree 门禁 run；精确时刻未记录）
-GIT_SHA = 04c00297（work/scratch HEAD）
-BRANCH = work/scratch
-COMMAND = bash scripts/e2e/run.sh（E2E_WORKERS=2，COMPOSE_PROJECT_NAME=exam-gov927，
-  DB_HOST_PORT=55432 / REDIS_HOST_PORT=56379，shard API 端口 13100/13101）
-EXECUTION_TOPOLOGY = 2 个并行 shard，各自独立 exam_e2e_w<N> 库 + host-native API
-  server；受害文件位于 shard 1/2（db=exam_e2e_w0）
-FAILED_FILE = apps/e2e/e2e/rich-content-overflow.spec.ts
-FAILED_TEST = :528 candidate take → rich answer → graded result: local scroll,
-  keyboard, stable geometry
-FAILURE_PHASE = 运行时断言（非 setup/teardown）
-FAILURE_CLASS = ORACLE_SYNC（固定 150ms 采样早于 Chrome 键盘滚动动画提交）
-ERROR = expect(received).toBeGreaterThan(expected)；Expected: > 0；Received: 0
-ASSERTION_FAILURE = :568 expect(promptScrollAfter).toBeGreaterThan(promptScrollBefore)
-AUTHORITATIVE_RUN_RESULT = FAIL（shard 1/2：1 failed | 21 passed | 1 skipped |
-  3 did not run；提供的失败输出只含 shard 1 日志，shard 2 结果未保全）
-RERUN_EVIDENCE = 修复后同拓扑完整 run 通过 2 次（1 次捕获 E2E_EXIT=0，另 1 次
-  runner 两个 shard 均通过但管道未保留退出码）；merged blob report 中该用例
-  status=passed（8580ms，errors=[]），见 CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE
-DIFF_RELATION = PLAUSIBLY_UNRELATED（失败 run 的 HEAD 04c00297 diff 仅含
-  TakeExamPage.tsx 与其 snapshot 测试；该 spec 与 ContentScrollViewport 未改动。
-  按 STEP 7 不升级 PROVEN_UNRELATED）
-TRACE_AVAILABLE = YES（失败轮 screenshot + error-context 位于
-  apps/e2e/test-results/shard-0/rich-content-overflow-rich-38719-ll-keyboard-stable-
-  geometry-chromium/）
-INSTRUMENTED_WITNESS = 见 CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE：最小页面
-  ArrowRight 后 scrollLeft = 0 @keydown、0 @25ms、7 @50ms、28 @100ms、40 @150ms
-NONDETERMINISM_CONFIRMED = YES（同 HEAD：2-shard 负载 FAIL → 同拓扑条件等待 PASS）
-CURRENT_CHANGE_CAUSALITY = PLAUSIBLY_UNRELATED（失败 run 的候选改动未触达该 spec 或
-  ContentScrollViewport；按 STEP 7 不升级 PROVEN_UNRELATED）
-ROOT_CAUSE_CONFIDENCE = HYPOTHESIS（机制有 witness；失败轮采样序列未捕获）
-FIRST_CAUSAL_DIVERGENCE = 未取得失败轮内部采样序列
-CASE_ID = CASE-2026-11-09-E2E-KEYBOARD-SCROLL-ORACLE
-AGGREGATION_BASIS = 与 OBS-2026-11-03-001 机制级聚合（同一 spec、同一断言、同一
-  固定采样 vs ScrollAnimator 竞态）；AGGREGATION_CONFIDENCE = SUPPORTED
-OWNER_DISPOSITION = 登记 + 测试 oracle 修复：5 处固定等待统一为显式条件等待；
-  不调大 timeout、不重试、不减少 shard、不削弱断言
-```
+#878：#923 head `2a820e78` 的 GitHub Actions E2E 绿后关闭（本地 2-shard 连续 5/5 已达成）。
 
 ---
 

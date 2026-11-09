@@ -1,0 +1,29 @@
+warmup...
+{
+  "rows": [
+    {
+      "mix": "realistic-mix",
+      "baselineNormalizeNsPerOp": 405.4,
+      "integrationProjectNsPerOp": 908.2,
+      "deltaNs": 502.8
+    },
+    {
+      "mix": "pure-miss",
+      "baselineNormalizeNsPerOp": 384.4,
+      "integrationProjectNsPerOp": 782.3,
+      "deltaNs": 397.9
+    },
+    {
+      "mix": "pure-template",
+      "baselineNormalizeNsPerOp": 383.7,
+      "integrationProjectNsPerOp": 903.9,
+      "deltaNs": 520.2
+    }
+  ],
+  "sample": {
+    "template": "/exam/:attemptId/take",
+    "miss": null,
+    "baselineMissPersisted": "/totally/unknown/a/b/c"
+  },
+  "node": "v24.22.1"
+}

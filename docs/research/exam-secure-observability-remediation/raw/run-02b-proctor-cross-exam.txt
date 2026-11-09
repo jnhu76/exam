@@ -1,0 +1,6 @@
+===== 补充负例：proctorA1（对金丝雀考试已分配）读取未分配考试（demo seed 考试）的 attempt ==
+--- [proctorA1→demo attempt timeline]（期望 404：同 org + 有 capability + 无该考试分配 → 分配门折叠 404）
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"567e9dd5-9e0f-4bb3-a9bc-ade9ae69d4f7"}}
+>> HTTP_STATUS:404 TIME_TOTAL:0.007675
+--- [proctorA1→demo attempt proctor-events]
+{"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存在","requestId":"b37e1280-6d98-417e-89bc-01a3a1c1dc01"}}

@@ -29,9 +29,9 @@ Every request has a correlation id. The minimum traceable shape:
 
 | Field | Source | Example | Notes |
 |---|---|---|---|
-| requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, Pino and HTTP audit correlation |
+| requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, `x-request-id` response header (#865), Pino and HTTP audit correlation |
 | method | HTTP method | `POST` | pino default request log |
-| path / route | request path | `/api/attempts/:id/submit` | pino default |
+| path / route | matched route template (`routeOptions.url`; #925 serializer) | `/api/attempts/:attemptId/submit` | fixed `(unrouted)` placeholder when no route matched — never the raw URL/query |
 | statusCode | reply status | `200` | pino onResponse log |
 | durationMs | response time | `42` | pino onResponse log |
 | timestamp | pino `time` | ISO | pino default |
@@ -63,13 +63,55 @@ required merely to identify an HTTP request.
 - **Untrusted headers.** Fastify `requestIdHeader` remains explicitly disabled.
   Client-supplied `request-id` / `X-Request-Id` is never authoritative
   for the server's `request.id`.
+- **Response-header carrier (#865).** One root-scope `onRequest` hook stamps
+  `x-request-id: request.id` onto every Fastify-managed response — success,
+  business rejection, validation error, unmatched route, and thrown-error
+  paths alike. No second id is minted: the header makes the SAME
+  server-generated value (which already keys the pino lines and the error
+  envelope) readable by the caller on 2xx responses, where no envelope
+  exists. The web client consumes it opt-in
+  (`api.getWithMeta` / `api.postWithMeta` in `apps/web/src/lib/api.ts`); the
+  answer-save path is the first production consumer (#924): a 200 business
+  rejection (`accepted: false`) surfaces the header id as the rejection
+  alert's 请求编号 and as the client-claimed `requestId` in the
+  `answer_autosave_failed` telemetry metadata — never as a server-verified
+  fact. On error responses the envelope `requestId` stays authoritative; a
+  divergent header is recorded as a bounded client-log warn, not promoted
+  onto the error object. `api.getWithMeta` itself is a documented
+  forward-looking surface with no production caller yet (read-side
+  counterpart of the same opt-in seam, contract pinned by its unit test) —
+  retained deliberately, not dead code.
+  CORS exposes it only to the configured web origin
+  (`docs/contracts/api-contract.md` §Standard response headers).
+  Non-carriable boundary: requests whose response is never sent — connection
+  destroyed mid-request, socket-level HTTP framing failures, Node-level
+  request/keepAlive timeouts — and protocol-level framework errors answered
+  in router lookup before request construction (malformed request target,
+  e.g. `FST_ERR_BAD_URL`) carry no header; the server's log lines for the
+  former are still keyed by the same `request.id`.
 - **End-to-end correlation.** The same server-generated requestId is carried
-  in the error envelope, Pino request logs, and HTTP audit metadata where
+  in the error envelope, the `x-request-id` response header (#865), Pino
+  request logs, and HTTP audit metadata where
   an audit row exists. Not every HTTP request produces an audit row.
   A UUIDv4 is a correlation key, not proof of causality or of complete
   log retention. Use the known server time, origin, tenant/actor and request
   lifecycle to interpret evidence; NO_MATCH may mean UNKNOWN and multiple
   plausible records remain AMBIGUOUS.
+- **Save success, retries and UNKNOWN (#924 / #861).** A 2xx response, the
+  presence of a `requestId`, or a readable `x-request-id` header is never
+  proof that an answer was saved: save success is decided only by the
+  server's `accepted: true` response and its receipt / attempt domain state
+  (`apps/web/src/pages/exam/TakeExamPage.tsx`,
+  `docs/operations/save-failure-evidence.md`). The `accepted: false` body
+  deliberately carries no `requestId`; the header id is a correlation
+  candidate, not a save verdict. Each retry is a NEW HTTP request with its
+  own server-minted id, so a reported failure is correlated by
+  `attemptId` + `questionId` + `clientSeq` + server time window, not by
+  reusing an earlier request id. When the response is never observed
+  (connection destroyed, ACK dropped, timeout) there is no client-visible
+  id; the server-side fact is settled by receipts / domain state, and a
+  missing record is an evidence gap (UNKNOWN, F6), never proof of
+  non-arrival.
 - **Client-claimed candidates.** A requestId sent inside client telemetry
   remains an unverified claim about a previous interaction. The "客户端声明，
   未经服务端核验" label applies to all such metadata until corroborated by
@@ -78,6 +120,30 @@ required merely to identify an HTTP request.
 - **Background work.** Background scanner/incident operations continue to
   use their existing workerInstanceId/operationId; do not fabricate an HTTP
   requestId for work that did not originate from an HTTP request.
+- **Raw URLs never persisted in app pathways (#925).** No application-side
+  log pathway writes the raw client URL (query or path): the pino request
+  line logs the matched route template via the `req` serializer in
+  `lib/logRedaction.ts`; error, authz-denial and 404 logging use the same
+  `routeTemplateOf`. This is a separate claim from the nginx edge below —
+  do not merge them into one statement.
+- **nginx access-log privacy vs error-log risk acceptance (#925 / Owner
+  Decision A).** The nginx edge access log keeps the secret-free
+  `exam_privacy` format (`deploy/nginx/web.conf`): fixed prefix-level
+  route placeholder plus server-observed fields only — raw request
+  line/URI, Referer, Cookie and Authorization are banned from it forever.
+  The nginx error_log stays at the native `error` level so a self-managed
+  deployment keeps upstream/resolution fault diagnostics; nginx core quotes
+  the FULL request line (including query secrets) in error-level messages
+  during upstream/DNS failures — verified by container fault injection
+  (access log: zero raw-URL leaks across all scenarios/levels; error log:
+  leaks in the upstream-failure family; `crit` suppresses all diagnosis;
+  `warn` adds no failure-diagnostic value but additionally leaks malformed
+  request lines via uninitialized-variable warnings) — and that raw-URL
+  exposure is an explicitly accepted, bounded risk (no `crit` suppression,
+  no log-filtering proxy). Access-log
+  privacy and error-log exposure are reported as separate verdicts; any
+  third-party log collector outside the deployment boundary remains a
+  documented residual, not a verified surface.
 - **Multi-instance boundary.** Generating unique request IDs does NOT make
   the current deployment multi-instance safe. Scanner ownership, scheduling,
   deployment and lifecycle concerns require a separate architecture decision.
@@ -216,7 +282,7 @@ Additional rules (policy, partially enforced):
 
 Request trace (pino, error path):
 ```json
-{"level":"info","time":1730000000000,"req":{"method":"POST","url":"/api/attempts/a1/submit"},"reqId":"r1"}
+{"level":"info","time":1730000000000,"req":{"method":"POST","route":"/api/attempts/:attemptId/submit","remoteAddress":"10.1.2.3"},"reqId":"r1"}
 {"level":"error","time":1730000000042,"reqId":"r1","msg":"attempt submit failed","actorId":"u7","organizationId":"org1","errorCode":"ATTEMPT_CLOSED"}
 {"level":"info","time":1730000000042,"res":{"statusCode":409},"reqId":"r1","responseTime":42}
 ```

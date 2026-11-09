@@ -1,0 +1,13 @@
+   event_id   |          name           |                                                                   metadata                                                                   
+--------------+-------------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+ rtcanary-16a | auditCanaryRT           | {"note": "EXAMAUDIT-CANARY-RT-16A-plainsecret"}
+ rtcanary-16b | auditCanaryRT           | {"note": "[redacted]"}
+ rtcanary-16c | auditCanaryRT           | {"note": "[redacted]"}
+ rtcanary-16d | auditCanaryRT           | {"password": "[redacted]"}
+ rtcanary-16e | auditCanaryRT           | {"answer": "[redacted]"}
+ rtcanary-16f | auditCanaryRT           | {"message": "[redacted]"}
+ rtcanary-16g | auditCanaryRT           | {"note": "[redacted]"}
+ rtcanary-17  | auditCanaryRT           | {"arr": ["EXAMAUDIT-CANARY-RT-17A", {"k": "EXAMAUDIT-CANARY-RT-17B", "token": "[redacted]"}], "nested": {"deep": "EXAMAUDIT-CANARY-RT-17D"}}
+ rtcanary-18c | EXAMAUDIT-CANARY-RT-18C | {}
+(9 rows)
+

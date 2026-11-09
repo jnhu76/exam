@@ -503,6 +503,35 @@ audit, external log shipping. All Phase 4; none started — Issue-tracked
   baseline remains PASS. P4 is **CLOSED** — see
   [`docs/archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../archive/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md).
 
+## Secure-observability hardening (#800 campaign): ✅ MERGED TO MASTER
+
+Delivered 2026-11-09 via PRs #922/#923/#924/#926 (merge SHAs `647b5ab0` /
+`322e3c55` / `0e58a5fd` / `2ea4ab82`); decision gates #864/#865/#925 closed
+with evidence. As-built authorities: ADR-025 (+ addenda),
+`docs/contracts/observability.md`, `docs/contracts/api-contract.md`,
+`docs/operations/save-failure-evidence.md`, `docs/architecture/exam-system/security-model.md`
+(§15), `deploy/nginx/web.conf`.
+
+- **Request correlation**: server-generated UUIDv4 `request.id` carried on
+  the error envelope, the `x-request-id` response header (every
+  Fastify-managed response), pino logs and HTTP audit metadata; forged
+  client id headers never influence the value.
+- **SaveAnswer investigation**: 200 `accepted:false` business rejections are
+  correlated through the header id in candidate alerts + client telemetry
+  (unverified-claim label); retries mint new ids; receipts/attempt state
+  remain the business authority (worked example in the ops runbook).
+- **Route privacy**: client-event `route` stored only as a closed-vocabulary
+  SPA template (or `null`) at ingest AND re-projected on the proctor-timeline
+  read; historical raw bytes age out via the 30-day retention (at-rest
+  residual accepted by owner decision).
+- **Log privacy**: no raw client URL/query in pino request lines, authz/error
+  logs, or the nginx access log; nginx `error_log` stays at `error` level
+  (owner Decision A — bounded raw-request-line risk accepted).
+- **Honest unverified boundaries**: `INFRA_LOG_ACCESS = NOT_VERIFIED` (no
+  production log-permission evidence); backup retention and third-party
+  collectors UNKNOWN (operator policy); compose log-rotation caps pending an
+  owner decision (archive item O3).
+
 ## E2E status
 
 E2E is **enabled and runs as blocking CI**. The `e2e` job in

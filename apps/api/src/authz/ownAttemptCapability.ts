@@ -32,6 +32,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Database } from "@exam/db/types";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { type PermissionKey, type ResolverContext } from "@exam/authz";
+import { routeTemplateOf } from "../lib/logRedaction.js";
 import {
   resolveOwnAttemptScope,
   isOwnAttemptDenied,
@@ -86,7 +87,7 @@ export function buildOwnAttemptCapabilityPreHandler(
     const attemptId = params[resourceIdKey];
     if (!attemptId) {
       request.log.error(
-        { route: request.url, resourceIdKey, permission },
+        { route: routeTemplateOf(request), resourceIdKey, permission },
         "authz own-attempt capability resource id missing on params",
       );
       return reply

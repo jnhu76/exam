@@ -254,6 +254,7 @@ Ownership fencing prevents a stale/lost worker from updating delivery state; it 
 | INV-CE-002 | `attemptId`/`examId`/`questionId` are NULLed unless server-provable for the actor; anti-enumeration: response always `{accepted: N}`. | `clientEventReferenceNormalizer.ts` | Ownership chain + frozen question-set check |
 | INV-CE-003 | Monitoring timeline ordering is server-owned `receivedAt + id`; `occurredAt` is display-only. | `clientEventRepo.ts` + `proctorMonitoringService.ts` | `orderBy(desc(receivedAt), desc(id))` |
 | INV-CE-004 | `client_events` retention is 30 days from `receivedAt`; no durable cleanup evidence table. | `clientEventRetention.ts` | `deleteOlderThan` + structured operational log |
+| INV-CE-005 | `client_events.route` is closed-vocabulary at its boundaries: (a) every value WRITTEN by current code ∈ `SPA_ROUTE_TEMPLATES` ∪ {null}; (b) every value READ through the authorized proctor timeline ∈ `SPA_ROUTE_TEMPLATES` ∪ {null}; (c) pre-#864 at-rest bytes are legacy — immutable, re-projected on read, retention-aged. Every failure path fails closed. | `clientEventRoute.ts` (contracts) | Ingest + timeline read both project; drift guard vs App.tsx |
 
 ## 15. Client-Event Trust Boundary
 
@@ -297,5 +298,69 @@ Unprovable references are NULLed. **The event is always accepted** (`{accepted: 
 ### 15.6 Retention (INV-CE-004)
 
 30-day fixed horizon from server-owned `receivedAt`. No per-tenant configurability, no generic retention framework. The executor is application-owned (plugin following the `deadlineScanner` pattern): startup convergence + daily interval + in-flight guard + `onClose` join. No durable cleanup evidence table (no new DB tables; ADR-023 removed the backup-evidence tables and none may be reused for client-event GC).
+
+- **Eligibility and cutoff boundary.** `DELETE ... WHERE received_at <
+  cutoff`; an event whose `receivedAt == cutoff` is KEPT. The cutoff is
+  computed from server time (`retentionCutoff` in
+  `apps/api/src/plugins/clientEventRetention.ts`), never from client-asserted
+  `occurredAt` (INV-CE-003). Daily-scale sweeping is sufficient for a 30-day
+  horizon; a startup run converges any missed window, and the org-scoped
+  delete is idempotent.
+- **Cleanup failure and compensation.** A pass iterates organizations; one
+  organization's failure is logged as a structured error and does NOT block
+  the others. The next sweep (or the startup convergence after a restart)
+  converges the missed rows because the delete is idempotent. A settled pass
+  with any failed organization increments `consecutiveFailedTicks` (the
+  #871 escalation input); a fully-clean pass resets it. A tick-level throw
+  settles without business-failure evidence and freezes the counter rather
+  than falsely resetting it. No durable "cleanup evidence" row is written.
+- **Backups can restore old records.** A `pg_restore` from a dump taken
+  before the cutoff reintroduces pre-cutoff `client_events` rows at rest.
+  After restore, the online 30-day sweep re-ages them, and the INV-CE-005
+  read-side projection still applies, so historical raw route bytes never
+  re-enter an authorized response. The product's online deletion is one
+  layer only: it does not bound any backup copy.
+- **Backup retention is UNKNOWN; state the limit exactly.** Backup
+  scheduling and retention are operator policy (`docs/operations/README.md`,
+  `docs/deployment/mvp-deployment-runbook.md` §17); the platform has no
+  deployment-side visibility, so `BACKUP_RETENTION = UNKNOWN` (not VERIFIED,
+  not PARTIAL). The accurate limitation is: legacy at-rest route bytes may
+  survive for as long as the operator keeps a dump, independently of the
+  30-day business retention; encryption, dump-file permissions and any
+  third-party log collector are likewise unverified. See the evidence record
+  `docs/research/exam-secure-observability-remediation/09-HISTORICAL-DATA-AND-BACKUP-BOUNDARY.md`.
+
+### 15.7 Route closed-vocabulary projection (INV-CE-005, #864)
+
+The client-reported `route` free string is untrusted input. At BOTH the
+ingest boundary and the proctor-timeline read boundary it is projected onto
+the closed SPA route-template vocabulary `SPA_ROUTE_TEMPLATES`
+(`@exam/contracts`, single authority; a drift-guard test pins it to the
+router declared in `apps/web/src/App.tsx`). The invariant has three parts:
+
+1. **current-code writes**: every `client_events.route` value written by
+   this codebase is the matched template (dynamic identifiers become
+   `:param` placeholders — never echoed) or `null`;
+2. **authorized reads**: every value returned through the proctor timeline
+   is the matched template or `null` — legacy rows are re-projected on read
+   (see 3);
+3. **legacy at-rest bytes**: rows written by the pre-#864 regime may still
+   hold raw pathnames in the database. They are immutable (#875), are never
+   returned raw (read-side projection), and age out under the 30-day
+   retention. No data migration rewrites them.
+- unknown routes, non-http(s) schemes (incl. opaque `user:…@` and `data:`),
+  malformed URLs, and structural garbage all fail closed to `null` — there
+  is deliberately no raw/truncated/partially-sanitized fallback (the
+  pre-#864 pathname-only regime was proven leakable: path-segment secrets,
+  encoded query smuggling, opaque-scheme credentials; audit archive
+  `docs/research/exam-secure-observability-remediation/`);
+- percent escapes other than dot segments are NOT decoded (decoding `%2F`/
+  `%3F` would re-open separator smuggling);
+- the projection is idempotent, so the read-side projection of legacy rows
+  (written by the pre-#864 regime with raw pathnames) blocks historical
+  bytes from re-entering an authorized response without any data migration.
+
+The route vocabulary is the SPA router's, never Fastify's
+(`request.routeOptions.url` describes API routes, not browser navigation).
 
 ## 16. Security Invariant Summary (continued)

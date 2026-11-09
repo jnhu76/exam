@@ -8,6 +8,47 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+### Added
+
+- Server-owned `x-request-id` response header on every Fastify-managed
+  response (ADR-025 fourth correlation carrier, scope 865-C): one root-scope
+  hook reusing the existing request id — no second id is minted — with CORS
+  exposing it only to the configured web origin; opt-in
+  `api.getWithMeta`/`api.postWithMeta` client reads, and the TakeExamPage
+  save path surfaces the rejection correlation id in candidate alerts and
+  client telemetry (#865, PR #924). A save-failure investigation worked
+  example (200 `accepted:false` → X-Request-Id → pino WARN → receipt/domain
+  verification) ships in `docs/operations/save-failure-evidence.md`.
+- Security-audit evidence archive for the secure-observability remediation
+  (SHA256-pinned, sanitized copies; `docs/research/…-remediation/`)
+  (#800 evidence basis, PR #922).
+
+### Changed
+
+- Client-event `route` is projected onto a closed vocabulary of 49 SPA route
+  templates at BOTH the ingest boundary and the proctor-timeline read
+  (legacy rows re-projected on read; no data migration; unknown routes and
+  malformed/non-http(s) URLs fail closed to `null`) (#864, PR #923).
+- Log privacy: pino request lines and the 19 authz/error log sites no longer
+  persist raw client URLs — matched route templates or a fixed
+  `(unrouted)` placeholder everywhere; the nginx access log uses an explicit
+  privacy format (no `$request`/`$request_uri`/raw `$uri`/referer) recording
+  the upstream `x-request-id`; the root 404 boundary replaces Fastify's
+  URL-logging default (#925, PR #926). The nginx `error_log` keeps the
+  Owner-decided `error` level (native upstream diagnostics; the bounded
+  raw-request-line risk is accepted and documented).
+
+### Fixed
+
+- `rich-content-overflow` E2E geometry flake under 2-shard CI load (#878):
+  root cause causally proven (Chromium's internal key-scroll animation can
+  commit its first frame 59ms–1078ms after the press under contention, and
+  the lazy KaTeX fallback swap transiently flips the derived tab-stop
+  state). All five fixed 150ms waits were replaced by an explicit
+  trigger → state-change → settle oracle; registration in
+  `docs/standards/test-flakes.md` (CASE-2026-11-09-878-KEYSCROLL-ORACLE)
+  (PR #923).
+
 ## [0.0.12] - 2026-11-07
 
 ### Added

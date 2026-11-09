@@ -676,6 +676,10 @@ const zhCN = {
       futureVersion: "答案版本超前，请刷新页面后重试",
       conflictingPayload: "答案数据冲突，请刷新页面后重试",
       invalidAnswer: "答案格式不符合此题要求，请检查作答内容",
+      // 200 业务拒绝响应头 x-request-id 是考生/客服可回查的请求关联键
+      // （#924；客户端声明，未经服务端核验——同 serverErrorRequestId 的信任
+      // 定位）。仅在实际收到该头时渲染，缺失不显示占位。
+      requestId: "请求编号：{{requestId}}（如需联系管理员，请提供此编号）",
     },
     // Lock-overlay copy is branched by the authoritative snapshot lockReason
     // (#674) — each cause states only what is actually true.

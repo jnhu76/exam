@@ -20,15 +20,21 @@ import operabilityMonitorPlugin from "./plugins/operabilityMonitor.js";
 import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
+import { setupRequestIdHeader } from "./plugins/requestIdHeader.js";
 import { registerStaticFrontend } from "./plugins/staticFrontend.js";
 import apiSurfacePlugin from "./routes/apiSurface.js";
+import { registerRootNotFoundBoundary } from "./plugins/rootNotFoundBoundary.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import {
   getRuntimeConfig,
   resolveTrustProxyOption,
 } from "./config/runtimeConfig.js";
-import { REDACT_CONFIG, serializeErrorForLog } from "./lib/logRedaction.js";
+import {
+  REDACT_CONFIG,
+  serializeErrorForLog,
+  serializeReqForLog,
+} from "./lib/logRedaction.js";
 
 loadRootEnv();
 
@@ -114,7 +120,11 @@ async function main() {
     logger: {
       level: "info",
       redact: REDACT_CONFIG,
-      serializers: { err: serializeErrorForLog },
+      // #925: the req serializer replaces Fastify's default, which persists
+      // the raw req.url (full query string) on every "incoming request"
+      // line. The replacement emits the matched route template (or a fixed
+      // placeholder pre-routing) — never raw client-controlled URL bytes.
+      serializers: { req: serializeReqForLog, err: serializeErrorForLog },
     },
     // #546: the ONLY place client-IP trust is decided. Empty TRUSTED_PROXY_CIDRS
     // keeps request.ip = socket peer (DIRECT_LAN); a non-empty list enables the
@@ -122,6 +132,12 @@ async function main() {
     // this single request.ip derivation.
     trustProxy: resolveTrustProxyOption(getRuntimeConfig()),
   });
+
+  // #865: root-scope, before any registration, so every response path — /api
+  // routes, the canonical unmatched-route boundary, docs, static — carries the
+  // server-owned x-request-id. The value is the request.id already minted
+  // above; client headers never influence it.
+  setupRequestIdHeader(app);
 
   await app.register(fastifyCookie);
   await app.register(cors);
@@ -157,7 +173,16 @@ async function main() {
   );
   app.log.info({ publicDir, exists: existsSync(publicDir) }, "static dir");
   if (existsSync(publicDir)) {
+    // The static surface owns the root unmatched policy (SPA shell fallback
+    // for GET/HEAD, plain 404 otherwise — it logs no URL, so #925 holds).
+    // Fastify allows ONE root notFound handler; registering the API-only
+    // boundary here too would throw "Not found handler already set".
     await registerStaticFrontend(app, publicDir);
+  } else {
+    // #925 API-only deployments: replace the default basic404, which logs
+    // `Route <raw url> not found` (raw query/path bytes), with the same
+    // JSON envelope the /api scope serves (#429).
+    registerRootNotFoundBoundary(app);
   }
 
   registerShutdownSignals(app);
