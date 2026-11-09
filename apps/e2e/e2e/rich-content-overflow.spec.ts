@@ -1086,6 +1086,14 @@ test.describe.serial("rich-content overflow contract", () => {
       .locator('[data-slot="card"]')
       .filter({ hasText: "考生视角预览" })
       .first();
+    // Settle the lazy KaTeX projection BEFORE the one-shot geometry snapshot:
+    // overflowing/tabIndex in the snapshot derive from the measured width,
+    // and a mid-swap read samples the transient raw-LaTeX fallback surface
+    // (the #878 family; independent review finding).
+    await expect(card.locator(".katex").first()).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
     const geometry = await card.evaluate((cardEl) => {
       const cardRect = cardEl.getBoundingClientRect();
       const viewports = Array.from(
@@ -1132,14 +1140,8 @@ test.describe.serial("rich-content overflow contract", () => {
       ),
     ).toBe(true);
 
-    // The preview's first keyboard stop is the prompt's block formula:
-    // settle the lazy KaTeX projection BEFORE the walk, so the tab-stop
-    // state the walk relies on is the settled one (same rule as the take
-    // page).
-    await expect(card.locator(".katex").first()).toHaveCount(1);
-    await page.evaluate(async () => {
-      if (document.fonts) await document.fonts.ready;
-    });
+    // KaTeX + fonts are already settled above (before the geometry
+    // snapshot), so the walk relies on the settled tab-stop state.
     await page.mouse.click(2, 2);
     await tabToViewport(page);
     const focused = page.locator('[data-slot="content-scroll-viewport"]:focus');
@@ -1245,15 +1247,23 @@ test.describe.serial("rich-content overflow contract", () => {
     expect(code!.tabIndex).toBe(0);
     expect(code!.label).toBe("代码块，可横向滚动");
 
+    // Settle the lazy KaTeX projection at the ANSWER level BEFORE the
+    // keyboard walk: the walk's target selection is itself swap-dependent —
+    // pre-swap the wider raw-LaTeX fallback makes the formula a tab stop
+    // (first stop), while the settled formula is not — so a pre-settle walk
+    // can land on a viewport whose settled geometry has no real overflow
+    // and the initialMax assertion below would then read the transient
+    // surface (#878 family; independent review finding).
+    await expect(answer.locator(".katex").first()).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
     await page.mouse.click(2, 2);
     await tabToViewport(page);
     const focused = page.locator('[data-slot="content-scroll-viewport"]:focus');
     expect(
       await answer.evaluate((el) => el.contains(document.activeElement)),
     ).toBe(true);
-    await page.evaluate(async () => {
-      if (document.fonts) await document.fonts.ready;
-    });
     const initialMax = await focused.evaluate(
       (el) => el.scrollWidth - el.clientWidth,
     );
