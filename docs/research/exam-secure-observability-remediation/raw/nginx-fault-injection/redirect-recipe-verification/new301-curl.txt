@@ -1,0 +1,8 @@
+-- new recipe: healthz (expect 200):
+200
+-- new recipe: / (expect 301 -> https):
+301 https://127.0.0.1/
+-- new recipe: /api/ok (expect 301):
+301
+-- new recipe: https / (expect 200):
+200

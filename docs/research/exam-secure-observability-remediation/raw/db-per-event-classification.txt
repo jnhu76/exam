@@ -1,0 +1,42 @@
+   event_id   | r_raw | r_pct1 | r_pct2 | m_raw | s_raw 
+--------------+-------+--------+--------+-------+-------
+ rtcanary-1   | t     | f      | f      | f     | 
+ rtcanary-10  | f     | f      | f      | f     | 
+ rtcanary-11  | t     | f      | f      | f     | 
+ rtcanary-12  | f     | f      | f      | f     | 
+ rtcanary-12b | t     | f      | f      | f     | 
+ rtcanary-12c | t     | f      | f      | f     | 
+ rtcanary-13  | f     | f      | f      | f     | 
+ rtcanary-14  | f     | f      | f      | f     | 
+ rtcanary-14b | t     | f      | f      | f     | 
+ rtcanary-15  | t     | f      | f      | f     | 
+ rtcanary-15b | f     | f      | f      | f     | 
+ rtcanary-16a | f     | f      | f      | t     | 
+ rtcanary-16b | f     | f      | f      | f     | 
+ rtcanary-16c | f     | f      | f      | f     | 
+ rtcanary-16d | f     | f      | f      | f     | 
+ rtcanary-16e | f     | f      | f      | f     | 
+ rtcanary-16f | f     | f      | f      | f     | 
+ rtcanary-16g | f     | f      | f      | f     | 
+ rtcanary-17  | f     | f      | f      | t     | 
+ rtcanary-18c | f     | f      | f      | f     | 
+ rtcanary-18d | f     | f      | f      | f     | t
+ rtcanary-18e | f     | f      | f      | f     | f
+ rtcanary-2   | t     | f      | f      | f     | 
+ rtcanary-2b  | t     | f      | f      | f     | 
+ rtcanary-3   | t     | f      | f      | f     | 
+ rtcanary-4   | f     | f      | f      | f     | 
+ rtcanary-5   | f     | f      | f      | f     | 
+ rtcanary-6   | f     | t      | f      | f     | 
+ rtcanary-7   | f     | t      | t      | f     | 
+ rtcanary-8   | t     | f      | f      | f     | 
+ rtcanary-9   | t     | f      | f      | f     | 
+(31 rows)
+
+                  id                  |               name               |          event_id           |        client_session_id         |        received_at         
+--------------------------------------+----------------------------------+-----------------------------+----------------------------------+----------------------------
+ 01d0f6df-8578-45a6-ac1d-ca3332950253 | examaudit-canary-f6-baseline-a1  | EXAMAUDIT-CANARY-EV-A1-0001 | EXAMAUDIT-CANARY-SESSION-A1-0001 | 2026-11-08 00:45:49.599+08
+ ec62ecce-b51d-41a3-b62b-47cd32c4d173 | examaudit-canary-f6-a2-claims-a1 | EXAMAUDIT-CANARY-EV-A1-0001 | EXAMAUDIT-CANARY-SESSION-A1-0001 | 2026-11-08 00:45:49.621+08
+ a5b8bd4b-2b0c-4472-a729-af625d164e61 | EXAMAUDIT-CANARY-unknown-event   | EXAMAUDITCANARY0002         |                                  | 2026-11-08 00:55:20.126+08
+(3 rows)
+

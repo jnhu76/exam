@@ -1,0 +1,147 @@
+RUN_START 2026-11-08T15:54:29Z
+=== rep 1 variant base (15:54:29) ===
+[base] discovered 18 save slots across 3 candidates
+[base rep1] answers-c1: n=296 rps=24.7 p50=38.6 p95=60.1 p99=73.0 cpu=14.19ms/req pino=530.3B/req xact/req=4.17 receipts=296 ce=0 statuses={"200":296} accT=296 accF=0
+[base rep1] answers-c3: n=758 rps=63.0 p50=46.6 p95=60.6 p99=70.1 cpu=11.37ms/req pino=530.2B/req xact/req=4.07 receipts=758 ce=0 statuses={"200":758} accT=758 accF=0
+[base rep1] answers-c8: n=614 rps=50.2 p50=165.0 p95=311.9 p99=380.2 cpu=14.12ms/req pino=695.9B/req xact/req=3.83 receipts=494 ce=0 statuses={"200":494,"409":120} accT=494 accF=0
+[base rep1] reject-c8: n=994 rps=82.1 p50=91.1 p95=138.7 p99=205.3 cpu=9.12ms/req pino=1096.1B/req xact/req=4.10 receipts=0 ce=0 statuses={"200":994} accT=0 accF=994
+[base rep1] events-safe-c8: n=2701 rps=224.6 p50=34.6 p95=46.2 p99=59.1 cpu=4.50ms/req pino=453.4B/req xact/req=4.97 receipts=0 ce=27010 statuses={"200":2701} accT=0 accF=0
+[base rep1] events-miss-c8: n=2481 rps=206.2 p50=38.1 p95=49.4 p99=58.5 cpu=5.01ms/req pino=453.3B/req xact/req=4.98 receipts=0 ce=24810 statuses={"200":2481} accT=0 accF=0
+[base rep1] get-c8: n=2371 rps=197.0 p50=40.1 p95=56.6 p99=63.7 cpu=5.32ms/req pino=484.3B/req xact/req=5.88 receipts=0 ce=0 statuses={"200":2371} accT=0 accF=0
+[base rep1] heartbeat-c3: n=1980 rps=164.8 p50=17.6 p95=23.0 p99=28.1 cpu=3.95ms/req pino=495.7B/req xact/req=6.08 receipts=0 ce=0 statuses={"200":1980} accT=0 accF=0
+[base rep1] httperr-c8: n=73164 rps=6096.5 p50=1.2 p95=2.0 p99=2.5 cpu=0.17ms/req pino=461.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":73164} accT=0 accF=0
+[base rep1] done -> /tmp/perf-ab/out/phases-base-rep1.json
+=== rep 1 variant int (15:57:43) ===
+[int] discovered 18 save slots across 3 candidates
+[int rep1] answers-c1: n=299 rps=24.9 p50=39.1 p95=49.4 p99=57.4 cpu=15.82ms/req pino=457.3B/req xact/req=4.02 receipts=299 ce=0 statuses={"200":299} accT=299 accF=0
+[int rep1] answers-c3: n=840 rps=69.7 p50=42.0 p95=53.8 p99=58.3 cpu=9.23ms/req pino=457.2B/req xact/req=4.12 receipts=840 ce=0 statuses={"200":840} accT=840 accF=0
+[int rep1] answers-c8: n=672 rps=55.3 p50=152.3 p95=295.3 p99=314.4 cpu=11.93ms/req pino=621.4B/req xact/req=3.94 receipts=577 ce=0 statuses={"200":577,"409":95} accT=577 accF=0
+[int rep1] reject-c8: n=1080 rps=89.6 p50=88.2 p95=104.6 p99=112.4 cpu=8.19ms/req pino=1022.9B/req xact/req=4.21 receipts=0 ce=0 statuses={"200":1080} accT=0 accF=1080
+[int rep1] events-safe-c8: n=2569 rps=213.6 p50=36.9 p95=45.1 p99=50.7 cpu=4.58ms/req pino=431.3B/req xact/req=5.01 receipts=0 ce=25690 statuses={"200":2569} accT=0 accF=0
+[int rep1] events-miss-c8: n=2758 rps=229.5 p50=34.3 p95=42.4 p99=48.5 cpu=4.34ms/req pino=431.4B/req xact/req=5.13 receipts=0 ce=27580 statuses={"200":2758} accT=0 accF=0
+[int rep1] get-c8: n=2767 rps=230.2 p50=34.1 p95=44.1 p99=50.0 cpu=4.38ms/req pino=429.4B/req xact/req=6.13 receipts=0 ce=0 statuses={"200":2767} accT=0 accF=0
+[int rep1] heartbeat-c3: n=2048 rps=170.4 p50=17.1 p95=21.3 p99=27.2 cpu=3.52ms/req pino=447.7B/req xact/req=6.13 receipts=0 ce=0 statuses={"200":2048} accT=0 accF=0
+[int rep1] httperr-c8: n=71651 rps=5968.4 p50=1.2 p95=2.0 p99=2.6 cpu=0.19ms/req pino=424.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":71651} accT=0 accF=0
+[int rep1] done -> /tmp/perf-ab/out/phases-int-rep1.json
+=== rep 2 variant int (16:00:56) ===
+[int] discovered 18 save slots across 3 candidates
+[int rep2] answers-c1: n=349 rps=29.1 p50=33.5 p95=41.9 p99=49.3 cpu=10.95ms/req pino=457.4B/req xact/req=4.01 receipts=349 ce=0 statuses={"200":349} accT=349 accF=0
+[int rep2] answers-c3: n=879 rps=73.1 p50=40.5 p95=48.1 p99=52.9 cpu=8.62ms/req pino=457.2B/req xact/req=4.12 receipts=879 ce=0 statuses={"200":879} accT=879 accF=0
+[int rep2] answers-c8: n=669 rps=54.9 p50=154.3 p95=293.5 p99=316.2 cpu=12.44ms/req pino=621.0B/req xact/req=3.78 receipts=566 ce=0 statuses={"200":566,"409":103} accT=566 accF=0
+[int rep2] reject-c8: n=1152 rps=95.4 p50=82.6 p95=97.9 p99=104.5 cpu=7.68ms/req pino=1022.9B/req xact/req=4.11 receipts=0 ce=0 statuses={"200":1152} accT=0 accF=1152
+[int rep2] events-safe-c8: n=2958 rps=246.1 p50=31.9 p95=39.2 p99=45.4 cpu=3.92ms/req pino=431.5B/req xact/req=5.06 receipts=0 ce=29580 statuses={"200":2958} accT=0 accF=0
+[int rep2] events-miss-c8: n=2904 rps=241.6 p50=32.5 p95=40.5 p99=46.6 cpu=4.13ms/req pino=431.5B/req xact/req=5.09 receipts=0 ce=29040 statuses={"200":2904} accT=0 accF=0
+[int rep2] get-c8: n=3023 rps=251.6 p50=31.1 p95=40.3 p99=45.7 cpu=3.95ms/req pino=429.5B/req xact/req=6.08 receipts=0 ce=0 statuses={"200":3023} accT=0 accF=0
+[int rep2] heartbeat-c3: n=2092 rps=174.2 p50=17.0 p95=20.5 p99=23.4 cpu=3.64ms/req pino=447.7B/req xact/req=6.04 receipts=0 ce=0 statuses={"200":2092} accT=0 accF=0
+[int rep2] httperr-c8: n=72209 rps=6016.9 p50=1.2 p95=2.0 p99=2.7 cpu=0.19ms/req pino=424.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":72209} accT=0 accF=0
+[int rep2] done -> /tmp/perf-ab/out/phases-int-rep2.json
+=== rep 2 variant base (16:04:09) ===
+[base] discovered 18 save slots across 3 candidates
+[base rep2] answers-c1: n=307 rps=25.5 p50=38.1 p95=51.6 p99=58.5 cpu=14.14ms/req pino=530.3B/req xact/req=4.05 receipts=307 ce=0 statuses={"200":307} accT=307 accF=0
+[base rep2] answers-c3: n=627 rps=52.1 p50=53.9 p95=84.6 p99=114.8 cpu=14.42ms/req pino=530.2B/req xact/req=4.14 receipts=627 ce=0 statuses={"200":627} accT=627 accF=0
+[base rep2] answers-c8: n=683 rps=56.2 p50=135.0 p95=291.9 p99=338.3 cpu=12.30ms/req pino=690.0B/req xact/req=3.82 receipts=578 ce=0 statuses={"200":578,"409":105} accT=578 accF=0
+[base rep2] reject-c8: n=1017 rps=84.3 p50=86.9 p95=131.1 p99=179.5 cpu=8.91ms/req pino=1095.6B/req xact/req=4.12 receipts=0 ce=0 statuses={"200":1017} accT=0 accF=1017
+[base rep2] events-safe-c8: n=2588 rps=215.4 p50=36.2 p95=47.4 p99=56.3 cpu=4.71ms/req pino=453.4B/req xact/req=4.95 receipts=0 ce=25880 statuses={"200":2588} accT=0 accF=0
+[base rep2] events-miss-c8: n=2739 rps=227.8 p50=33.3 p95=43.9 p99=90.2 cpu=4.26ms/req pino=453.4B/req xact/req=5.04 receipts=0 ce=27390 statuses={"200":2739} accT=0 accF=0
+[base rep2] get-c8: n=2782 rps=231.4 p50=33.9 p95=41.8 p99=51.4 cpu=4.42ms/req pino=484.4B/req xact/req=6.04 receipts=0 ce=0 statuses={"200":2782} accT=0 accF=0
+[base rep2] heartbeat-c3: n=2146 rps=178.7 p50=16.6 p95=20.2 p99=22.3 cpu=3.59ms/req pino=495.7B/req xact/req=6.06 receipts=0 ce=0 statuses={"200":2146} accT=0 accF=0
+[base rep2] httperr-c8: n=76248 rps=6354.5 p50=1.2 p95=1.9 p99=2.4 cpu=0.17ms/req pino=461.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":76248} accT=0 accF=0
+[base rep2] done -> /tmp/perf-ab/out/phases-base-rep2.json
+=== rep 3 variant base (16:07:22) ===
+[base] discovered 18 save slots across 3 candidates
+[base rep3] answers-c1: n=341 rps=28.3 p50=34.5 p95=43.9 p99=49.7 cpu=10.85ms/req pino=530.4B/req xact/req=4.06 receipts=341 ce=0 statuses={"200":341} accT=341 accF=0
+[base rep3] answers-c3: n=1005 rps=83.7 p50=35.5 p95=41.2 p99=44.2 cpu=7.60ms/req pino=530.3B/req xact/req=4.10 receipts=1005 ce=0 statuses={"200":1005} accT=1005 accF=0
+[base rep3] answers-c8: n=881 rps=72.3 p50=39.3 p95=266.9 p99=290.3 cpu=9.21ms/req pino=652.5B/req xact/req=3.84 receipts=648 ce=0 statuses={"200":648,"409":233} accT=648 accF=0
+[base rep3] reject-c8: n=1172 rps=97.2 p50=76.8 p95=114.2 p99=157.4 cpu=7.47ms/req pino=1096.0B/req xact/req=4.23 receipts=0 ce=0 statuses={"200":1172} accT=0 accF=1172
+[base rep3] events-safe-c8: n=3383 rps=281.5 p50=27.7 p95=35.2 p99=40.8 cpu=3.62ms/req pino=453.6B/req xact/req=5.11 receipts=0 ce=33830 statuses={"200":3383} accT=0 accF=0
+[base rep3] events-miss-c8: n=3464 rps=288.3 p50=27.1 p95=34.1 p99=42.7 cpu=3.48ms/req pino=453.6B/req xact/req=5.02 receipts=0 ce=34640 statuses={"200":3464} accT=0 accF=0
+[base rep3] get-c8: n=3447 rps=286.8 p50=27.2 p95=35.0 p99=41.6 cpu=3.59ms/req pino=484.6B/req xact/req=6.00 receipts=0 ce=0 statuses={"200":3447} accT=0 accF=0
+[base rep3] heartbeat-c3: n=2355 rps=196.0 p50=15.0 p95=18.2 p99=20.6 cpu=3.16ms/req pino=495.8B/req xact/req=5.90 receipts=0 ce=0 statuses={"200":2355} accT=0 accF=0
+[base rep3] httperr-c8: n=90748 rps=7561.7 p50=1.0 p95=1.5 p99=1.9 cpu=0.14ms/req pino=461.1B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":90748} accT=0 accF=0
+[base rep3] done -> /tmp/perf-ab/out/phases-base-rep3.json
+=== rep 3 variant int (16:10:33) ===
+[int] discovered 18 save slots across 3 candidates
+[int rep3] answers-c1: n=409 rps=34.1 p50=28.9 p95=34.2 p99=39.0 cpu=10.29ms/req pino=457.6B/req xact/req=3.89 receipts=409 ce=0 statuses={"200":409} accT=409 accF=0
+[int rep3] answers-c3: n=972 rps=80.8 p50=37.0 p95=41.1 p99=43.6 cpu=7.50ms/req pino=457.2B/req xact/req=4.08 receipts=972 ce=0 statuses={"200":972} accT=972 accF=0
+[int rep3] answers-c8: n=903 rps=74.3 p50=38.4 p95=265.5 p99=271.8 cpu=8.50ms/req pino=576.6B/req xact/req=3.74 receipts=660 ce=0 statuses={"200":660,"409":243} accT=660 accF=0
+[int rep3] reject-c8: n=1317 rps=109.2 p50=72.3 p95=83.2 p99=95.9 cpu=6.51ms/req pino=1022.3B/req xact/req=4.04 receipts=0 ce=0 statuses={"200":1317} accT=0 accF=1317
+[int rep3] events-safe-c8: n=3411 rps=283.8 p50=27.5 p95=34.6 p99=43.7 cpu=3.44ms/req pino=431.6B/req xact/req=4.96 receipts=0 ce=34110 statuses={"200":3411} accT=0 accF=0
+[int rep3] events-miss-c8: n=3504 rps=291.5 p50=27.2 p95=32.1 p99=35.6 cpu=3.30ms/req pino=431.6B/req xact/req=5.15 receipts=0 ce=35040 statuses={"200":3504} accT=0 accF=0
+[int rep3] get-c8: n=3446 rps=286.8 p50=27.4 p95=33.3 p99=39.3 cpu=3.46ms/req pino=429.6B/req xact/req=6.15 receipts=0 ce=0 statuses={"200":3446} accT=0 accF=0
+[int rep3] heartbeat-c3: n=2297 rps=191.4 p50=15.5 p95=18.3 p99=21.0 cpu=3.14ms/req pino=447.8B/req xact/req=6.05 receipts=0 ce=0 statuses={"200":2297} accT=0 accF=0
+[int rep3] httperr-c8: n=75696 rps=6308.0 p50=1.2 p95=1.9 p99=2.5 cpu=0.18ms/req pino=424.0B/req xact/req=0.01 receipts=0 ce=0 statuses={"404":75696} accT=0 accF=0
+[int rep3] done -> /tmp/perf-ab/out/phases-int-rep3.json
+=== rep 4 variant int (16:13:44) ===
+[int] discovered 18 save slots across 3 candidates
+[int rep4] answers-c1: n=424 rps=35.3 p50=27.9 p95=32.6 p99=34.4 cpu=8.66ms/req pino=457.6B/req xact/req=3.98 receipts=424 ce=0 statuses={"200":424} accT=424 accF=0
+[int rep4] answers-c3: n=820 rps=68.2 p50=41.6 p95=58.0 p99=93.1 cpu=9.33ms/req pino=457.2B/req xact/req=4.17 receipts=820 ce=0 statuses={"200":820} accT=820 accF=0
+[int rep4] answers-c8: n=740 rps=61.1 p50=49.3 p95=287.8 p99=307.3 cpu=10.88ms/req pino=605.2B/req xact/req=3.81 receipts=600 ce=0 statuses={"200":600,"409":140} accT=600 accF=0
+[int rep4] reject-c8: n=1198 rps=99.4 p50=79.6 p95=92.9 p99=105.0 cpu=7.15ms/req pino=1022.9B/req xact/req=4.16 receipts=0 ce=0 statuses={"200":1198} accT=0 accF=1198
+[int rep4] events-safe-c8: n=2927 rps=243.6 p50=32.2 p95=40.8 p99=47.5 cpu=4.10ms/req pino=431.5B/req xact/req=5.12 receipts=0 ce=29270 statuses={"200":2927} accT=0 accF=0
+[int rep4] events-miss-c8: n=2715 rps=225.9 p50=34.6 p95=44.2 p99=48.7 cpu=4.36ms/req pino=431.4B/req xact/req=5.05 receipts=0 ce=27150 statuses={"200":2715} accT=0 accF=0
+[int rep4] get-c8: n=2154 rps=179.0 p50=42.0 p95=66.9 p99=86.2 cpu=5.55ms/req pino=429.3B/req xact/req=5.69 receipts=0 ce=0 statuses={"200":2154} accT=0 accF=0
+[int rep4] heartbeat-c3: n=1967 rps=163.8 p50=17.7 p95=22.5 p99=27.0 cpu=3.72ms/req pino=447.7B/req xact/req=5.91 receipts=0 ce=0 statuses={"200":1967} accT=0 accF=0
+[int rep4] httperr-c8: n=70859 rps=5904.9 p50=1.2 p95=2.1 p99=2.8 cpu=0.20ms/req pino=424.0B/req xact/req=0.01 receipts=0 ce=0 statuses={"404":70859} accT=0 accF=0
+[int rep4] done -> /tmp/perf-ab/out/phases-int-rep4.json
+=== rep 4 variant base (16:16:56) ===
+[base] discovered 18 save slots across 3 candidates
+[base rep4] answers-c1: n=410 rps=34.2 p50=28.6 p95=33.4 p99=36.5 cpu=9.80ms/req pino=530.6B/req xact/req=3.95 receipts=410 ce=0 statuses={"200":410} accT=410 accF=0
+[base rep4] answers-c3: n=963 rps=80.0 p50=37.0 p95=44.5 p99=53.3 cpu=8.41ms/req pino=530.3B/req xact/req=4.08 receipts=963 ce=0 statuses={"200":963} accT=963 accF=0
+[base rep4] answers-c8: n=785 rps=64.5 p50=44.0 p95=275.2 p99=285.3 cpu=10.48ms/req pino=670.4B/req xact/req=3.85 receipts=622 ce=0 statuses={"200":622,"409":163} accT=622 accF=0
+[base rep4] reject-c8: n=1180 rps=97.9 p50=81.4 p95=93.6 p99=102.1 cpu=7.48ms/req pino=1095.9B/req xact/req=4.14 receipts=0 ce=0 statuses={"200":1180} accT=0 accF=1180
+[base rep4] events-safe-c8: n=3141 rps=261.6 p50=29.9 p95=38.7 p99=46.6 cpu=3.88ms/req pino=453.5B/req xact/req=5.09 receipts=0 ce=31410 statuses={"200":3141} accT=0 accF=0
+[base rep4] events-miss-c8: n=3053 rps=254.1 p50=30.6 p95=39.2 p99=45.8 cpu=3.88ms/req pino=453.5B/req xact/req=5.15 receipts=0 ce=30530 statuses={"200":3053} accT=0 accF=0
+[base rep4] get-c8: n=3161 rps=263.0 p50=29.6 p95=37.8 p99=42.1 cpu=3.89ms/req pino=484.5B/req xact/req=6.17 receipts=0 ce=0 statuses={"200":3161} accT=0 accF=0
+[base rep4] heartbeat-c3: n=2399 rps=199.8 p50=14.7 p95=17.6 p99=20.7 cpu=3.15ms/req pino=495.8B/req xact/req=6.02 receipts=0 ce=0 statuses={"200":2399} accT=0 accF=0
+[base rep4] httperr-c8: n=90589 rps=7549.1 p50=1.0 p95=1.5 p99=1.8 cpu=0.14ms/req pino=461.1B/req xact/req=0.01 receipts=0 ce=0 statuses={"404":90589} accT=0 accF=0
+[base rep4] done -> /tmp/perf-ab/out/phases-base-rep4.json
+=== rep 5 variant base (16:20:08) ===
+[base] discovered 18 save slots across 3 candidates
+[base rep5] answers-c1: n=417 rps=34.7 p50=28.1 p95=34.5 p99=39.6 cpu=8.37ms/req pino=530.5B/req xact/req=3.97 receipts=417 ce=0 statuses={"200":417} accT=417 accF=0
+[base rep5] answers-c3: n=1001 rps=83.4 p50=34.4 p95=48.3 p99=65.2 cpu=7.37ms/req pino=530.3B/req xact/req=4.10 receipts=1001 ce=0 statuses={"200":1001} accT=1001 accF=0
+[base rep5] answers-c8: n=872 rps=71.3 p50=40.0 p95=271.3 p99=286.2 cpu=9.54ms/req pino=653.7B/req xact/req=3.74 receipts=650 ce=0 statuses={"200":650,"409":222} accT=650 accF=0
+[base rep5] reject-c8: n=1361 rps=112.9 p50=70.3 p95=78.1 p99=84.2 cpu=6.30ms/req pino=1096.9B/req xact/req=4.06 receipts=0 ce=0 statuses={"200":1361} accT=0 accF=1361
+[base rep5] events-safe-c8: n=3510 rps=292.0 p50=26.6 p95=34.7 p99=40.1 cpu=3.56ms/req pino=453.6B/req xact/req=4.99 receipts=0 ce=35100 statuses={"200":3510} accT=0 accF=0
+[base rep5] events-miss-c8: n=3677 rps=306.1 p50=25.7 p95=31.7 p99=35.1 cpu=3.29ms/req pino=453.6B/req xact/req=5.03 receipts=0 ce=36770 statuses={"200":3677} accT=0 accF=0
+[base rep5] get-c8: n=3693 rps=307.2 p50=25.4 p95=32.1 p99=35.4 cpu=3.34ms/req pino=484.6B/req xact/req=6.17 receipts=0 ce=0 statuses={"200":3693} accT=0 accF=0
+[base rep5] heartbeat-c3: n=2467 rps=205.5 p50=14.4 p95=17.3 p99=19.6 cpu=2.91ms/req pino=495.8B/req xact/req=6.03 receipts=0 ce=0 statuses={"200":2467} accT=0 accF=0
+[base rep5] httperr-c8: n=90066 rps=7505.5 p50=1.0 p95=1.5 p99=1.9 cpu=0.14ms/req pino=461.1B/req xact/req=0.01 receipts=0 ce=0 statuses={"404":90066} accT=0 accF=0
+[base rep5] done -> /tmp/perf-ab/out/phases-base-rep5.json
+=== rep 5 variant int (16:23:19) ===
+[int] discovered 18 save slots across 3 candidates
+[int rep5] answers-c1: n=381 rps=31.7 p50=28.8 p95=41.0 p99=71.4 cpu=9.87ms/req pino=457.5B/req xact/req=3.95 receipts=381 ce=0 statuses={"200":381} accT=381 accF=0
+[int rep5] answers-c3: n=1010 rps=84.0 p50=35.5 p95=39.8 p99=42.3 cpu=7.27ms/req pino=457.2B/req xact/req=4.07 receipts=1010 ce=0 statuses={"200":1010} accT=1010 accF=0
+[int rep5] answers-c8: n=907 rps=74.4 p50=38.5 p95=264.6 p99=282.7 cpu=8.67ms/req pino=576.1B/req xact/req=3.61 receipts=660 ce=0 statuses={"200":660,"409":247} accT=660 accF=0
+[int rep5] reject-c8: n=1351 rps=112.2 p50=70.8 p95=79.4 p99=86.0 cpu=6.22ms/req pino=1023.8B/req xact/req=3.99 receipts=0 ce=0 statuses={"200":1351} accT=0 accF=1351
+[int rep5] events-safe-c8: n=3399 rps=282.8 p50=27.3 p95=34.2 p99=42.5 cpu=3.43ms/req pino=431.6B/req xact/req=5.02 receipts=0 ce=33990 statuses={"200":3399} accT=0 accF=0
+[int rep5] events-miss-c8: n=3554 rps=295.6 p50=26.5 p95=33.1 p99=38.4 cpu=3.24ms/req pino=431.6B/req xact/req=5.07 receipts=0 ce=35540 statuses={"200":3554} accT=0 accF=0
+[int rep5] get-c8: n=3581 rps=298.1 p50=26.4 p95=31.9 p99=35.4 cpu=3.34ms/req pino=429.6B/req xact/req=6.19 receipts=0 ce=0 statuses={"200":3581} accT=0 accF=0
+[int rep5] heartbeat-c3: n=2327 rps=193.8 p50=15.2 p95=18.1 p99=20.2 cpu=3.06ms/req pino=447.8B/req xact/req=6.45 receipts=0 ce=0 statuses={"200":2327} accT=0 accF=0
+[int rep5] httperr-c8: n=84332 rps=7027.1 p50=1.1 p95=1.6 p99=2.1 cpu=0.16ms/req pino=424.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":84332} accT=0 accF=0
+[int rep5] done -> /tmp/perf-ab/out/phases-int-rep5.json
+=== rep 6 variant int (16:26:30) ===
+[int] discovered 18 save slots across 3 candidates
+[int rep6] answers-c1: n=414 rps=34.5 p50=28.6 p95=33.1 p99=35.9 cpu=8.74ms/req pino=457.6B/req xact/req=3.90 receipts=414 ce=0 statuses={"200":414} accT=414 accF=0
+[int rep6] answers-c3: n=1000 rps=83.2 p50=35.5 p95=42.1 p99=49.0 cpu=7.35ms/req pino=457.3B/req xact/req=4.05 receipts=1000 ce=0 statuses={"200":1000} accT=1000 accF=0
+[int rep6] answers-c8: n=932 rps=76.9 p50=37.6 p95=256.5 p99=267.2 cpu=8.07ms/req pino=573.8B/req xact/req=3.74 receipts=674 ce=0 statuses={"200":674,"409":258} accT=674 accF=0
+[int rep6] reject-c8: n=1346 rps=111.7 p50=70.4 p95=84.0 p99=93.8 cpu=6.09ms/req pino=1023.9B/req xact/req=4.09 receipts=0 ce=0 statuses={"200":1346} accT=0 accF=1346
+[int rep6] events-safe-c8: n=3572 rps=297.3 p50=26.2 p95=32.9 p99=44.9 cpu=3.32ms/req pino=431.6B/req xact/req=5.05 receipts=0 ce=35720 statuses={"200":3572} accT=0 accF=0
+[int rep6] events-miss-c8: n=3600 rps=299.6 p50=26.0 p95=31.3 p99=35.2 cpu=3.10ms/req pino=431.6B/req xact/req=5.15 receipts=0 ce=36000 statuses={"200":3600} accT=0 accF=0
+[int rep6] get-c8: n=3602 rps=299.8 p50=26.2 p95=31.9 p99=36.0 cpu=3.33ms/req pino=429.6B/req xact/req=6.10 receipts=0 ce=0 statuses={"200":3602} accT=0 accF=0
+[int rep6] heartbeat-c3: n=2402 rps=200.0 p50=14.9 p95=17.1 p99=18.3 cpu=2.92ms/req pino=447.8B/req xact/req=6.10 receipts=0 ce=0 statuses={"200":2402} accT=0 accF=0
+[int rep6] httperr-c8: n=85550 rps=7129.2 p50=1.1 p95=1.5 p99=2.1 cpu=0.16ms/req pino=424.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":85550} accT=0 accF=0
+[int rep6] done -> /tmp/perf-ab/out/phases-int-rep6.json
+=== rep 6 variant base (16:29:41) ===
+[base] discovered 18 save slots across 3 candidates
+[base rep6] answers-c1: n=432 rps=36.0 p50=27.2 p95=32.7 p99=37.3 cpu=9.33ms/req pino=530.6B/req xact/req=3.98 receipts=432 ce=0 statuses={"200":432} accT=432 accF=0
+[base rep6] answers-c3: n=1058 rps=88.0 p50=33.7 p95=38.8 p99=42.1 cpu=7.26ms/req pino=530.4B/req xact/req=4.02 receipts=1058 ce=0 statuses={"200":1058} accT=1058 accF=0
+[base rep6] answers-c8: n=998 rps=82.3 p50=36.0 p95=245.2 p99=254.3 cpu=7.80ms/req pino=642.3B/req xact/req=3.74 receipts=709 ce=0 statuses={"200":709,"409":289} accT=709 accF=0
+[base rep6] reject-c8: n=1389 rps=115.3 p50=67.9 p95=80.3 p99=93.2 cpu=6.52ms/req pino=1096.9B/req xact/req=4.05 receipts=0 ce=0 statuses={"200":1389} accT=0 accF=1389
+[base rep6] events-safe-c8: n=3696 rps=307.8 p50=25.4 p95=31.8 p99=37.4 cpu=3.33ms/req pino=453.6B/req xact/req=4.83 receipts=0 ce=36960 statuses={"200":3696} accT=0 accF=0
+[base rep6] events-miss-c8: n=3763 rps=313.1 p50=25.2 p95=30.9 p99=33.6 cpu=3.25ms/req pino=453.6B/req xact/req=5.16 receipts=0 ce=37630 statuses={"200":3763} accT=0 accF=0
+[base rep6] get-c8: n=3757 rps=312.6 p50=24.8 p95=32.0 p99=37.4 cpu=3.25ms/req pino=484.6B/req xact/req=6.02 receipts=0 ce=0 statuses={"200":3757} accT=0 accF=0
+[base rep6] heartbeat-c3: n=2511 rps=209.1 p50=14.1 p95=16.9 p99=19.1 cpu=2.90ms/req pino=495.8B/req xact/req=6.01 receipts=0 ce=0 statuses={"200":2511} accT=0 accF=0
+[base rep6] httperr-c8: n=81533 rps=6795.0 p50=1.2 p95=1.7 p99=2.0 cpu=0.15ms/req pino=461.0B/req xact/req=0.00 receipts=0 ce=0 statuses={"404":81533} accT=0 accF=0
+[base rep6] done -> /tmp/perf-ab/out/phases-base-rep6.json
+RUN_END 2026-11-08T16:32:51Z
+BENCH_PROGRAM_DONE
