@@ -86,10 +86,14 @@ function buildSnapshot(
   };
 }
 
-const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
+const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
   takeHandler: vi.fn(),
+  // The x-request-id header value postWithMeta reports on save responses
+  // (#924). Null by default (no header); tests that pin rejection-id
+  // correlation set it before triggering the save.
+  postMeta: { requestId: null as string | null },
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -122,11 +126,12 @@ vi.mock("@/lib/api", () => ({
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
     // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock so url/body assertions stay single-sourced. This harness asserts
-    // no rejection-id behavior, so the header id is a constant null.
+    // mock so url/body assertions stay single-sourced. The header id comes
+    // from the shared postMeta holder so rejection-correlation tests can
+    // forge one; every other test sees the absent-header null.
     postWithMeta: async (...args: unknown[]) => ({
       data: await apiPost(...args),
-      meta: { requestId: null },
+      meta: { requestId: postMeta.requestId },
     }),
   },
   setNavigate: () => {},
@@ -221,6 +226,7 @@ beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
   takeHandler.mockReset();
+  postMeta.requestId = null;
 });
 
 afterEach(() => {
@@ -1225,6 +1231,147 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       expect(
         within(overlay).getByRole("button", { name: "重试提交" }),
       ).toBeInTheDocument();
+    } finally {
+      capture.stop();
+    }
+  });
+
+  it("DEADLINE_EXCEEDED 200-rejection (with header id) during the auto-submit flush: one reconcile, exactly one submit, correlated failure telemetry", async () => {
+    // Reviewer-C follow-up from the #924×#929 combination gate: a terminal
+    // save rejection is driven here as the real DEADLINE_EXCEEDED 200
+    // envelope (with the #924 header correlation id), interleaved with the
+    // deadline auto-submit's flush→submit — the reconcile tests only drove
+    // ATTEMPT_ALREADY_SUBMITTED / ATTEMPT_CLOSED.
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      // timingMode "deadline" mounts no ExamTimer: the page's 1s tick is the
+      // only trigger.
+      const editable = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: T0_ISO,
+        effectiveDeadline: nearDeadline,
+      });
+      // The frozen snapshot the terminal-rejection reconcile returns: the
+      // server froze saving at the deadline. Submit stays the converging
+      // action (the lock overlay offers 重试提交), so canSubmit is retained.
+      // serverNow is the SERVER's live clock — past the deadline — so the
+      // re-read does not re-base the client clock backwards below it.
+      const locked = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: new Date(T0.getTime() + 3_500).toISOString(),
+        effectiveDeadline: nearDeadline,
+        isEditable: false,
+        canSave: false,
+        lockReason: "deadline",
+      });
+      let takeCalls = 0;
+      apiGet.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+          takeHandler(path);
+          takeCalls += 1;
+          return takeCalls === 1 ? editable : locked;
+        }
+        throw new Error(`unexpected GET ${path}`);
+      });
+      // The save POST stalls in flight until the episode's flush() is
+      // awaiting it, then settles as the server's terminal 200-rejection.
+      let postedClientSeq: unknown;
+      let settleSave!: () => void;
+      const saveInFlight = new Promise<unknown>((resolve) => {
+        settleSave = () =>
+          resolve({
+            accepted: false,
+            reason: "DEADLINE_EXCEEDED",
+            message: "已到截止时间",
+            serverVersion: 5,
+            savedAt: T0_ISO,
+          });
+      });
+      postMeta.requestId = "req-deadline-865-929";
+      const pendingSubmits: DeferredSubmit[] = [];
+      apiPost.mockImplementation(
+        async (path: string, body?: { clientSeq?: number }) => {
+          if (typeof path === "string" && path.includes("/answers/")) {
+            postedClientSeq = body?.clientSeq;
+            return saveInFlight;
+          }
+          if (typeof path === "string" && path.includes("/submit")) {
+            const d = deferredSubmit();
+            pendingSubmits.push(d);
+            return d.promise;
+          }
+          return { ok: true, serverNow: T0_ISO };
+        },
+      );
+
+      renderWithFakeClock();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(takeCalls).toBe(1);
+
+      fireEvent.click(screen.getByRole("radio", { name: "A" }));
+      // Debounce fires: the save POST is in flight.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_600);
+      });
+
+      // The deadline passes: the episode is declared and flush() starts
+      // awaiting the in-flight save.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_600);
+      });
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(1);
+      expect(pendingSubmits).toHaveLength(0);
+
+      // The racing save settles as the terminal 200-rejection carrying the
+      // header id — while the episode's flush is still awaiting it.
+      await act(async () => {
+        settleSave();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      // The alert names the header correlation id for support lookup…
+      const alert = screen.getByTestId("save-rejection-alert");
+      expect(alert).toHaveTextContent("请求编号：req-deadline-865-929");
+      // …and the terminal signal drove exactly ONE authoritative re-read
+      // (the submit's own reload comes later).
+      expect(takeCalls).toBe(2);
+      await flushAll();
+      const failed = telemetryEvents(send, "answer_autosave_failed");
+      expect(failed).toHaveLength(1);
+      const failedMeta = failed[0]!.metadata as Record<string, unknown>;
+      expect(failedMeta.errorCode).toBe("DEADLINE_EXCEEDED");
+      expect(failedMeta.requestId).toBe("req-deadline-865-929");
+      expect(failedMeta.clientSeq).toBe(postedClientSeq);
+
+      // flush() drains via allSettled, so the rejected save does not abort
+      // the episode: the deadline submit fires EXACTLY once — neither
+      // duplicated nor cancelled by the terminal rejection.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(pendingSubmits).toHaveLength(1);
+      await act(async () => {
+        pendingSubmits[0]!.resolve({ ok: true });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(1);
+      expect(telemetryEvents(send, "deadline_auto_submit_failed")).toHaveLength(
+        0,
+      );
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/result");
+      // No duplicate submit after convergence.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(submitPostCount()).toBe(1);
     } finally {
       capture.stop();
     }
