@@ -20,6 +20,7 @@ import operabilityMonitorPlugin from "./plugins/operabilityMonitor.js";
 import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
+import { setupRequestIdHeader } from "./plugins/requestIdHeader.js";
 import { registerStaticFrontend } from "./plugins/staticFrontend.js";
 import apiSurfacePlugin from "./routes/apiSurface.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
@@ -122,6 +123,12 @@ async function main() {
     // this single request.ip derivation.
     trustProxy: resolveTrustProxyOption(getRuntimeConfig()),
   });
+
+  // #865: root-scope, before any registration, so every response path — /api
+  // routes, the canonical unmatched-route boundary, docs, static — carries the
+  // server-owned x-request-id. The value is the request.id already minted
+  // above; client headers never influence it.
+  setupRequestIdHeader(app);
 
   await app.register(fastifyCookie);
   await app.register(cors);

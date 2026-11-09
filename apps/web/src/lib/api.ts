@@ -17,7 +17,7 @@ let navigateFn: ((path: string) => void) | null = null;
  */
 const networkFailureLimiter = createTelemetryRateLimiter();
 
-/** Test-only: clears the network-failure limiter window. */
+/** Test-only: clears the module-level limiter (all bounded-warn keys). */
 export function __resetNetworkFailureLimiterForTest(): void {
   networkFailureLimiter.reset();
 }
@@ -232,6 +232,40 @@ export async function responseToApiError(
   } catch {
     // body parse failed; fall through to status-string message
   }
+  // #924 Case D: the header is read on the ERROR path too so a mismatch
+  // between the two correlation carriers is a recorded fact instead of a
+  // silent pick. Header values survive body consumption — headers are
+  // independent of the stream. The header value stays LOCAL to this
+  // function: it is never promoted onto the ApiError (the envelope
+  // `requestId` is the typed wire contract and the only correlation fact
+  // consumers read).
+  const headerRequestId = response.headers.get("x-request-id") ?? undefined;
+  if (
+    requestId !== undefined &&
+    headerRequestId !== undefined &&
+    requestId !== headerRequestId
+  ) {
+    // Neither value is promoted: the envelope stays the authoritative
+    // `requestId` and the divergence is recorded as one bounded client-log
+    // warn (#924; TASK-CONTRACT §3.3 Case D "correlation inconsistency").
+    // Bounded via the module-level limiter so a mismatch storm stays a fixed
+    // number of persisted rows — same fixed-key pattern as
+    // `api.network_failed` below.
+    //
+    // PROVENANCE: this warn flows through the generic logger, whose
+    // kind:"log" events carry NO attemptId dimension, so the proctor
+    // timeline query (WHERE organizationId + attemptId) can never match it —
+    // it exists only in the client log stream as a diagnostic trace. The
+    // monitoring SAFE_METADATA_ALLOWLIST projecting unknown log names to {}
+    // is a second, independent line of defense, not the reason it is
+    // timeline-invisible.
+    if (networkFailureLimiter.allow("api.request_id_correlation_mismatch")) {
+      logger.warn("api.request_id_correlation_mismatch", {
+        envelopeRequestId: requestId,
+        headerRequestId,
+      });
+    }
+  }
   const message = serverMessage || `${response.status} Request failed`;
   return new ApiError(
     response.status,
@@ -243,8 +277,36 @@ export async function responseToApiError(
   );
 }
 
-/** Executes an HTTP request, handles error parsing, and throws ApiError. */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** Success-path response metadata surfaced by the `*WithMeta` helpers. */
+export interface ApiResponseMeta {
+  /**
+   * Server-minted request id from the `x-request-id` response header (#865);
+   * null when the header is absent (older server, or a hop that strips it).
+   * Correlates with the same id in server logs and error envelopes — it is
+   * never a credential or business identity. OPAQUE value: treat as a
+   * correlation string, never parse or log it as trusted text (a misbehaving
+   * intermediary could substitute it; the server-minted claim holds only for
+   * direct responses).
+   */
+  requestId: string | null;
+}
+
+/** Result of the `*WithMeta` request helpers: parsed body plus metadata. */
+export interface ApiResultWithMeta<T> {
+  data: T;
+  meta: ApiResponseMeta;
+}
+
+/**
+ * Executes an HTTP request, handles error parsing, and returns the parsed 2xx
+ * body plus response metadata. Single implementation core shared by
+ * {@link request} and the `*WithMeta` helpers so every surface keeps
+ * identical error, 401-redirect, and network-telemetry behavior.
+ */
+async function requestWithMeta<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<ApiResultWithMeta<T>> {
   try {
     const hasBody = init?.body !== undefined;
     const response = await fetch(`${baseUrl}${path}`, {
@@ -266,11 +328,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw await responseToApiError(response);
     }
 
+    const meta: ApiResponseMeta = {
+      requestId: response.headers.get("x-request-id"),
+    };
     if (response.status === 204) {
-      return undefined as T;
+      return { data: undefined as T, meta };
     }
 
-    return (await response.json()) as T;
+    return { data: (await response.json()) as T, meta };
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -293,6 +358,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(0, "Network request failed");
   }
+}
+
+/** Executes an HTTP request, handles error parsing, and throws ApiError. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { data } = await requestWithMeta<T>(path, init);
+  return data;
 }
 
 /**
@@ -331,5 +402,34 @@ export const api = {
   },
   delete<T>(path: string): Promise<T> {
     return request<T>(path, { method: "DELETE" });
+  },
+  // #865: success-path variants that also surface the server's x-request-id
+  // response header; callers that need correlation opt in — the plain
+  // helpers above keep their signature and behavior unchanged. postWithMeta
+  // is the production surface (TakeExamPage's save path, #924).
+  //
+  // getWithMeta below is a DOCUMENTED FORWARD SURFACE: it currently has no
+  // production caller (its contract is pinned by api.test.ts only). It is
+  // retained deliberately as the read-side counterpart of the same opt-in
+  // seam — recorded in docs/contracts/observability.md (#865/#924) — not an
+  // accidentally dead duplicate. Delete it only together with that contract
+  // note.
+  getWithMeta<T>(
+    path: string,
+    opts?: ApiRequestOptions,
+  ): Promise<ApiResultWithMeta<T>> {
+    return requestWithMeta<T>(
+      path,
+      opts?.signal ? { signal: opts.signal } : undefined,
+    );
+  },
+  postWithMeta<T, TBody = unknown>(
+    path: string,
+    body?: TBody,
+  ): Promise<ApiResultWithMeta<T>> {
+    return requestWithMeta<T>(path, {
+      method: "POST",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   },
 };
