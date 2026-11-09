@@ -25,6 +25,7 @@ import {
   getRequestContext,
 } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { routeTemplateOf } from "../lib/logRedaction.js";
 
 /** Zod schema for route params containing a UUID `id` field. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
@@ -177,7 +178,7 @@ async function requireScoreView(
     return request.scoreView;
   }
   request.log.error(
-    { route: request.url },
+    { route: routeTemplateOf(request) },
     "score handler reached without a scoreView signal — preHandler wiring bug",
   );
   await reply

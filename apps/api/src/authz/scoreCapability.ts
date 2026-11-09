@@ -52,6 +52,7 @@ import {
   type ScoreResolution,
 } from "./resolvers/scoreResolver.js";
 import type { TeacherCourseAssignmentGate } from "./scopedCapability.js";
+import { routeTemplateOf } from "../lib/logRedaction.js";
 
 /**
  * Capability predicate over the request (union-of-assignments authority). Reads the authoritative
@@ -110,7 +111,7 @@ export function buildScoreCapabilityPreHandler(
     const attemptId = params[ATTEMPT_ID_PARAM];
     if (!attemptId) {
       request.log.error(
-        { route: request.url, resourceIdKey: ATTEMPT_ID_PARAM },
+        { route: routeTemplateOf(request), resourceIdKey: ATTEMPT_ID_PARAM },
         "authz score capability resource id missing on params",
       );
       return reply
@@ -172,7 +173,7 @@ export function buildScoreCapabilityPreHandler(
       if (!runtimeCtx.roles?.includes(Role.Admin)) {
         if (!teacherCourseGate) {
           request.log.error(
-            { route: request.url },
+            { route: routeTemplateOf(request) },
             "authz score capability teacher course gate not wired",
           );
           return reply
@@ -184,7 +185,7 @@ export function buildScoreCapabilityPreHandler(
           // The resolution produced no Course identity — the enforcement
           // cannot run. Fail closed (mis-declared route/resolver).
           request.log.error(
-            { route: request.url, attemptId },
+            { route: routeTemplateOf(request), attemptId },
             "authz score capability enforcement: no resolved Course id",
           );
           return reply
@@ -198,7 +199,7 @@ export function buildScoreCapabilityPreHandler(
           // Operational failure: never fail open, never masquerade as
           // 403/404 — the same 503 AUTHZ_UNAVAILABLE contract as everywhere.
           request.log.error(
-            { err: error, route: request.url, attemptId },
+            { err: error, route: routeTemplateOf(request), attemptId },
             "authz score capability teacher-assignment lookup failed",
           );
           return reply
