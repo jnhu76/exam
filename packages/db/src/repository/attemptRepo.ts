@@ -24,7 +24,9 @@ type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
 
 /**
- * Attempt statuses that are not finalized (`graded` / `voided` are final).
+ * Attempt statuses that can carry a non-finalized attempt. `graded` and
+ * `voided` are finalized; `not_started` is intentionally absent because it
+ * has no production writer and cannot carry an answered/in-flight attempt.
  * Single source for the unresolved predicate shared by the close/scores/
  * export guards and the exam-list availability projection.
  */
@@ -874,7 +876,8 @@ export function createAttemptRepo(db: Database) {
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.examId, examId),
             // Union of both predicates: keeps the (org, exam, status) index
-            // selective and excludes finalized `voided`/`not_started` rows.
+            // selective and excludes rows that contribute to neither count
+            // (`voided`, `not_started`).
             inArray(examAttempts.status, [
               "graded",
               ...UNRESOLVED_ATTEMPT_STATUSES,

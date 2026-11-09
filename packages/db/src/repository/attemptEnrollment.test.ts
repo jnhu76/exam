@@ -794,7 +794,7 @@ describe("attemptRepo custom methods", () => {
       expect(
         await attemptRepo.countResultsAvailabilityByExam(ctxU, examId),
       ).toEqual({
-        gradedCount: await attemptRepo.countGradedByExam(ctxU, examId),
+        gradedCount: 1,
         unresolvedCount: count,
       });
     });
