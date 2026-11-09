@@ -95,8 +95,8 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
               }),
             );
           case "EXAM_NOT_FINISHED":
-          // Unreachable under allowZeroGraded; kept for an exhaustive wire
-          // mapping if the option is ever removed.
+          // NO_GRADED_ATTEMPTS is unreachable under allowZeroGraded; both map
+          // to the same wire reason, kept for an exhaustive mapping.
           case "NO_GRADED_ATTEMPTS":
             return reply.code(409).send(
               buildErrorResponse(request.id, "RESOURCE_CONFLICT", {

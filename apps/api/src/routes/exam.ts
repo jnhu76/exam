@@ -1273,13 +1273,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           // the Date coercions above), never a lifecycle write: `status` is
           // not an UpdateExamRequest field, and transitions run through the
           // engine funnel (reconcileExamForMutation / lifecycle commands).
-          // Explicit narrowing to the repo's EXSEM-014 update input keeps
-          // that boundary visible at the call site.
-          // The payload is schema-shaped (Record<string, unknown> after the
-          // Date coercions above). This is the only place it becomes the
-          // narrowed repo input; assert the lifecycle column cannot ride
-          // through the cast. Initial state belongs to create commands and
-          // transitions to the engine funnel.
+          // This is the only place it becomes the narrowed repo input; assert
+          // the lifecycle column cannot ride through the cast. Initial state
+          // belongs to create commands.
           if ("status" in updateData || "gradingStatus" in updateData) {
             throw new Error(
               "Exam update payload must not carry lifecycle columns",
