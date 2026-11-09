@@ -7,7 +7,13 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -128,7 +134,21 @@ function LocationProbe() {
   return <span data-testid="current-path">{location.pathname}</span>;
 }
 
-function renderPage() {
+/** Test-only route switch: simulates the candidate leaving attempt att-1. */
+function AttemptSwitcher() {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      data-testid="switch-attempt"
+      onClick={() => navigate("/exam/exam-1/take/att-2")}
+    >
+      switch
+    </button>
+  );
+}
+
+function renderPage(options: { withAttemptSwitcher?: boolean } = {}) {
   return render(
     <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
       <AuthProvider
@@ -142,12 +162,25 @@ function renderPage() {
         }}
       >
         <BrandProvider>
+          <LocationProbe />
           <Routes>
             <Route
               path="/exam/:examId/take/:attemptId"
-              element={<TakeExamPage />}
+              element={
+                options.withAttemptSwitcher ? (
+                  <>
+                    <TakeExamPage />
+                    <AttemptSwitcher />
+                  </>
+                ) : (
+                  <TakeExamPage />
+                )
+              }
             />
-            <Route path="/exam/:attemptId/result" element={<LocationProbe />} />
+            <Route
+              path="/exam/:attemptId/result"
+              element={<span>result</span>}
+            />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -1016,10 +1049,12 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
   }
 
   /** Fake timers pinned at T0 so the server clock offset is zero. */
-  function renderWithFakeClock() {
+  function renderWithFakeClock(
+    options: { withAttemptSwitcher?: boolean } = {},
+  ) {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
-    return renderPage();
+    return renderPage(options);
   }
 
   it("deadline tick with the user's submit POST in flight: no phantom success, episode re-arms once idle, real failure surfaces the retry entry", async () => {
@@ -1169,6 +1204,101 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
     } finally {
       capture.stop();
     }
+  });
+
+  it("attempt switch during the pre-submit flush: no submit for the abandoned attempt, no cross-attempt UI or telemetry", async () => {
+    const send = installRecordingBuffer();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const editableB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: new Date(T0.getTime() + 600_000).toISOString(),
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/attempts/att-1/")) {
+        takeHandler(path);
+        return editableA;
+      }
+      if (typeof path === "string" && path.includes("/attempts/att-2/")) {
+        takeHandler(path);
+        return editableB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    // A save POST that stays in flight: the deadline auto-submit's flush()
+    // awaits exactly this promise.
+    let resolveSave!: () => void;
+    const saveGate = new Promise<unknown>((resolve) => {
+      resolveSave = () =>
+        resolve({ accepted: true, serverVersion: 1, savedAt: T0_ISO });
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return saveGate;
+      }
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(takeHandler).toHaveBeenCalledWith(expect.stringContaining("att-1"));
+
+    fireEvent.click(screen.getByRole("radio", { name: "A" }));
+    // Debounce fires: the save POST is in flight.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    // The deadline passes: the episode is declared and flush() starts
+    // awaiting the in-flight save.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    await flushAll();
+    expect(telemetryEvents(send, "deadline_auto_submit_started")).toHaveLength(
+      1,
+    );
+
+    // The candidate leaves att-1 for att-2 while the flush is still awaiting.
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    // The abandoned flush finally settles.
+    await act(async () => {
+      resolveSave();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    // The stale episode must not submit att-1, must not record a success for
+    // it, and must not write its submit state onto att-2's page.
+    expect(pendingSubmits).toHaveLength(0);
+    expect(telemetryEvents(send, "submit_requested")).toHaveLength(0);
+    expect(telemetryEvents(send, "deadline_auto_submit_success")).toHaveLength(
+      0,
+    );
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
   });
 
   it("ExamTimer onTimeout and the deadline effect in the same window: one declaration, one submit POST, one real failure record", async () => {

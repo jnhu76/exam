@@ -1129,6 +1129,12 @@ export function TakeExamPage() {
    *      path;
    *   3. otherwise declare and own the episode: flush (flush-before-submit is
    *      unchanged), then submit.
+   *   4. the episode is bound to the attempt that declared it: if the route
+   *      changes while flush() is awaiting, this invocation is abandoned. It
+   *      must not submit/navigate the old attempt, toast onto the new route,
+   *      or clear the new attempt's deadline indicator. Identity comes from
+   *      the same currentAttemptIdRef + scope-generation authority as
+   *      runSubmitFlush — no second token.
    * Success/failure telemetry and autoSubmitFailed record only the REAL
    * result of this invocation's own submit: the submittingRef re-check below
    * is synchronous with the handleSubmit call, so a pass through it
@@ -1139,44 +1145,65 @@ export function TakeExamPage() {
   const runDeadlineAutoSubmit = useCallback(async () => {
     if (!attemptId || deadlineHandledRef.current) return;
     if (submittingRef.current) return;
+    const attemptAtStart = attemptId;
+    const scopeGenAtStart = getScopeGeneration();
+    const stale = () =>
+      currentAttemptIdRef.current !== attemptAtStart ||
+      getScopeGeneration() !== scopeGenAtStart;
     deadlineHandledRef.current = true;
     trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
     setDeadlineAutoSubmitting(true);
+
+    let flushFailed = false;
     try {
       await flush();
     } catch {
+      flushFailed = true;
+    }
+
+    if (flushFailed) {
+      // A real flush failure stays attributable to the attempt that declared
+      // the episode, even if the route has already moved on.
       trackExamEvent(
         "deadline_auto_submit_failed",
         { stage: "flush", errorCode: "FLUSH_ERROR" },
         { attemptId, level: "error" },
       );
-      toast.error(t("candidateRuntime.errors.saveError"));
-    } finally {
-      if (submittingRef.current) {
-        // A submit started while the flush was awaiting (user-initiated).
-        // This invocation's handleSubmit would silently no-op, so that
-        // submit's outcome — not ours — is the real result: success
-        // navigates away; failure releases submittingRef. Re-arm the
-        // episode so the next tick can act on the settled truth. Never
-        // claim success.
-        deadlineHandledRef.current = false;
-      } else {
-        try {
-          await handleSubmit();
-          trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
-        } catch {
-          trackExamEvent(
-            "deadline_auto_submit_failed",
-            { stage: "submit", errorCode: "SUBMIT_ERROR" },
-            { attemptId, level: "error" },
-          );
-          setAutoSubmitFailed(true);
-          toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
-        }
-      }
-      setDeadlineAutoSubmitting(false);
     }
-  }, [attemptId, flush, handleSubmit, t]);
+
+    if (stale()) {
+      // The new route's render-time reset already owns its refs and UI.
+      return;
+    }
+
+    if (flushFailed) {
+      toast.error(t("candidateRuntime.errors.saveError"));
+    }
+
+    if (submittingRef.current) {
+      // A submit started while the flush was awaiting (user-initiated).
+      // This invocation's handleSubmit would silently no-op, so that
+      // submit's outcome — not ours — is the real result: success
+      // navigates away; failure releases submittingRef. Re-arm the
+      // episode so the next tick can act on the settled truth. Never
+      // claim success.
+      deadlineHandledRef.current = false;
+    } else {
+      try {
+        await handleSubmit();
+        trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
+      } catch {
+        trackExamEvent(
+          "deadline_auto_submit_failed",
+          { stage: "submit", errorCode: "SUBMIT_ERROR" },
+          { attemptId, level: "error" },
+        );
+        setAutoSubmitFailed(true);
+        toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+      }
+    }
+    setDeadlineAutoSubmitting(false);
+  }, [attemptId, flush, getScopeGeneration, handleSubmit, t]);
 
   /** Handles exam timer expiry through the shared deadline auto-submit seam. */
   const handleTimeout = useCallback(() => {
