@@ -1205,7 +1205,10 @@ LOCAL_2SHARD_FULL_SPEC = 连续 5/5 全绿（merged blob report 确认 4/4 测�
   真实执行，非过滤空洞）
 THROTTLE_MATRIX = 4× PASS / 8× PASS（16× 仅剩应用渲染预算伪影）
 NO_TIMEOUT_WIDENED = 断言无放宽、无 skip、无 retry（diff 复核）
-CI_ON_HEAD = 待 #923 head 2a820e78 的 GitHub Actions 结果
+CI_ON_HEAD = PASS — #923 最终复审 head 82aadfe7（含独立 review 两处补修：
+  grader 页 settle 前移到键盘走焦之前、admin 预览 settle 前移到几何快照之前）
+  GitHub Actions 8/8 success（含 E2E shard 1/2 + 2/2；run 42632860153）；
+  中间 head 80f01590 / 3b1ecf96 亦全绿
 CASE_REPAIRED_AT = 2026-11-09
 ```
 
