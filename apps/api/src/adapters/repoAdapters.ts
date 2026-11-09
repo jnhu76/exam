@@ -44,11 +44,13 @@ export function createExamRepoAdapter(
       (await repo.findByIdForUpdate(ctx, examId)) as Exam | null,
     findByIdForShare: async (examId) =>
       (await repo.findByIdForShare(ctx, examId)) as Exam | null,
+    // EXSEM-014: the engine funnel is the ONLY writer of the exam lifecycle
+    // column, so this adapter goes through the named lifecycle-state seam.
     update: async (examId, data) =>
-      (await repo.update(
+      (await repo.updateIncludingLifecycleState(
         ctx,
         examId,
-        data as Parameters<typeof repo.update>[2],
+        data as Parameters<typeof repo.updateIncludingLifecycleState>[2],
       )) as Exam | null,
   };
 }
@@ -151,11 +153,13 @@ export function createAttemptRepoAdapter(
           >[1],
         ),
       ),
+    // EXSEM-014: the engine funnel is the ONLY writer of the attempt
+    // lifecycle columns (status, gradingStatus) — named seam, not `update`.
     update: async (id, data) => {
-      const row = await repo.update(
+      const row = await repo.updateIncludingLifecycleState(
         ctx,
         id,
-        data as Parameters<typeof repo.update>[2],
+        data as Parameters<typeof repo.updateIncludingLifecycleState>[2],
       );
       return row ? hydrateAttemptFromDb(row) : null;
     },
@@ -220,11 +224,13 @@ export function createEnrollmentRepoAdapter(
         ctx,
         input as Parameters<typeof repo.create>[1],
       )) as ExamEnrollment,
+    // EXSEM-014: the engine funnel is the ONLY writer of the enrollment
+    // lifecycle column — named seam, not `update`.
     update: async (id, data) =>
-      (await repo.update(
+      (await repo.updateIncludingLifecycleState(
         ctx,
         id,
-        data as Parameters<typeof repo.update>[2],
+        data as Parameters<typeof repo.updateIncludingLifecycleState>[2],
       )) as ExamEnrollment | null,
   };
 }

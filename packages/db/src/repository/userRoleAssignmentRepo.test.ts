@@ -512,4 +512,31 @@ describe("userRoleAssignmentRepo", () => {
       expect(active[0]!.id).toBe(result.id);
     });
   });
+
+  // INVARIANT (EXSEM-014 family): `isPrimary` × `isActive` transitions are
+  // owned by the named methods (assign / setPrimary / activate / deactivate /
+  // remove / ensurePrimaryAssignment / replacePrimaryRole). The generic CRUD
+  // surface of the underlying tenant repo is deliberately NOT spread onto the
+  // public object: it had zero callers, and its full-field write members
+  // (create / update / the wide lifecycle-state seam / delete) would bypass
+  // the demote-and-promote invariants those named methods own.
+  it("exposes no generic CRUD write primitives", () => {
+    const repo = createUserRoleAssignmentRepo(db);
+    const exposed = Object.keys(repo);
+    const banned = [
+      "create",
+      "list",
+      "count",
+      "listPaginated",
+      "update",
+      "updateIncludingLifecycleState",
+      "delete",
+    ];
+    for (const member of banned) {
+      expect(exposed, `generic "${member}" must not be exposed`).not.toContain(
+        member,
+      );
+    }
+    expect(exposed).toContain("findById");
+  });
 });

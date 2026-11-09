@@ -559,4 +559,29 @@ describe("attemptGradingEntryRepo", () => {
     expect(row!.status).toBe("completed_auto");
     expect(row!.earnedScore).toBe(20);
   });
+
+  // INVARIANT (EXSEM-009): grading entries are durable scoring facts — the
+  // workset is built once via bulkCreate and entries move pending→completed
+  // only through completeManualEntry's SQL guard. The generic CRUD surface of
+  // the underlying tenant repo is deliberately NOT spread onto the public
+  // object: a full-field setter would bypass that one-way transition.
+  it("exposes no generic CRUD write primitives", () => {
+    const entryRepo = createAttemptGradingEntryRepo(db);
+    const exposed = Object.keys(entryRepo);
+    const banned = [
+      "create",
+      "list",
+      "count",
+      "listPaginated",
+      "update",
+      "updateIncludingLifecycleState",
+      "delete",
+    ];
+    for (const member of banned) {
+      expect(exposed, `generic "${member}" must not be exposed`).not.toContain(
+        member,
+      );
+    }
+    expect(exposed).toContain("findById");
+  });
 });

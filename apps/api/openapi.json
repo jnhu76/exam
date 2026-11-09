@@ -15405,6 +15405,7 @@
                             "enum": [
                               "EXAM_CANCELED",
                               "EXAM_NOT_FINISHED",
+                              "UNRESOLVED_ATTEMPTS_EXIST",
                               "NO_GRADED_ATTEMPTS"
                             ],
                             "nullable": true,

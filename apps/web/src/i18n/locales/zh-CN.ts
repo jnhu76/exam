@@ -1097,6 +1097,7 @@ const zhCN = {
       disabledReasons: {
         canceled: "考试已取消",
         notFinished: "考试尚未结束",
+        unresolvedAttempts: "仍有未完成的作答，暂不能查看成绩",
         noGradedAttempts: "暂无已阅卷的作答",
         notDraft: "仅草稿状态的考试可删除",
       },

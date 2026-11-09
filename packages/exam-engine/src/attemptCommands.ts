@@ -687,8 +687,12 @@ export async function markDisrupted(
     return { outcome: "missing" };
   }
 
-  // 2. Recheck status under the row lock.
-  if (attempt.status !== "in_progress") {
+  // 2. Recheck status under the row lock against the authoritative
+  //    transition table — `in_progress:disrupt` is the only disrupt row, so
+  //    every other status (including retained values) maps to
+  //    `state_changed_before_lock`.
+  const disrupt = transition(attempt.status, "disrupt");
+  if (!isTransitionOk(disrupt)) {
     return { outcome: "state_changed_before_lock" };
   }
 
@@ -793,7 +797,13 @@ export async function restoreAttemptState(
   ) {
     return { outcome: "terminal", attempt };
   }
-  if (attempt.status !== "disrupted") {
+  // Business outcomes above deliberately precede the table lookup: restore
+  // legality for the remaining statuses comes from the authoritative
+  // transition table (`disrupted:restore` is the only restore row), so
+  // non-disrupted, non-terminal states (not_started|queued) fail closed with
+  // the same error shape as before.
+  const restore = transition(attempt.status, "restore");
+  if (!isTransitionOk(restore)) {
     throw new InvalidStateTransitionError(
       `Cannot restore attempt from ${attempt.status} state`,
     );

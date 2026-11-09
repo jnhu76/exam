@@ -11,6 +11,7 @@ import type {
 export type ExamDisabledReasonKey =
   | "admin.exams.disabledReasons.canceled"
   | "admin.exams.disabledReasons.notFinished"
+  | "admin.exams.disabledReasons.unresolvedAttempts"
   | "admin.exams.disabledReasons.noGradedAttempts"
   | "admin.exams.disabledReasons.notDraft";
 
@@ -20,6 +21,7 @@ const SCORE_VIEW_KEYS: Record<
 > = {
   EXAM_CANCELED: "admin.exams.disabledReasons.canceled",
   EXAM_NOT_FINISHED: "admin.exams.disabledReasons.notFinished",
+  UNRESOLVED_ATTEMPTS_EXIST: "admin.exams.disabledReasons.unresolvedAttempts",
   NO_GRADED_ATTEMPTS: "admin.exams.disabledReasons.noGradedAttempts",
 };
 

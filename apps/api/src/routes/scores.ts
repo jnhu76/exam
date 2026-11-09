@@ -24,6 +24,7 @@ import {
   ensureTargetOrg,
   getRequestContext,
 } from "./helpers.js";
+import { resolveAdminResultsAccess } from "./resultsAccessPolicy.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { routeTemplateOf } from "../lib/logRedaction.js";
 
@@ -133,31 +134,6 @@ function buildQuestionResults(
 }
 
 /**
- * Determines whether the score list for an exam can be opened.
- * The exam must be finished (closed/archived or past closeAt) and have
- * at least one graded attempt.
- *
- * INVARIANT (message contract D0.6): the blocking condition is signaled to
- * the client via `details.reason` (EXAM_NOT_FINISHED), never via prose.
- */
-function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
-  const examEnded =
-    exam.status === "closed" ||
-    exam.status === "archived" ||
-    (exam.closeAt !== null && now >= exam.closeAt);
-
-  if (!examEnded) {
-    return { allowed: false };
-  }
-
-  if (gradedCount === 0) {
-    return { allowed: false };
-  }
-
-  return { allowed: true };
-}
-
-/**
  * Resolves the score preHandler's authoritative own/all capability-path
  * decision (union-of-assignments authority). `request.scoreView` is set ONLY by
  * `requireScoreCapability` after it arbitrates ScoreAllView vs
@@ -240,45 +216,56 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      // ADR-005: canceled exams never expose normal scores/export. Runs first
-      // so it takes precedence over all other gates.
-      if (exam.status === "canceled") {
-        return reply
-          .code(409)
-          .send(
-            buildErrorResponse(
-              request.id,
-              "EXAM_CANCELED_RESULTS_UNAVAILABLE",
-              { reason: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
-            ),
-          );
-      }
-      // ADR-005 close & export policy: scores are not exposed while
-      // unresolved attempts remain, even if the exam window has ended — an
-      // admin must not export partial results mid-exam. Checked BEFORE the
-      // ended/graded-count guard so the UNRESOLVED signal takes precedence.
+      // ADR-005 §Close & export policy (binding): the shared
+      // resultsAccessPolicy is the single gate authority; its verdict order
+      // (canceled > unresolved > not-ended > no-graded) is the wire
+      // precedence. The mapping below is this route's wire contract
+      // (D0.6/D0.13): EXAM_NOT_FINISHED covers both the not-ended and the
+      // no-graded blocks, exactly as before the extraction.
       const unresolvedCount = await attemptRepo.countUnresolvedByExam(
         ctx,
         examId,
       );
-      if (unresolvedCount > 0) {
-        return reply.code(409).send(
-          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
-            reason: "UNRESOLVED_ATTEMPTS_EXIST",
-            activeAttemptCount: unresolvedCount,
-          }),
-        );
-      }
       const gradedCount = await attemptRepo.countGradedByExam(ctx, examId, {
         passFilter: "all",
       });
-      const access = canOpenScoreList(exam, gradedCount, now);
+      const access = resolveAdminResultsAccess(
+        exam,
+        now,
+        unresolvedCount,
+        gradedCount,
+      );
       if (!access.allowed) {
-        return reply.code(409).send(
-          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
-            reason: "EXAM_NOT_FINISHED",
-          }),
-        );
+        switch (access.verdict) {
+          case "EXAM_CANCELED":
+            // ADR-005: canceled exams never expose normal scores/export.
+            return reply.code(409).send(
+              buildErrorResponse(
+                request.id,
+                "EXAM_CANCELED_RESULTS_UNAVAILABLE",
+                {
+                  reason: "CANCELLATION_MARKER_NOT_IMPLEMENTED",
+                },
+              ),
+            );
+          case "UNRESOLVED_ATTEMPTS_EXIST":
+            // Scores are not exposed while unresolved attempts remain, even
+            // if the exam window has ended — an admin must not see partial
+            // results mid-exam.
+            return reply.code(409).send(
+              buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+                reason: "UNRESOLVED_ATTEMPTS_EXIST",
+                activeAttemptCount: access.unresolvedCount,
+              }),
+            );
+          case "EXAM_NOT_FINISHED":
+          case "NO_GRADED_ATTEMPTS":
+            return reply.code(409).send(
+              buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+                reason: "EXAM_NOT_FINISHED",
+              }),
+            );
+        }
       }
       const offset = (page - 1) * pageSize;
       const statsResult = await attemptRepo.getGradedStats(ctx, examId);

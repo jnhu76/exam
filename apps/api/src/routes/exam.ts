@@ -20,7 +20,10 @@ import {
   ExamStatusEnum,
   ScoreViewDisabledReasonCodeEnum,
 } from "@exam/contracts";
-import { createExamRepo } from "@exam/db/repository/examRepo";
+import {
+  createExamRepo,
+  type ExamUpdateInput,
+} from "@exam/db/repository/examRepo";
 import { createExamAdmissionRepo } from "@exam/db/repository/examAdmissionRepo";
 import { deriveAdmissionViews } from "@exam/exam-engine";
 import { createGraderExamAssignmentRepo } from "@exam/db/repository/graderExamAssignmentRepo";
@@ -68,6 +71,10 @@ import {
   ExamPublishResultsNotAllowedError,
 } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
+import {
+  resolveAdminResultsAccess,
+  type AdminResultsAccess,
+} from "./resultsAccessPolicy.js";
 import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
 import { executeAdminExamTransition } from "./examTransitionExecutor.js";
@@ -191,47 +198,52 @@ async function getExamParticipants(
   });
 }
 
-/** Determine whether scores can be viewed for an exam based on its status, close time, and graded attempt count. */
-function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
-  if (exam.status === "canceled") {
-    return {
-      canViewScores: false,
-      // D0.8 additive bridge: the legacy text is non-authoritative
-      // compatibility copy; the machine condition lives in the *Code field.
-      // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
-      scoreViewDisabledReason: "已取消的考试不提供成绩",
-      scoreViewDisabledReasonCode: "EXAM_CANCELED",
-    } as const;
+/**
+ * Maps the shared results-access verdict to the exam-list wire metadata.
+ * The verdict itself comes only from {@link resolveAdminResultsAccess} — the
+ * same authority GET /exams/:id/scores uses — so the list never advertises
+ * an action the scores route would reject. This function only chooses the
+ * list's legacy compatibility copy and machine code.
+ */
+function getScoreViewMeta(access: AdminResultsAccess) {
+  switch (access.verdict) {
+    case "EXAM_CANCELED":
+      return {
+        canViewScores: false,
+        // D0.8 additive bridge: the legacy text is non-authoritative
+        // compatibility copy; the machine condition lives in the *Code field.
+        // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
+        scoreViewDisabledReason: "已取消的考试不提供成绩",
+        scoreViewDisabledReasonCode: "EXAM_CANCELED",
+      } as const;
+    case "UNRESOLVED_ATTEMPTS_EXIST":
+      return {
+        canViewScores: false,
+        // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
+        scoreViewDisabledReason: "仍有未完成的作答，暂不能查看成绩",
+        scoreViewDisabledReasonCode: "UNRESOLVED_ATTEMPTS_EXIST",
+      } as const;
+    case "EXAM_NOT_FINISHED":
+      return {
+        canViewScores: false,
+        // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
+        scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
+        scoreViewDisabledReasonCode: "EXAM_NOT_FINISHED",
+      } as const;
+    case "NO_GRADED_ATTEMPTS":
+      return {
+        canViewScores: false,
+        // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
+        scoreViewDisabledReason: "暂无成绩数据",
+        scoreViewDisabledReasonCode: "NO_GRADED_ATTEMPTS",
+      } as const;
+    case "allowed":
+      return {
+        canViewScores: true,
+        scoreViewDisabledReason: null,
+        scoreViewDisabledReasonCode: null,
+      } as const;
   }
-
-  const examEnded =
-    exam.status === "closed" ||
-    exam.status === "archived" ||
-    (exam.closeAt !== null && now >= exam.closeAt);
-
-  if (!examEnded) {
-    return {
-      canViewScores: false,
-      // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
-      scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
-      scoreViewDisabledReasonCode: "EXAM_NOT_FINISHED",
-    } as const;
-  }
-
-  if (gradedAttemptCount === 0) {
-    return {
-      canViewScores: false,
-      // i18n-copy-allow: wire-compat — legacy natural-language status reason on the wire; machine code/reason fields are the contract
-      scoreViewDisabledReason: "暂无成绩数据",
-      scoreViewDisabledReasonCode: "NO_GRADED_ATTEMPTS",
-    } as const;
-  }
-
-  return {
-    canViewScores: true,
-    scoreViewDisabledReason: null,
-    scoreViewDisabledReasonCode: null,
-  } as const;
 }
 
 /** Determine whether an exam can be deleted. Only draft exams are deletable. */
@@ -494,15 +506,23 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               exam.id,
               allEnrollments,
             );
-            const gradedAttemptCount = await attemptRepo.countGradedByExam(
-              ctx,
-              exam.id,
-            );
+            // One query supplies both policy inputs: the list must not add a
+            // second per-exam round trip just to tell the truth about
+            // canViewScores (ADR-005 close & export policy).
+            const { gradedCount, unresolvedCount } =
+              await attemptRepo.countResultsAvailabilityByExam(ctx, exam.id);
             return {
               ...toExamResponse(exam),
               participantCount: participants.length,
-              gradedAttemptCount,
-              ...getScoreViewMeta(exam, gradedAttemptCount, now),
+              gradedAttemptCount: gradedCount,
+              ...getScoreViewMeta(
+                resolveAdminResultsAccess(
+                  exam,
+                  now,
+                  unresolvedCount,
+                  gradedCount,
+                ),
+              ),
               ...getDeleteMeta(exam),
             };
           }),
@@ -1249,10 +1269,22 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               },
             });
           }
+          // The patch payload is schema-shaped (Record<string, unknown> after
+          // the Date coercions above), never a lifecycle write: `status` is
+          // not an UpdateExamRequest field, and transitions run through the
+          // engine funnel (reconcileExamForMutation / lifecycle commands).
+          // This is the only place it becomes the narrowed repo input; assert
+          // the lifecycle column cannot ride through the cast. Initial state
+          // belongs to create commands.
+          if ("status" in updateData || "gradingStatus" in updateData) {
+            throw new Error(
+              "Exam update payload must not carry lifecycle columns",
+            );
+          }
           const updated = (await repo.update(
             ctx,
             id,
-            updateData,
+            updateData as ExamUpdateInput,
           )) as Exam | null;
           if (!updated) return null;
           if (exam.status === "published") {

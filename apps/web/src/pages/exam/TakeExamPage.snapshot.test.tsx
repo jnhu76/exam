@@ -1,12 +1,30 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
-import type { CandidateTakeSnapshot } from "@exam/contracts";
+import type { CandidateTakeSnapshot, ClientEvent } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
+import { ApiError } from "@/lib/api";
+import { toast } from "sonner";
+import { ClientEventBuffer } from "@/lib/clientEventBuffer";
+import { getBuffer, setBuffer } from "@/lib/logger";
+import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
 
 /**
  * P3-FSM-0 integration tests — authoritative CandidateTakeSnapshot read path.
@@ -68,10 +86,14 @@ function buildSnapshot(
   };
 }
 
-const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
+const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
   takeHandler: vi.fn(),
+  // The x-request-id header value postWithMeta reports on save responses
+  // (#924). Null by default (no header); tests that pin rejection-id
+  // correlation set it before triggering the save.
+  postMeta: { requestId: null as string | null },
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -104,11 +126,12 @@ vi.mock("@/lib/api", () => ({
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
     // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock so url/body assertions stay single-sourced. This harness asserts
-    // no rejection-id behavior, so the header id is a constant null.
+    // mock so url/body assertions stay single-sourced. The header id comes
+    // from the shared postMeta holder so rejection-correlation tests can
+    // forge one; every other test sees the absent-header null.
     postWithMeta: async (...args: unknown[]) => ({
       data: await apiPost(...args),
-      meta: { requestId: null },
+      meta: { requestId: postMeta.requestId },
     }),
   },
   setNavigate: () => {},
@@ -123,7 +146,30 @@ function LocationProbe() {
   return <span data-testid="current-path">{location.pathname}</span>;
 }
 
-function renderPage() {
+/** Test-only routes: switch attempt or leave the take page entirely. */
+function AttemptSwitcher() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="switch-attempt"
+        onClick={() => navigate("/exam/exam-1/take/att-2")}
+      >
+        switch
+      </button>
+      <button
+        type="button"
+        data-testid="leave-page"
+        onClick={() => navigate("/exam/list")}
+      >
+        leave
+      </button>
+    </>
+  );
+}
+
+function renderPage(options: { withAttemptSwitcher?: boolean } = {}) {
   return render(
     <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
       <AuthProvider
@@ -137,12 +183,26 @@ function renderPage() {
         }}
       >
         <BrandProvider>
+          <LocationProbe />
           <Routes>
             <Route
               path="/exam/:examId/take/:attemptId"
-              element={<TakeExamPage />}
+              element={
+                options.withAttemptSwitcher ? (
+                  <>
+                    <TakeExamPage />
+                    <AttemptSwitcher />
+                  </>
+                ) : (
+                  <TakeExamPage />
+                )
+              }
             />
-            <Route path="/exam/:attemptId/result" element={<LocationProbe />} />
+            <Route
+              path="/exam/:attemptId/result"
+              element={<span>result</span>}
+            />
+            <Route path="/exam/list" element={<span>list</span>} />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -166,9 +226,12 @@ beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
   takeHandler.mockReset();
+  postMeta.requestId = null;
 });
 
 afterEach(() => {
+  setBuffer(null);
+  __resetExamTelemetryForTest();
   vi.useRealTimers();
 });
 
@@ -922,5 +985,885 @@ describe("submit-freeze UI proof", () => {
       },
       { timeout: 3000 },
     );
+  });
+});
+
+describe("deadline auto-submit trigger declaration and result recording (F16)", () => {
+  const T0 = new Date("2026-07-04T10:00:00.000Z");
+  const T0_ISO = T0.toISOString();
+  const nearDeadline = new Date(T0.getTime() + 3_000).toISOString();
+
+  /** Recording telemetry buffer (same persistence seam as the saveFault suite). */
+  function installRecordingBuffer() {
+    const send = vi.fn(async (events: ClientEvent[]) => ({
+      acknowledgedCount: events.length,
+      rejected: [],
+    }));
+    setBuffer(
+      new ClientEventBuffer({
+        send,
+        batchSize: 100,
+        flushIntervalMs: 0,
+      }),
+    );
+    return send;
+  }
+
+  async function flushAll(): Promise<void> {
+    await getBuffer().flush();
+  }
+
+  /** All buffered exam_telemetry records with the given event name. */
+  function telemetryEvents(
+    send: ReturnType<typeof vi.fn>,
+    name: string,
+  ): Array<Record<string, unknown>> {
+    const out: Array<Record<string, unknown>> = [];
+    for (const call of send.mock.calls) {
+      for (const ev of call[0] as Array<Record<string, unknown>>) {
+        if (ev.kind === "exam_telemetry" && ev.name === name) out.push(ev);
+      }
+    }
+    return out;
+  }
+
+  /** A /submit POST that stays in flight until the test settles it. */
+  interface DeferredSubmit {
+    promise: Promise<unknown>;
+    resolve: (value: unknown) => void;
+    reject: (err: unknown) => void;
+  }
+
+  function deferredSubmit(): DeferredSubmit {
+    let resolve!: (value: unknown) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<unknown>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return {
+      promise,
+      resolve: (value: unknown) => resolve(value),
+      reject: (err: unknown) => reject(err),
+    };
+  }
+
+  function submitPostCount(): number {
+    return apiPost.mock.calls.filter(
+      ([p]) => typeof p === "string" && p.includes("/submit"),
+    ).length;
+  }
+
+  /**
+   * The dialog and timer entries invoke `void handleSubmit()` and DELIBERATELY
+   * discard the submit failure (the toast is the candidate feedback). Node
+   * raises that discarded rejection as a global unhandled rejection, and
+   * vitest's own listener would fail the run for it. This capture attaches a
+   * second listener for the duration of one test: vitest's handler explicitly
+   * yields when another listener exists ("assume that it's handled by user
+   * code"), and the capture keeps the discard ASSERTED (exact count) instead
+   * of silently suppressed.
+   */
+  function captureDiscardedSubmitRejections() {
+    const discarded: unknown[] = [];
+    const listener = (err: unknown) => {
+      discarded.push(err);
+    };
+    process.on("unhandledRejection", listener);
+    return {
+      discarded,
+      stop() {
+        process.off("unhandledRejection", listener);
+      },
+    };
+  }
+
+  /** Fake timers pinned at T0 so the server clock offset is zero. */
+  function renderWithFakeClock(
+    options: { withAttemptSwitcher?: boolean } = {},
+  ) {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    return renderPage(options);
+  }
+
+  it("deadline tick with the user's submit POST in flight: no phantom success, episode re-arms once idle, real failure surfaces the retry entry", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      // timingMode "deadline" mounts no ExamTimer: the page's 1s tick is the
+      // only trigger, isolating the effect-vs-in-flight-submit interleave.
+      const editable = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: T0_ISO,
+        effectiveDeadline: nearDeadline,
+      });
+      // The frozen snapshot the authoritative re-read returns after the
+      // terminal heartbeat (lockReason 'deadline' = locked pre-reconcile).
+      // serverNow is the SERVER's live clock — past the deadline — so the
+      // re-read does not re-base the client clock backwards below it.
+      const locked = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: new Date(T0.getTime() + 35_000).toISOString(),
+        effectiveDeadline: nearDeadline,
+        isEditable: false,
+        canSave: false,
+        canSubmit: false,
+        lockReason: "deadline",
+      });
+      let takeCalls = 0;
+      apiGet.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+          takeHandler(path);
+          takeCalls += 1;
+          return takeCalls === 1 ? editable : locked;
+        }
+        throw new Error(`unexpected GET ${path}`);
+      });
+      const pendingSubmits: DeferredSubmit[] = [];
+      apiPost.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/submit")) {
+          const d = deferredSubmit();
+          pendingSubmits.push(d);
+          return d.promise;
+        }
+        if (typeof path === "string" && path.includes("/heartbeat")) {
+          // Past the deadline the server froze the attempt; the terminal
+          // heartbeat is the authority signal that drives the re-read.
+          throw new ApiError(
+            409,
+            "attempt no longer in_progress",
+            "INVALID_STATE_TRANSITION",
+          );
+        }
+        return { ok: true, serverNow: T0_ISO };
+      });
+
+      renderWithFakeClock();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(takeCalls).toBe(1);
+
+      // User submit: dialog open → confirm; the POST stalls in flight.
+      fireEvent.click(screen.getByTestId("take-submit-btn"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByTestId("confirm-submit-btn"),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(pendingSubmits).toHaveLength(1);
+
+      // The deadline passes while the user's POST is still in flight.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_100);
+      });
+      // The tick must not double-submit…
+      expect(pendingSubmits).toHaveLength(1);
+      // …must not declare an episode it did not start…
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(0);
+      // …and above all must not record success for a submit that never ran.
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+
+      // The user's POST settles FAILED: submittingRef is released again.
+      await act(async () => {
+        pendingSubmits[0]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Next tick (submit idle) REALLY initiates the deadline auto-submit.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_100);
+      });
+      expect(pendingSubmits).toHaveLength(2);
+
+      // That real auto-submit fails → the failure branch records real results.
+      await act(async () => {
+        pendingSubmits[1]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(1);
+      const failures = telemetryEvents(send, "deadline_auto_submit_failed");
+      expect(failures).toHaveLength(1);
+      expect((failures[0]!.metadata as { stage?: string }).stage).toBe(
+        "submit",
+      );
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+      expect(toast.error).toHaveBeenCalledWith("自动提交失败，请点击重试");
+      // Exactly the dialog-invoked user submit is discarded by production's
+      // fire-and-forget; the auto-submit flow handles its own failure.
+      expect(capture.discarded).toHaveLength(1);
+
+      // Dismiss the still-open submit dialog: while it is open, Radix
+      // aria-hides the page around it, which blanks the lock overlay's
+      // accessibility subtree for role queries.
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "继续答题",
+        }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Heartbeat 409 → authoritative re-read locks the page; with the real
+      // failure recorded, the lock overlay offers the candidate a retry entry.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(takeCalls).toBe(2);
+      const overlay = screen.getByTestId("deadline-overlay");
+      expect(overlay).toHaveAttribute("data-lock-reason", "deadline");
+      expect(
+        within(overlay).getByRole("button", { name: "重试提交" }),
+      ).toBeInTheDocument();
+    } finally {
+      capture.stop();
+    }
+  });
+
+  it("DEADLINE_EXCEEDED 200-rejection (with header id) during the auto-submit flush: one reconcile, exactly one submit, correlated failure telemetry", async () => {
+    // Reviewer-C follow-up from the #924×#929 combination gate: a terminal
+    // save rejection is driven here as the real DEADLINE_EXCEEDED 200
+    // envelope (with the #924 header correlation id), interleaved with the
+    // deadline auto-submit's flush→submit — the reconcile tests only drove
+    // ATTEMPT_ALREADY_SUBMITTED / ATTEMPT_CLOSED.
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      // timingMode "deadline" mounts no ExamTimer: the page's 1s tick is the
+      // only trigger.
+      const editable = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: T0_ISO,
+        effectiveDeadline: nearDeadline,
+      });
+      // The frozen snapshot the terminal-rejection reconcile returns: the
+      // server froze saving at the deadline. Submit stays the converging
+      // action (the lock overlay offers 重试提交), so canSubmit is retained.
+      // serverNow is the SERVER's live clock — past the deadline — so the
+      // re-read does not re-base the client clock backwards below it.
+      const locked = buildSnapshot({
+        timingMode: "deadline",
+        serverNow: new Date(T0.getTime() + 3_500).toISOString(),
+        effectiveDeadline: nearDeadline,
+        isEditable: false,
+        canSave: false,
+        lockReason: "deadline",
+      });
+      let takeCalls = 0;
+      apiGet.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+          takeHandler(path);
+          takeCalls += 1;
+          return takeCalls === 1 ? editable : locked;
+        }
+        throw new Error(`unexpected GET ${path}`);
+      });
+      // The save POST stalls in flight until the episode's flush() is
+      // awaiting it, then settles as the server's terminal 200-rejection.
+      let postedClientSeq: unknown;
+      let settleSave!: () => void;
+      const saveInFlight = new Promise<unknown>((resolve) => {
+        settleSave = () =>
+          resolve({
+            accepted: false,
+            reason: "DEADLINE_EXCEEDED",
+            message: "已到截止时间",
+            serverVersion: 5,
+            savedAt: T0_ISO,
+          });
+      });
+      postMeta.requestId = "req-deadline-865-929";
+      const pendingSubmits: DeferredSubmit[] = [];
+      apiPost.mockImplementation(
+        async (path: string, body?: { clientSeq?: number }) => {
+          if (typeof path === "string" && path.includes("/answers/")) {
+            postedClientSeq = body?.clientSeq;
+            return saveInFlight;
+          }
+          if (typeof path === "string" && path.includes("/submit")) {
+            const d = deferredSubmit();
+            pendingSubmits.push(d);
+            return d.promise;
+          }
+          return { ok: true, serverNow: T0_ISO };
+        },
+      );
+
+      renderWithFakeClock();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(takeCalls).toBe(1);
+
+      fireEvent.click(screen.getByRole("radio", { name: "A" }));
+      // Debounce fires: the save POST is in flight.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_600);
+      });
+
+      // The deadline passes: the episode is declared and flush() starts
+      // awaiting the in-flight save.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_600);
+      });
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(1);
+      expect(pendingSubmits).toHaveLength(0);
+
+      // The racing save settles as the terminal 200-rejection carrying the
+      // header id — while the episode's flush is still awaiting it.
+      await act(async () => {
+        settleSave();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      // The alert names the header correlation id for support lookup…
+      const alert = screen.getByTestId("save-rejection-alert");
+      expect(alert).toHaveTextContent("请求编号：req-deadline-865-929");
+      // …and the terminal signal drove exactly ONE authoritative re-read
+      // (the submit's own reload comes later).
+      expect(takeCalls).toBe(2);
+      await flushAll();
+      const failed = telemetryEvents(send, "answer_autosave_failed");
+      expect(failed).toHaveLength(1);
+      const failedMeta = failed[0]!.metadata as Record<string, unknown>;
+      expect(failedMeta.errorCode).toBe("DEADLINE_EXCEEDED");
+      expect(failedMeta.requestId).toBe("req-deadline-865-929");
+      expect(failedMeta.clientSeq).toBe(postedClientSeq);
+
+      // flush() drains via allSettled, so the rejected save does not abort
+      // the episode: the deadline submit fires EXACTLY once — neither
+      // duplicated nor cancelled by the terminal rejection.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(pendingSubmits).toHaveLength(1);
+      await act(async () => {
+        pendingSubmits[0]!.resolve({ ok: true });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(1);
+      expect(telemetryEvents(send, "deadline_auto_submit_failed")).toHaveLength(
+        0,
+      );
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/result");
+      // No duplicate submit after convergence.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(submitPostCount()).toBe(1);
+    } finally {
+      capture.stop();
+    }
+  });
+
+  it("attempt switch during the pre-submit flush: no submit for the abandoned attempt, no cross-attempt UI or telemetry", async () => {
+    const send = installRecordingBuffer();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const editableB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: new Date(T0.getTime() + 600_000).toISOString(),
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/attempts/att-1/")) {
+        takeHandler(path);
+        return editableA;
+      }
+      if (typeof path === "string" && path.includes("/attempts/att-2/")) {
+        takeHandler(path);
+        return editableB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    // A save POST that stays in flight: the deadline auto-submit's flush()
+    // awaits exactly this promise.
+    let resolveSave!: () => void;
+    const saveGate = new Promise<unknown>((resolve) => {
+      resolveSave = () =>
+        resolve({ accepted: true, serverVersion: 1, savedAt: T0_ISO });
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return saveGate;
+      }
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(takeHandler).toHaveBeenCalledWith(expect.stringContaining("att-1"));
+
+    fireEvent.click(screen.getByRole("radio", { name: "A" }));
+    // Debounce fires: the save POST is in flight.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    // The deadline passes: the episode is declared and flush() starts
+    // awaiting the in-flight save.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    await flushAll();
+    expect(telemetryEvents(send, "deadline_auto_submit_started")).toHaveLength(
+      1,
+    );
+
+    // The candidate leaves att-1 for att-2 while the flush is still awaiting.
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    // The abandoned flush finally settles.
+    await act(async () => {
+      resolveSave();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    // The stale episode must not submit att-1, must not record a success for
+    // it, and must not write its submit state onto att-2's page.
+    expect(pendingSubmits).toHaveLength(0);
+    expect(telemetryEvents(send, "submit_requested")).toHaveLength(0);
+    expect(telemetryEvents(send, "deadline_auto_submit_success")).toHaveLength(
+      0,
+    );
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+  });
+
+  it("attempt switch during the auto-submit POST failure: no failure UI on the new attempt; telemetry stays attributed to the old one", async () => {
+    const send = installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const lockedB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+      isEditable: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "deadline",
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return path.includes("att-1") ? editableA : lockedB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+
+    // The POST is in flight when the candidate switches to att-2.
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+    expect(
+      within(screen.getByTestId("deadline-overlay")).queryByRole("button", {
+        name: "重试提交",
+      }),
+    ).toBeNull();
+
+    // att-1's submit settles FAILED after the switch.
+    await act(async () => {
+      pendingSubmits[0]!.reject(new Error("network down"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    // No failure toast / autoSubmitFailed retry entry may land on att-2.
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+    expect(
+      within(screen.getByTestId("deadline-overlay")).queryByRole("button", {
+        name: "重试提交",
+      }),
+    ).toBeNull();
+    // The real failure is still attributable to the attempt that submitted.
+    const failures = telemetryEvents(send, "deadline_auto_submit_failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.attemptId).toBe("att-1");
+  });
+
+  it("attempt switch during the auto-submit POST success: the new attempt is not navigated to the old result", async () => {
+    installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const editableB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return path.includes("att-1") ? editableA : editableB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    await act(async () => {
+      pendingSubmits[0]!.resolve({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+  });
+
+  it("leaving the take page during the auto-submit POST: the settled old submit does not navigate the router", async () => {
+    installRecordingBuffer();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return editableA;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("leave-page"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/exam/list");
+
+    await act(async () => {
+      pendingSubmits[0]!.resolve({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/exam/list");
+  });
+
+  it("a stale heartbeat success does not retry the new attempt's failed save against the old attempt", async () => {
+    installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const snapA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    const snapB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return path.includes("att-1") ? snapA : snapB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    let heartbeat: DeferredSubmit | null = null;
+    const oldAttemptSavePaths: string[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        heartbeat = deferredSubmit();
+        return heartbeat.promise;
+      }
+      if (typeof path === "string" && path.includes("/answers/")) {
+        if (path.includes("/attempts/att-1/")) {
+          oldAttemptSavePaths.push(path);
+        }
+        throw new Error("save transport down");
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // att-1's heartbeat is in flight when the candidate switches to att-2.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(heartbeat).not.toBeNull();
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    // att-2 now has a failed save of its own.
+    fireEvent.click(screen.getByRole("radio", { name: "A" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+
+    // The OLD attempt's heartbeat settles success after the switch.
+    await act(async () => {
+      heartbeat!.resolve({ ok: true, serverNow: T0_ISO });
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    await flushAll();
+
+    // Its stale retry must not replay att-2's failed save against att-1.
+    expect(oldAttemptSavePaths).toHaveLength(0);
+  });
+
+  it("attempt switch during the post-submit authoritative reload: no navigation to the old result", async () => {
+    installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const editableB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    let aGets = 0;
+    let resolveReload!: (value: unknown) => void;
+    const reloadGate = new Promise<unknown>((resolve) => {
+      resolveReload = resolve;
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        if (path.includes("att-1")) {
+          aGets += 1;
+          return aGets === 1 ? editableA : reloadGate;
+        }
+        return editableB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        return { ok: true };
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    // The submit POST resolved; its authoritative reload GET is in flight.
+    expect(aGets).toBe(2);
+
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    // The abandoned reload settles after the switch; it must not navigate.
+    await act(async () => {
+      resolveReload(editableA);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+  });
+
+  it("ExamTimer onTimeout and the deadline effect in the same window: one declaration, one submit POST, one real failure record", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      // timed_window mounts ExamTimer: at the deadline instant its onTimeout
+      // and the page's 1s tick fire in the same window — one episode, not two
+      // competing flows (the two triggers must not double-declare/submit).
+      installTakeRoute(
+        buildSnapshot({
+          timingMode: "timed_window",
+          serverNow: T0_ISO,
+          effectiveDeadline: nearDeadline,
+        }),
+      );
+      const pendingSubmits: DeferredSubmit[] = [];
+      apiPost.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/submit")) {
+          const d = deferredSubmit();
+          pendingSubmits.push(d);
+          return d.promise;
+        }
+        return { ok: true, serverNow: T0_ISO };
+      });
+
+      renderWithFakeClock();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Cross the deadline: both triggers land in the same window.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_100);
+      });
+      // Exactly one submit POST, declared by exactly one episode.
+      expect(pendingSubmits).toHaveLength(1);
+      await flushAll();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(1);
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+
+      // The auto-submit POST fails; later ticks must not re-submit.
+      await act(async () => {
+        pendingSubmits[0]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(1_100);
+      });
+      expect(pendingSubmits).toHaveLength(1);
+      await flushAll();
+      const failures = telemetryEvents(send, "deadline_auto_submit_failed");
+      expect(failures).toHaveLength(1);
+      expect((failures[0]!.metadata as { stage?: string }).stage).toBe(
+        "submit",
+      );
+      expect(toast.error).toHaveBeenCalledWith("自动提交失败，请点击重试");
+      // The unified flow awaits its own submit, so nothing is discarded.
+      expect(capture.discarded).toHaveLength(0);
+    } finally {
+      capture.stop();
+    }
   });
 });

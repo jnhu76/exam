@@ -83,7 +83,9 @@ function makeRepo(overrides: Partial<IncidentRepo> = {}): IncidentRepo {
     findById: vi.fn().mockResolvedValue(null) as never,
     findByIdForUpdate: vi.fn().mockResolvedValue(null) as never,
     listByExam: vi.fn().mockResolvedValue([]) as never,
-    update: vi.fn().mockResolvedValue(makeIncident()) as never,
+    updateIncludingLifecycleState: vi
+      .fn()
+      .mockResolvedValue(makeIncident()) as never,
     appendEvent: vi.fn().mockResolvedValue({ id: randomUUID() }) as never,
     findEventByOperationId: vi.fn().mockResolvedValue(null) as never,
     listEventsByIncident: vi.fn().mockResolvedValue([]) as never,

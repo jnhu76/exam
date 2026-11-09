@@ -12,6 +12,7 @@ import {
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
+  type TenantCrudUpdateInput,
 } from "./baseRepo.js";
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
@@ -21,6 +22,32 @@ import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
+
+/**
+ * Attempt statuses that can carry a non-finalized attempt. `graded` and
+ * `voided` are finalized; `not_started` is intentionally absent because it
+ * has no production writer and cannot carry an answered/in-flight attempt.
+ * Single source for the unresolved predicate shared by the close/scores/
+ * export guards and the exam-list availability projection.
+ */
+const UNRESOLVED_ATTEMPT_STATUSES = [
+  "queued",
+  "in_progress",
+  "disrupted",
+  "submitted",
+] as const;
+
+/**
+ * Non-lifecycle update input for the `exam_attempts` row (EXSEM-014).
+ * `status` and `gradingStatus` are the attempt lifecycle/scoring state:
+ * they are written only by the engine command funnel through
+ * {@link createAttemptRepo}'s `updateIncludingLifecycleState` seam
+ * (ADR-005 lock-reconcile-assert-mutate), never through `update`.
+ */
+type AttemptUpdateInput = Omit<
+  TenantCrudUpdateInput<typeof examAttempts>,
+  "status" | "gradingStatus"
+>;
 
 /**
  * One SaveAnswer replay receipt row (`exam_answer_save_receipts`, #669).
@@ -85,6 +112,20 @@ export function createAttemptRepo(db: Database) {
 
   return {
     ...repo,
+    /**
+     * EXSEM-014: input excludes the lifecycle columns `status` and
+     * `gradingStatus`. Attempt lifecycle transitions and scoring-lifecycle
+     * labels run through the engine command funnel
+     * (`updateIncludingLifecycleState`). This narrowed override delegates to
+     * the base `update` for non-lifecycle fields only.
+     */
+    update(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+      input: AttemptUpdateInput,
+    ) {
+      return repo.update(ctx, attemptId, input);
+    },
     findByIds,
     /**
      * O(1) indexed replay-receipt lookup for ONE (attempt, question,
@@ -802,15 +843,55 @@ export function createAttemptRepo(db: Database) {
           and(
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.examId, examId),
-            inArray(examAttempts.status, [
-              "queued",
-              "in_progress",
-              "disrupted",
-              "submitted",
-            ]),
+            inArray(examAttempts.status, [...UNRESOLVED_ATTEMPT_STATUSES]),
           ),
         );
       return pgNum((rows[0] as { count: number }).count);
+    },
+
+    /**
+     * Returns the two counts consumed by the shared admin results-access
+     * policy (graded and unresolved attempts) in ONE tenant-scoped query.
+     * The exam list needs both to expose `canViewScores` truthfully; issuing
+     * a second per-exam count query would double the list's existing count
+     * round trip. Predicates mirror countGradedByExam /
+     * countUnresolvedByExam exactly.
+     */
+    async countResultsAvailabilityByExam(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select({
+          gradedCount: sql<number>`count(*) filter (where ${examAttempts.status} = 'graded' and ${examAttempts.score} is not null)`,
+          unresolvedCount: sql<number>`count(*) filter (where ${inArray(
+            examAttempts.status,
+            [...UNRESOLVED_ATTEMPT_STATUSES],
+          )})`,
+        })
+        .from(examAttempts)
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.examId, examId),
+            // Union of both predicates: keeps the (org, exam, status) index
+            // selective and excludes rows that contribute to neither count
+            // (`voided`, `not_started`).
+            inArray(examAttempts.status, [
+              "graded",
+              ...UNRESOLVED_ATTEMPT_STATUSES,
+            ]),
+          ),
+        );
+      const row = rows[0] as {
+        gradedCount: number;
+        unresolvedCount: number;
+      };
+      return {
+        gradedCount: pgNum(row.gradedCount),
+        unresolvedCount: pgNum(row.unresolvedCount),
+      };
     },
   };
 }

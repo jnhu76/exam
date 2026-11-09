@@ -682,3 +682,24 @@ all decisions.
    // TODO(Phase 3+): Replace this rejection with explicit cancellation-marker
    // result/export semantics once canceled exam behavior is defined.
    ```
+
+## Appendix — results-list projection clarification (2026-11-09)
+
+This appendix clarifies the binding Close & export policy above; it does not
+change or supersede the original decision.
+
+The admin exam-list projection's `canViewScores` is not a second policy. It is
+the same `resolveAdminResultsAccess` verdict used by
+`GET /exams/:id/scores` and the CSV export gate, so `canViewScores = true`
+means the scores surface would pass its access gate at that instant. The list
+therefore must not advertise an action the scores route would reject while
+unfinalized attempts remain.
+
+The list metadata reason vocabulary (`scoreViewDisabledReasonCode`, D0.8
+machine-code bridge) is extended additively with `UNRESOLVED_ATTEMPTS_EXIST`,
+mirroring the scores/export 409 `details.reason`, so an ended exam with
+unfinalized attempts is disabled with the truthful reason.
+
+Unchanged: an ended exam with zero graded attempts still exports a
+headers-only CSV with HTTP 200. That zero-graded export line is an independent
+Owner Gate and is not altered by this clarification.

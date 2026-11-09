@@ -111,9 +111,13 @@ describe("candidate result visibility projection", () => {
     attemptId: string,
     status: "auto_graded" | "pending_manual" | "fully_graded",
   ) {
-    await createAttemptRepo(ctx.db).update(candidateCtx(), attemptId, {
-      gradingStatus: status,
-    });
+    await createAttemptRepo(ctx.db).updateIncludingLifecycleState(
+      candidateCtx(),
+      attemptId,
+      {
+        gradingStatus: status,
+      },
+    );
   }
 
   /**
@@ -461,10 +465,14 @@ describe("candidate result visibility projection", () => {
       // (frozen, not active), no terminal projection, enrollment.finalAttemptId
       // still null. #542: there is no durable `grading` status — the pre-close
       // hold point IS `submitted`.
-      await createAttemptRepo(ctx.db).update(candidateCtx(), attemptId, {
-        status: "submitted",
-        gradingStatus: "auto_graded",
-      });
+      await createAttemptRepo(ctx.db).updateIncludingLifecycleState(
+        candidateCtx(),
+        attemptId,
+        {
+          status: "submitted",
+          gradingStatus: "auto_graded",
+        },
+      );
       const enrollment = await createEnrollmentRepo(
         ctx.db,
       ).findByExamAndCandidate(candidateCtx(), examId, candidateProfileId);

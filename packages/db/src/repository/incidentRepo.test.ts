@@ -595,11 +595,15 @@ describe("incident persistence foundation", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const updated = await repo.update(alpha.ctx, incident.id, {
-      status: "investigating",
-      version: 2,
-      updatedAt: now,
-    });
+    const updated = await repo.updateIncludingLifecycleState(
+      alpha.ctx,
+      incident.id,
+      {
+        status: "investigating",
+        version: 2,
+        updatedAt: now,
+      },
+    );
     expect(updated).not.toBeNull();
     expect(updated?.status).toBe("investigating");
     expect(updated?.version).toBe(2);

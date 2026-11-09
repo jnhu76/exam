@@ -119,9 +119,13 @@ describe("result publishing policy", () => {
     attemptId: string,
     status: "auto_graded" | "pending_manual" | "fully_graded",
   ) {
-    await createAttemptRepo(ctx.db).update(candidateCtx(), attemptId, {
-      gradingStatus: status,
-    });
+    await createAttemptRepo(ctx.db).updateIncludingLifecycleState(
+      candidateCtx(),
+      attemptId,
+      {
+        gradingStatus: status,
+      },
+    );
   }
 
   /**
@@ -381,9 +385,13 @@ describe("result publishing policy", () => {
   it("publish-results rejects canceled/archived exams → 409", async () => {
     const { examId } = await createGradedAttemptForMode("manual");
     // Move the exam to closed, then archive it.
-    await createExamRepo(ctx.db).update(adminCtx(), examId, {
-      status: "closed",
-    });
+    await createExamRepo(ctx.db).updateIncludingLifecycleState(
+      adminCtx(),
+      examId,
+      {
+        status: "closed",
+      },
+    );
     await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/archive`,
@@ -435,9 +443,13 @@ describe("result publishing policy", () => {
 
   it("F11e: publish-results succeeds on a persisted `closed` exam", async () => {
     const { examId } = await createGradedAttemptForMode("manual");
-    await createExamRepo(ctx.db).update(adminCtx(), examId, {
-      status: "closed",
-    });
+    await createExamRepo(ctx.db).updateIncludingLifecycleState(
+      adminCtx(),
+      examId,
+      {
+        status: "closed",
+      },
+    );
 
     const response = await ctx.app.inject({
       method: "POST",
@@ -457,9 +469,13 @@ describe("result publishing policy", () => {
     });
     expect(first.statusCode).toBe(200);
 
-    await createExamRepo(ctx.db).update(adminCtx(), examId, {
-      status: "canceled",
-    });
+    await createExamRepo(ctx.db).updateIncludingLifecycleState(
+      adminCtx(),
+      examId,
+      {
+        status: "canceled",
+      },
+    );
     const second = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/publish-results`,
