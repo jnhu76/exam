@@ -31,7 +31,7 @@ Every request has a correlation id. The minimum traceable shape:
 |---|---|---|---|
 | requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, Pino and HTTP audit correlation |
 | method | HTTP method | `POST` | pino default request log |
-| path / route | matched route template (`routeOptions.url`; #925 serializer) | `/api/attempts/:id/submit` | fixed `(unrouted)` placeholder when no route matched — never the raw URL/query |
+| path / route | matched route template (`routeOptions.url`; #925 serializer) | `/api/attempts/:attemptId/submit` | fixed `(unrouted)` placeholder when no route matched — never the raw URL/query |
 | statusCode | reply status | `200` | pino onResponse log |
 | durationMs | response time | `42` | pino onResponse log |
 | timestamp | pino `time` | ISO | pino default |
