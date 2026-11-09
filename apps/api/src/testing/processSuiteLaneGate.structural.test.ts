@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 //
 // The lane contract is:
 //   file-schema lane (local serial default) → the suites SKIP before any setup
-//   worker-database lane (pnpm verify / CI api-coverage)   → the suites RUN
+//   worker-database lane (pnpm verify / CI api-tests)   → the suites RUN
 //
 // This guard pins that wiring against both regression directions:
 //   - un-gating a process suite re-exposes the deterministic file-schema 42P01

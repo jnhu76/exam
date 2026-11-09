@@ -27,8 +27,8 @@ The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
 `static` is the first authority gate. After it passes, `verify-build` remains
 the build gate (full Turbo build + production resolution oracle). CI uses ZERO
 GitHub Actions artifacts — the private-repo artifact storage quota once
-blocked the whole pipeline — so Web/API/package coverage and the two E2E
-shards each run the same standard `pnpm build` in their own execution context,
+blocked the whole pipeline — so the Web/API test jobs, package coverage, and
+the two E2E shards each run the same standard `pnpm build` in their own execution context,
 accelerated by the shared GitHub-backed `.turbo` cache. PR CI runs no
 deployment suite; the production deployment itself is the acceptance surface
 (§1.6).
@@ -57,31 +57,35 @@ deployment suite; the production deployment itself is the acceptance surface
 | **Scope** | Full Turbo build: workspace package `dist/**` plus `apps/api/dist/**` and `apps/web/dist/**` |
 | **Turbo cache** | Restores the same GitHub-backed `.turbo` CAS used by `static`; Turbo task hashes decide reuse. |
 | **Artifacts** | NONE. CI uploads no GitHub Actions artifacts (storage quota on this private repo is a hard external limit). Downstream jobs rebuild locally — see below. |
-| **Downstream builds** | `web-coverage`, `api-coverage`, `package-coverage`, and the two E2E shards each restore the `.turbo` cache (same-run, same-sha primary key) and run the same `pnpm build` before their test command. Turbo replays cached task outputs only when the current inputs hash to the same task, so a cache hit or miss changes speed, never provenance: every job tests the SHA it checked out, on first runs and partial reruns alike. |
-| **Why job-local** | Filtered coverage/E2E commands bypass the root Turbo `^build` graph, so dist must be produced inside the job; sharing via artifacts was removed after the storage quota blocked the pipeline. |
+| **Downstream builds** | `web-tests`, `api-tests`, `package-coverage`, and the two E2E shards each restore the `.turbo` cache (same-run, same-sha primary key) and run the same `pnpm build` before their test command. Turbo replays cached task outputs only when the current inputs hash to the same task, so a cache hit or miss changes speed, never provenance: every job tests the SHA it checked out, on first runs and partial reruns alike. |
+| **Why job-local** | Filtered test/coverage/E2E commands bypass the root Turbo `^build` graph, so dist must be produced inside the job; sharing via artifacts was removed after the storage quota blocked the pipeline. |
 | **Trust boundary** | Deployment acceptance never consumed the CI build product and still does not: the operator's real `docker compose` run uses the pinned release images. |
 
-### 1.3 Web Coverage
+### 1.3 Web Tests
 
 | Field | Value |
 |-------|-------|
-| **Job** | `web-coverage` |
-| **Command** | `pnpm --filter @exam/web coverage` |
-| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before coverage (no cross-job artifact; §1.2). |
+| **Job** | `web-tests` |
+| **Command** | `pnpm --filter @exam/web test` |
+| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before the test run (no cross-job artifact; §1.2). |
 | **Services** | None (pure jsdom) |
 | **Env vars** | None set by the job or the config — Vitest defaults `NODE_ENV` to `test` when unset; `APP_MODE` is not set (the web suite reads no `APP_MODE`-dependent config) |
-| **Allowed resources** | CPU (jsdom + V8 coverage instrumentation) |
+| **Allowed resources** | CPU (jsdom) |
 | **Forbidden** | Database access, Redis, network calls |
 | **Timeout** | 10s per test (CI guardrail in `vitest.config.ts`) |
-| **Failure attribution** | Test failure → check `apps/web/src/**/*.test.tsx`; coverage threshold → check `vitest.config.ts` thresholds |
+| **Failure attribution** | Test failure → check `apps/web/src/**/*.test.tsx` |
 
-### 1.4 API Coverage
+PR CI runs the web suite WITHOUT coverage instrumentation; the local
+`pnpm --filter @exam/web coverage` lane (thresholds in `vitest.config.ts`)
+remains available on demand and via `pnpm verify`.
+
+### 1.4 API Tests
 
 | Field | Value |
 |-------|-------|
-| **Job** | `api-coverage` |
-| **Command** | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage` |
-| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before coverage (no cross-job artifact; §1.2). |
+| **Job** | `api-tests` |
+| **Command** | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test` |
+| **Input build** | Restores the `.turbo` cache and runs `pnpm build` in-job before the test run (no cross-job artifact; §1.2). |
 | **Services** | PostgreSQL (via CI service container on `localhost:5432`) |
 | **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `JWT_SECRET=ci-test-secret`, `APP_MODE=ci`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `REDIS_URL=redis://localhost:6379`, `TEST_DB_ISOLATION=worker-database`, `API_TEST_MAX_WORKERS=4` |
 | **Allowed resources** | PostgreSQL (`exam_test`), Redis, CPU |
@@ -231,8 +235,8 @@ section rejects repository-anchored env writers in test files.
 
 | Context | Value |
 |---------|-------|
-| CI jobs that export it (`api-coverage`, `package-coverage`, `e2e`) | `test` — explicit job-level `env:` injection |
-| CI vitest job without an `env:` block (`web-coverage`) | `test` via Vitest's own default (unset → `test`), NOT CI-injected |
+| CI jobs that export it (`api-tests`, `package-coverage`, `e2e`) | `test` — explicit job-level `env:` injection |
+| CI vitest job without an `env:` block (`web-tests`) | `test` via Vitest's own default (unset → `test`), NOT CI-injected |
 | CI jobs that run no vitest/playwright runtime (`static`, `verify-build`, `production-transport-regression`) | unset |
 | Local dev | `development` |
 | Production | `production` |
@@ -301,8 +305,8 @@ section rejects repository-anchored env writers in test files.
 
 | Context | Value | Mechanism |
 |---------|-------|-----------|
-| CI jobs that inject it (`api-coverage`, `package-coverage`, `e2e`) | `singleTenant` | explicit job-level `env:` in `.github/workflows/ci.yml` — the only CI injection sites; no workflow-level default |
-| CI jobs with no settings resolution (`static`, `verify-build`, `web-coverage`) | variable absent | nothing injects or consumes it there |
+| CI jobs that inject it (`api-tests`, `package-coverage`, `e2e`) | `singleTenant` | explicit job-level `env:` in `.github/workflows/ci.yml` — the only CI injection sites; no workflow-level default |
+| CI jobs with no settings resolution (`static`, `verify-build`, `web-tests`) | variable absent | nothing injects or consumes it there |
 | Production / rehearsal containers (incl. the `production-transport-regression` stack) | `singleTenant` unless the operator env sets otherwise | Compose service `environment` projection `DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}` (`docker-compose.yml`), interpolated from the shell / `--env-file .env.production`; the image itself sets no `DEPLOYMENT_MODE` |
 | Any process resolving app settings without an injected value | `singleTenant` | application resolved default — `settings.ts::deploymentModeLeaf` (`defaultRaw: "singleTenant"`; unset or empty → `singleTenant`) — a resolved fact, not an injection |
 
@@ -726,7 +730,7 @@ the isolation authority (§2.8):
   (`isWorkerDatabaseMode() ? describe : describe.skip` — collection-time
   skip); all other API integration tests run normally.
 - **Worker-database lane**: the suites **run and must pass**. This lane owns
-  their evidence and is exercised by `pnpm verify` and CI `api-coverage`
+  their evidence and is exercised by `pnpm verify` and CI `api-tests`
   (§1.4). It is the only supported way to execute them locally, e.g.
   `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=1 pnpm --filter @exam/api exec vitest run <files>`.
 

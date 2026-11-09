@@ -49,7 +49,7 @@ import {
  * healthy server. WHY WORKER-DATABASE: spawned children must boot against a
  * real database URL to reach the bind attempt. IN THE FILE-SCHEMA LANE the
  * suite is skipped at collection time, before any setup; the canonical lane
- * that RUNS it is worker-database (pnpm verify / CI api-coverage).
+ * that RUNS it is worker-database (pnpm verify / CI api-tests).
  */
 
 const workerDbDescribe = isWorkerDatabaseMode() ? describe : describe.skip;

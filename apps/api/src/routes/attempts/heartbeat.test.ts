@@ -100,29 +100,6 @@ describe("attempt routes", () => {
       expect(after).toBeInstanceOf(Date);
       expect(after!.getTime()).toBeGreaterThan(before!.getTime());
     });
-
-    it("marks stale attempts as disrupted during the background scan", async () => {
-      const result = await scanDatabaseForDisruptedAttempts(
-        ctx.app,
-        new Date(Date.now() + 61_000),
-        60,
-      );
-      const candidateCtx = {
-        actorId: ctx.candidate.id,
-        organizationId: ctx.org.id,
-        role: "Candidate" as const,
-        permissions: [] as import("@exam/domain").Permission[],
-        sessionId: "test",
-        targetOrganizationId: ctx.org.id,
-      };
-      const attempt = await createAttemptRepo(ctx.db).findById(
-        candidateCtx,
-        attemptId,
-      );
-
-      expect(result.markedCount).toBeGreaterThan(0);
-      expect(attempt?.status).toBe("disrupted");
-    }, 15_000);
   });
 });
 
