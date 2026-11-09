@@ -57,8 +57,8 @@ export function createExamRepo(db: Database) {
      * EXSEM-014: input excludes the lifecycle column `status`. Lifecycle
      * transitions run through the engine command funnel
      * (`updateIncludingLifecycleState`), which owns the ADR-005
-     * lock-reconcile-assert-mutate protocol; this override forwards to it
-     * for non-lifecycle fields only.
+     * lock-reconcile-assert-mutate protocol. This narrowed override delegates
+     * to the base `update` for non-lifecycle fields only.
      */
     update(
       ctx: TenantContext | RequestContext,

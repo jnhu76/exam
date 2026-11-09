@@ -102,8 +102,8 @@ export function createAttemptRepo(db: Database) {
      * EXSEM-014: input excludes the lifecycle columns `status` and
      * `gradingStatus`. Attempt lifecycle transitions and scoring-lifecycle
      * labels run through the engine command funnel
-     * (`updateIncludingLifecycleState`); this override forwards to it for
-     * non-lifecycle fields only.
+     * (`updateIncludingLifecycleState`). This narrowed override delegates to
+     * the base `update` for non-lifecycle fields only.
      */
     update(
       ctx: TenantContext | RequestContext,

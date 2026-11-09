@@ -774,6 +774,7 @@ describe("attemptRepo custom methods", () => {
           startedAt: new Date(),
           deadlineAt: new Date(Date.now() + 3600_000),
           lastActivityAt: new Date(),
+          ...(status === "graded" ? { score: 88, passed: true } : {}),
         });
       }
 
@@ -788,6 +789,14 @@ describe("attemptRepo custom methods", () => {
       // unreachable `grading` from the unresolved set — the DB cannot hold it).
       const count = await attemptRepo.countUnresolvedByExam(ctxU, examId);
       expect(count).toBe(4);
+      // The combined availability projection is one round trip and must agree
+      // with the two dedicated predicates for every inserted status.
+      expect(
+        await attemptRepo.countResultsAvailabilityByExam(ctxU, examId),
+      ).toEqual({
+        gradedCount: await attemptRepo.countGradedByExam(ctxU, examId),
+        unresolvedCount: count,
+      });
     });
 
     it("returns 0 when only finalized attempts exist", async () => {
@@ -818,6 +827,11 @@ describe("attemptRepo custom methods", () => {
 
       const count = await attemptRepo.countUnresolvedByExam(ctxU, examId);
       expect(count).toBe(0);
+      // A graded row without a score is not a graded result for either
+      // predicate (score IS NOT NULL is part of the authority).
+      expect(
+        await attemptRepo.countResultsAvailabilityByExam(ctxU, examId),
+      ).toEqual({ gradedCount: 0, unresolvedCount: 0 });
     });
   });
 });
