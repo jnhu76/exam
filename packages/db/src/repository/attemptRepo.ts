@@ -839,6 +839,41 @@ export function createAttemptRepo(db: Database) {
         );
       return pgNum((rows[0] as { count: number }).count);
     },
+
+    /**
+     * Returns the two counts consumed by the shared admin results-access
+     * policy (graded and unresolved attempts) in ONE tenant-scoped query.
+     * The exam list needs both to expose `canViewScores` truthfully; issuing
+     * a second per-exam count query would double the list's existing count
+     * round trip. Predicates mirror countGradedByExam /
+     * countUnresolvedByExam exactly.
+     */
+    async countResultsAvailabilityByExam(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select({
+          gradedCount: sql<number>`count(*) filter (where ${examAttempts.status} = 'graded' and ${examAttempts.score} is not null)`,
+          unresolvedCount: sql<number>`count(*) filter (where ${examAttempts.status} in ('queued', 'in_progress', 'disrupted', 'submitted'))`,
+        })
+        .from(examAttempts)
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.examId, examId),
+          ),
+        );
+      const row = rows[0] as {
+        gradedCount: number;
+        unresolvedCount: number;
+      };
+      return {
+        gradedCount: pgNum(row.gradedCount),
+        unresolvedCount: pgNum(row.unresolvedCount),
+      };
+    },
   };
 }
 
