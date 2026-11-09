@@ -330,6 +330,30 @@ async function saveRichAnswer(
   }
 }
 
+/**
+ * Press ArrowRight once and wait until the focused local scroller's animated
+ * scroll has advanced past `before`.
+ *
+ * Chrome animates keyboard arrow scrolling (ScrollAnimator): the first
+ * committed frame can land well after the keydown, and under shard load it
+ * can slip past any fixed sleep. Sampling after `waitForTimeout(150)` raced
+ * that animation and read `scrollLeft = 0` (OBS-2026-11-03-001 / #878). The
+ * assertion is unchanged — one real press must move the focusable viewport —
+ * only the sample waits for the animation instead of guessing its duration.
+ */
+async function pressArrowRightUntilScrolled(
+  page: Page,
+  target: Locator,
+  before: number,
+): Promise<void> {
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(() => target.evaluate((el) => el.scrollLeft), {
+      message: "ArrowRight must scroll the focused rich-content viewport",
+    })
+    .toBeGreaterThan(before);
+}
+
 /** Hold ArrowRight until the focused local scroller reaches its right edge. */
 async function scrollToHorizontalEnd(
   page: Page,
@@ -560,12 +584,11 @@ test.describe.serial("rich-content overflow contract", () => {
     const promptScrollBefore = await promptViewport.evaluate(
       (el) => el.scrollLeft,
     );
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    const promptScrollAfter = await promptViewport.evaluate(
-      (el) => el.scrollLeft,
+    await pressArrowRightUntilScrolled(
+      page,
+      promptViewport,
+      promptScrollBefore,
     );
-    expect(promptScrollAfter).toBeGreaterThan(promptScrollBefore);
     await page.keyboard.press("Shift+Tab");
     await expect(
       section.getByRole("button", { name: "取消标记" }),
@@ -917,9 +940,8 @@ test.describe.serial("rich-content overflow contract", () => {
       (el) => el.scrollWidth - el.clientWidth,
     );
     expect(maxScroll).toBeGreaterThan(0);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(await viewport.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    const beforeFirst = await viewport.evaluate((el) => el.scrollLeft);
+    await pressArrowRightUntilScrolled(page, viewport, beforeFirst);
     // Shift+Tab walks backward through any earlier viewport in the same
     // answer block; it must leave the block entirely (no keyboard trap).
     let leftBlock = false;
@@ -994,11 +1016,8 @@ test.describe.serial("rich-content overflow contract", () => {
       (el) => el.scrollWidth - el.clientWidth,
     );
     expect(inlineMax).toBeGreaterThan(0);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(
-      await inlineViewport.evaluate((el) => el.scrollLeft),
-    ).toBeGreaterThan(0);
+    const inlineBefore = await inlineViewport.evaluate((el) => el.scrollLeft);
+    await pressArrowRightUntilScrolled(page, inlineViewport, inlineBefore);
     await page.keyboard.press("Shift+Tab");
     expect(
       await inlineBlock.evaluate((el) => !el.contains(document.activeElement)),
@@ -1075,9 +1094,8 @@ test.describe.serial("rich-content overflow contract", () => {
       (el) => el.scrollWidth - el.clientWidth,
     );
     expect(maxScroll).toBeGreaterThan(0);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(await focused.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    const focusedBefore = await focused.evaluate((el) => el.scrollLeft);
+    await pressArrowRightUntilScrolled(page, focused, focusedBefore);
     await page.keyboard.press("Shift+Tab");
     expect(
       await page.evaluate(
@@ -1116,11 +1134,7 @@ test.describe.serial("rich-content overflow contract", () => {
     await page.keyboard.press("Tab");
     await expect(mathPreview).toBeFocused();
     const previewBefore = await mathPreview.evaluate((el) => el.scrollLeft);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(await mathPreview.evaluate((el) => el.scrollLeft)).toBeGreaterThan(
-      previewBefore,
-    );
+    await pressArrowRightUntilScrolled(page, mathPreview, previewBefore);
     await page.keyboard.press("Shift+Tab");
     await expect(dialog.getByTestId("formula-expert-source")).toBeFocused();
     await page.keyboard.press("Escape");
