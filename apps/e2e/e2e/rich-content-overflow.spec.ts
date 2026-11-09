@@ -336,23 +336,92 @@ async function scrollToHorizontalEnd(
   target: Locator,
   maxPresses = 160,
 ): Promise<number> {
-  // Chrome animates arrow-key scrolling; each press gets one settled sample,
-  // and two identical samples mean the right edge has been reached.
-  let previous = -1;
-  let stable = 0;
-  for (let i = 0; i < maxPresses; i += 1) {
+  // WHY per-press conditions instead of fixed-delay sampling: Chrome animates
+  // arrow-key scrolling, and under CI-level CPU contention the first committed
+  // frame after a press can land far past any fixed budget (#878: measured
+  // 59ms–1078ms with CPU throttling). Two identical fixed-delay samples can
+  // therefore read the pre-animation position and mistake "not started yet"
+  // for "edge reached". Each press instead waits for an explicit condition —
+  // the position grows past everything seen so far, or it is pinned at the
+  // right edge — which is only satisfied once this press's scroll has landed.
+  const edge = await target.evaluate(
+    (el) => el.scrollWidth - el.clientWidth - 2,
+  );
+  let reached = await target.evaluate((el) => el.scrollLeft);
+  for (let i = 0; i < maxPresses && reached < edge; i += 1) {
     await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(80);
-    const current = await target.evaluate((el) => el.scrollLeft);
-    if (current === previous) {
-      stable += 1;
-      if (stable >= 2) return current;
-    } else {
-      stable = 0;
-      previous = current;
-    }
+    await expect
+      .poll(
+        () =>
+          target.evaluate(
+            (el, state) =>
+              el.scrollLeft > state.grownPast || el.scrollLeft >= state.edge,
+            { grownPast: reached, edge },
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+    reached = await target.evaluate((el) => el.scrollLeft);
   }
-  return previous;
+  return reached;
+}
+
+/**
+ * One real ArrowRight on the focused local scroller, proven by the full
+ * trigger → state-change → settle chain instead of a fixed time budget
+ * (#878: Chrome's internal key-scroll animation can start arbitrarily late
+ * under load, so a sample taken after a fixed delay races the first frame
+ * and reads `scrollLeft = 0`).
+ *
+ * The oracle fails — never passes vacuously — when the premise of the press
+ * is broken: target not focused, node not live, no room left to scroll, the
+ * key producing no scroll, or the page scrolling instead of the target.
+ *
+ * Callers showing lazily projected KaTeX must settle that content (rendered
+ * formula + web fonts) before calling: a mid-swap geometry change can clamp
+ * the position and defeat the growth condition.
+ */
+async function arrowKeyScrollsLocally(
+  page: Page,
+  target: Locator,
+): Promise<{
+  before: number;
+  after: number;
+  maxScroll: number;
+}> {
+  await expect(target).toBeFocused();
+  const start = await target.evaluate((el) => ({
+    left: el.scrollLeft,
+    maxScroll: el.scrollWidth - el.clientWidth,
+    connected: el.isConnected,
+    pageLeft: document.documentElement.scrollLeft,
+  }));
+  expect(start.connected, "the scroll target must be a live node").toBe(true);
+  expect(
+    start.maxScroll,
+    "the target must have real horizontal overflow left to scroll",
+  ).toBeGreaterThan(start.left);
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(() => target.evaluate((el) => el.scrollLeft), { timeout: 5_000 })
+    .toBeGreaterThan(start.left);
+  // Settled completion: sample until the position stops changing. The sample
+  // cadence is not the oracle — growth above already proved the scroll; this
+  // only reports the resting position for the range/locality assertions.
+  let settled = await target.evaluate((el) => el.scrollLeft);
+  for (let i = 0; i < 40; i += 1) {
+    await page.waitForTimeout(50);
+    const current = await target.evaluate((el) => el.scrollLeft);
+    if (current === settled) break;
+    settled = current;
+  }
+  expect(settled).toBeGreaterThan(start.left);
+  expect(settled).toBeLessThanOrEqual(start.maxScroll + 1);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollLeft),
+    "the page must not scroll horizontally; the scroll stays local",
+  ).toBe(start.pageLeft);
+  return { before: start.left, after: settled, maxScroll: start.maxScroll };
 }
 
 /** Geometry of one result-detail row, isolated from presentation state. */
@@ -549,6 +618,16 @@ test.describe.serial("rich-content overflow contract", () => {
     const promptViewport = section
       .locator('[data-slot="content-scroll-viewport"][data-kind="block"]')
       .first();
+    // Judge every tab-stop/ARIA/scroll fact on the SETTLED KaTeX projection
+    // (the same rule as the result-page flow below): the raw-LaTeX fallback
+    // and the rendered formula have different widths, so mid-swap the
+    // derived tab-stop state can flip (role/tabindex vanish while focus
+    // stays) and scroll geometry samples a transient surface, not the
+    // contract.
+    await expect(promptViewport.locator(".katex")).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
     await expect(promptViewport).toHaveAttribute("data-overflowing", "true");
     await section.getByRole("button", { name: "标记本题" }).click();
     await page.keyboard.press("Tab");
@@ -557,28 +636,7 @@ test.describe.serial("rich-content overflow contract", () => {
     expect(await promptViewport.getAttribute("aria-label")).toBe(
       "公式，可横向滚动",
     );
-    // Wait for the SETTLED KaTeX projection before any scroll geometry (the
-    // same rule as the result-page flow below): the raw-LaTeX fallback and
-    // the rendered formula have different scroll ranges, so a sample taken
-    // across the lazy swap would read a transient surface, not the contract.
-    await expect(promptViewport.locator(".katex")).toHaveCount(1);
-    await page.evaluate(async () => {
-      if (document.fonts) await document.fonts.ready;
-    });
-    // The settled region must still be the focused, really-overflowing stop.
-    await expect(promptViewport).toBeFocused();
-    await expect(promptViewport).toHaveAttribute("data-overflowing", "true");
-    const promptScrollBefore = await promptViewport.evaluate(
-      (el) => el.scrollLeft,
-    );
-    await page.keyboard.press("ArrowRight");
-    // Chrome animates arrow-key scrolling: the scroll is proven by an
-    // explicit settled-position condition, not a fixed sleep (#878).
-    await expect
-      .poll(() => promptViewport.evaluate((el) => el.scrollLeft), {
-        timeout: 5_000,
-      })
-      .toBeGreaterThan(promptScrollBefore);
+    await arrowKeyScrollsLocally(page, promptViewport);
     await page.keyboard.press("Shift+Tab");
     await expect(
       section.getByRole("button", { name: "取消标记" }),
@@ -920,19 +978,21 @@ test.describe.serial("rich-content overflow contract", () => {
     if (!(await toggle.count())) {
       await block.getByRole("button", { name: "展开全文" }).click();
     }
+    // The answer's formula must be SETTLED before the keyboard walk: the
+    // raw-LaTeX fallback and the rendered formula have different widths, so
+    // mid-swap the derived tab-stop state can flip and the walk skips the
+    // stop it is supposed to land on (same rule as the take page).
+    await expect(block.locator(".katex").first()).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
     await block.getByRole("button", { name: "收起" }).focus();
     const label = await shiftTabToViewport(page);
     expect(label.length).toBeGreaterThan(0);
     const viewport = page.locator(
       '[data-slot="content-scroll-viewport"]:focus',
     );
-    const maxScroll = await viewport.evaluate(
-      (el) => el.scrollWidth - el.clientWidth,
-    );
-    expect(maxScroll).toBeGreaterThan(0);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(await viewport.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await arrowKeyScrollsLocally(page, viewport);
     // Shift+Tab walks backward through any earlier viewport in the same
     // answer block; it must leave the block entirely (no keyboard trap).
     let leftBlock = false;
@@ -1003,15 +1063,7 @@ test.describe.serial("rich-content overflow contract", () => {
     expect(
       await inlineBlock.evaluate((el) => el.contains(document.activeElement)),
     ).toBe(true);
-    const inlineMax = await inlineViewport.evaluate(
-      (el) => el.scrollWidth - el.clientWidth,
-    );
-    expect(inlineMax).toBeGreaterThan(0);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(
-      await inlineViewport.evaluate((el) => el.scrollLeft),
-    ).toBeGreaterThan(0);
+    await arrowKeyScrollsLocally(page, inlineViewport);
     await page.keyboard.press("Shift+Tab");
     expect(
       await inlineBlock.evaluate((el) => !el.contains(document.activeElement)),
@@ -1080,17 +1132,19 @@ test.describe.serial("rich-content overflow contract", () => {
       ),
     ).toBe(true);
 
+    // The preview's first keyboard stop is the prompt's block formula:
+    // settle the lazy KaTeX projection BEFORE the walk, so the tab-stop
+    // state the walk relies on is the settled one (same rule as the take
+    // page).
+    await expect(card.locator(".katex").first()).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
     await page.mouse.click(2, 2);
     await tabToViewport(page);
     const focused = page.locator('[data-slot="content-scroll-viewport"]:focus');
     await expect(focused).toHaveAttribute("role", "group");
-    const maxScroll = await focused.evaluate(
-      (el) => el.scrollWidth - el.clientWidth,
-    );
-    expect(maxScroll).toBeGreaterThan(0);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(await focused.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await arrowKeyScrollsLocally(page, focused);
     await page.keyboard.press("Shift+Tab");
     expect(
       await page.evaluate(
@@ -1109,6 +1163,12 @@ test.describe.serial("rich-content overflow contract", () => {
     await dialog.getByTestId("formula-expert-toggle").click();
     await dialog.getByTestId("formula-expert-source").fill(LONG_MATH);
     const mathPreview = dialog.locator('[data-slot="content-scroll-viewport"]');
+    // Live-rendered KaTeX: settle the projection before judging any derived
+    // tab-stop/ARIA/scroll fact (same rule as the take page).
+    await expect(mathPreview.locator(".katex").first()).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
     await expect(mathPreview).toHaveAttribute("data-overflowing", "true");
     await expect(mathPreview).toHaveAttribute("tabindex", "0");
     expect(
@@ -1128,12 +1188,7 @@ test.describe.serial("rich-content overflow contract", () => {
     await dialog.getByTestId("formula-expert-source").focus();
     await page.keyboard.press("Tab");
     await expect(mathPreview).toBeFocused();
-    const previewBefore = await mathPreview.evaluate((el) => el.scrollLeft);
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    expect(await mathPreview.evaluate((el) => el.scrollLeft)).toBeGreaterThan(
-      previewBefore,
-    );
+    await arrowKeyScrollsLocally(page, mathPreview);
     await page.keyboard.press("Shift+Tab");
     await expect(dialog.getByTestId("formula-expert-source")).toBeFocused();
     await page.keyboard.press("Escape");
