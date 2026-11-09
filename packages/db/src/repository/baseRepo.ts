@@ -40,6 +40,23 @@ type TenantTable = PgTable<TableConfig> & {
 
 export type { TenantTable };
 
+/** Columns the generic CRUD repo manages itself (never caller-supplied). */
+export type ManagedTenantColumns =
+  | "id"
+  | "organizationId"
+  | "createdAt"
+  | "updatedAt";
+
+/**
+ * The full (un-narrowed) update input of a tenant CRUD repo over table `T`.
+ * Lifecycle-owned repos narrow this with `Omit<…, "status" | "gradingStatus">`
+ * (EXSEM-014) — see `updateIncludingLifecycleState` below for the seam that
+ * keeps the wide shape.
+ */
+export type TenantCrudUpdateInput<T extends TenantTable> = Partial<
+  Omit<T["$inferInsert"], ManagedTenantColumns>
+>;
+
 type PgDrizzleTable = PgTable<TableConfig>;
 
 /** Casts a tenant table to a plain Drizzle table type for generic operations. */
@@ -60,14 +77,30 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
 ) {
   type Select = T["$inferSelect"];
   type Insert = T["$inferInsert"];
-  type ManagedColumn = "id" | "organizationId" | "createdAt" | "updatedAt";
-  type CreateInput = Omit<Insert, ManagedColumn>;
-  type UpdateInput = Partial<CreateInput>;
+  type CreateInput = Omit<Insert, ManagedTenantColumns>;
+  type UpdateInput = TenantCrudUpdateInput<T>;
 
   const orgId = (ctx: TenantContext | RequestContext) =>
     resolveOrganizationId(ctx);
 
   const tbl = asDrizzleTable(table);
+
+  /** Single UPDATE body shared by `update` and the lifecycle-state seam. */
+  async function applyUpdate(
+    ctx: TenantContext | RequestContext,
+    entityId: string,
+    input: UpdateInput,
+  ): Promise<Select | null> {
+    const changes = {
+      ...input,
+      ...("updatedAt" in table ? { updatedAt: now() } : {}),
+    };
+    await db
+      .update(tbl)
+      .set(changes)
+      .where(and(eq(table.organizationId, orgId(ctx)), eq(table.id, entityId)));
+    return findById(ctx, entityId);
+  }
 
   async function findById(
     ctx: TenantContext | RequestContext,
@@ -152,23 +185,36 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
     /**
      * Updates a row by `id` scoped to the tenant, setting `updatedAt`.
      * Returns the updated row or null if not found.
+     *
+     * Lifecycle-owned tables narrow this input at their repo factory
+     * (EXSEM-014): `status` / `gradingStatus` are not writable through
+     * `update` — use {@link updateIncludingLifecycleState}.
      */
-    async update(
+    update(
       ctx: TenantContext | RequestContext,
       entityId: string,
       input: UpdateInput,
     ): Promise<Select | null> {
-      const changes = {
-        ...input,
-        ...("updatedAt" in table ? { updatedAt: now() } : {}),
-      };
-      await db
-        .update(tbl)
-        .set(changes)
-        .where(
-          and(eq(table.organizationId, orgId(ctx)), eq(table.id, entityId)),
-        );
-      return findById(ctx, entityId);
+      return applyUpdate(ctx, entityId, input);
+    },
+    /**
+     * PROTOCOL / INVARIANT (EXSEM-014, ADR-005 lock-reconcile-assert-mutate):
+     * the ONLY named write path that may include lifecycle state columns
+     * (`status`, `gradingStatus`) on lifecycle-owned tables. Ordinary
+     * `update` input excludes them; the production writers of lifecycle
+     * state are the engine command funnels (apps/api/src/adapters/
+     * repoAdapters.ts, packages/exam-engine/src/incidentCommands.ts), which
+     * reconcile and assert legality under the row lock before mutating.
+     * A member call of this seam is arch-anchored (pnpm lint:arch,
+     * EXSEM014_* rules in config/architecture-policy.mjs): a new caller
+     * must be reviewed into that allowlist, never added silently.
+     */
+    updateIncludingLifecycleState(
+      ctx: TenantContext | RequestContext,
+      entityId: string,
+      input: UpdateInput,
+    ): Promise<Select | null> {
+      return applyUpdate(ctx, entityId, input);
     },
     /**
      * Deletes a row by `id` scoped to the tenant's organization.

@@ -1022,17 +1022,21 @@ describe("candidate result / answer visibility boundaries", () => {
           ? { ...r, score: 20, correct: true }
           : r,
       );
-      await createAttemptRepo(ctx.db).update(requestContext, attemptId, {
-        // Terminal state: status=graded + fully_graded so
-        // resolveCandidateResultVisibility treats the result as computable
-        // (it requires status==="graded").
-        status: "graded",
-        gradingStatus: "fully_graded",
-        score: 30,
-        passed: true,
-        gradedAt: new Date(),
-        gradingResult,
-      });
+      await createAttemptRepo(ctx.db).updateIncludingLifecycleState(
+        requestContext,
+        attemptId,
+        {
+          // Terminal state: status=graded + fully_graded so
+          // resolveCandidateResultVisibility treats the result as computable
+          // (it requires status==="graded").
+          status: "graded",
+          gradingStatus: "fully_graded",
+          score: 30,
+          passed: true,
+          gradedAt: new Date(),
+          gradingResult,
+        },
+      );
     }
     return { examId, attemptId };
   }
@@ -1680,14 +1684,18 @@ describe("admin frozen result view", () => {
         ...(existing.get(textResponseId) ?? {}),
       },
     ];
-    await createAttemptRepo(ctx.db).update(adminCtx, attemptId, {
-      status: "graded",
-      gradingStatus: "fully_graded",
-      score: 25,
-      passed: true,
-      gradedAt: new Date(),
-      gradingResult,
-    });
+    await createAttemptRepo(ctx.db).updateIncludingLifecycleState(
+      adminCtx,
+      attemptId,
+      {
+        status: "graded",
+        gradingStatus: "fully_graded",
+        score: 25,
+        passed: true,
+        gradedAt: new Date(),
+        gradingResult,
+      },
+    );
     return { examId, attemptId };
   }
 

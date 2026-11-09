@@ -20,7 +20,10 @@ import {
   ExamStatusEnum,
   ScoreViewDisabledReasonCodeEnum,
 } from "@exam/contracts";
-import { createExamRepo } from "@exam/db/repository/examRepo";
+import {
+  createExamRepo,
+  type ExamUpdateInput,
+} from "@exam/db/repository/examRepo";
 import { createExamAdmissionRepo } from "@exam/db/repository/examAdmissionRepo";
 import { deriveAdmissionViews } from "@exam/exam-engine";
 import { createGraderExamAssignmentRepo } from "@exam/db/repository/graderExamAssignmentRepo";
@@ -1247,10 +1250,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               },
             });
           }
+          // The patch payload is schema-shaped (Record<string, unknown> after
+          // the Date coercions above), never a lifecycle write: `status` is
+          // not an UpdateExamRequest field, and transitions run through the
+          // engine funnel (reconcileExamForMutation / lifecycle commands).
+          // Explicit narrowing to the repo's EXSEM-014 update input keeps
+          // that boundary visible at the call site.
           const updated = (await repo.update(
             ctx,
             id,
-            updateData,
+            updateData as ExamUpdateInput,
           )) as Exam | null;
           if (!updated) return null;
           if (exam.status === "published") {

@@ -12,6 +12,7 @@ import {
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
+  type TenantCrudUpdateInput,
 } from "./baseRepo.js";
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
@@ -21,6 +22,18 @@ import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
+
+/**
+ * Non-lifecycle update input for the `exam_attempts` row (EXSEM-014).
+ * `status` and `gradingStatus` are the attempt lifecycle/scoring state:
+ * they are written only by the engine command funnel through
+ * {@link createAttemptRepo}'s `updateIncludingLifecycleState` seam
+ * (ADR-005 lock-reconcile-assert-mutate), never through `update`.
+ */
+type AttemptUpdateInput = Omit<
+  TenantCrudUpdateInput<typeof examAttempts>,
+  "status" | "gradingStatus"
+>;
 
 /**
  * One SaveAnswer replay receipt row (`exam_answer_save_receipts`, #669).
@@ -85,6 +98,20 @@ export function createAttemptRepo(db: Database) {
 
   return {
     ...repo,
+    /**
+     * EXSEM-014: input excludes the lifecycle columns `status` and
+     * `gradingStatus`. Attempt lifecycle transitions and scoring-lifecycle
+     * labels run through the engine command funnel
+     * (`updateIncludingLifecycleState`); this override forwards to it for
+     * non-lifecycle fields only.
+     */
+    update(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+      input: AttemptUpdateInput,
+    ) {
+      return repo.update(ctx, attemptId, input);
+    },
     findByIds,
     /**
      * O(1) indexed replay-receipt lookup for ONE (attempt, question,

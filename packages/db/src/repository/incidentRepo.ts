@@ -251,7 +251,18 @@ export function createIncidentRepo(db: Database) {
       .orderBy(asc(examIncidents.createdAt), asc(examIncidents.id));
   }
 
-  async function update(
+  /**
+   * PROTOCOL / INVARIANT (EXSEM-014, ADR-014 §9): the named write seam for
+   * the incident row's lifecycle fields (`status`, `severity`, `version`).
+   * Callers are the engine incident commands
+   * (packages/exam-engine/src/incidentCommands.ts), which run the
+   * lock-reconcile-assert-mutate protocol (FOR UPDATE re-read, expected
+   * version check, terminal-status guard) before writing. A member call of
+   * this seam is arch-anchored (pnpm lint:arch, EXSEM014_* rules in
+   * config/architecture-policy.mjs): a new caller must be reviewed into
+   * that allowlist, never added silently.
+   */
+  async function updateIncludingLifecycleState(
     ctx: TenantContext | RequestContext,
     incidentId: string,
     input: UpdateIncidentInput,
@@ -586,7 +597,7 @@ export function createIncidentRepo(db: Database) {
     findAuthorizationChain,
     findByIdForUpdate,
     listByExam,
-    update,
+    updateIncludingLifecycleState,
     appendEvent,
     findEventByOperationId,
     listCommittedOperations,

@@ -76,7 +76,9 @@ function makeRepo(overrides: Partial<IncidentRepo> = {}): IncidentRepo {
     findById: vi.fn().mockResolvedValue(null) as never,
     findByIdForUpdate: vi.fn().mockResolvedValue(null) as never,
     listByExam: vi.fn().mockResolvedValue([]) as never,
-    update: vi.fn().mockResolvedValue(makeIncident()) as never,
+    updateIncludingLifecycleState: vi
+      .fn()
+      .mockResolvedValue(makeIncident()) as never,
     appendEvent: vi.fn().mockResolvedValue({ id: randomUUID() }) as never,
     findEventByOperationId: vi.fn().mockResolvedValue(null) as never,
     listEventsByIncident: vi.fn().mockResolvedValue([]) as never,
@@ -371,7 +373,7 @@ describe("incidentCommands — addIncidentNote", () => {
         eventType: "note_added",
       }),
     );
-    expect(repo.update).not.toHaveBeenCalled();
+    expect(repo.updateIncludingLifecycleState).not.toHaveBeenCalled();
   });
 
   it("throws NotFoundError when incident does not exist", async () => {
@@ -398,7 +400,9 @@ describe("incidentCommands — startIncidentInvestigation", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi.fn().mockResolvedValue(updated) as never,
+      updateIncludingLifecycleState: vi
+        .fn()
+        .mockResolvedValue(updated) as never,
     });
 
     const result = await startIncidentInvestigation(
@@ -413,7 +417,7 @@ describe("incidentCommands — startIncidentInvestigation", () => {
     );
 
     expect(result.outcome).toBe("applied");
-    expect(repo.update).toHaveBeenCalledWith(
+    expect(repo.updateIncludingLifecycleState).toHaveBeenCalledWith(
       expect.anything(),
       incident.id,
       expect.objectContaining({ status: "investigating", version: 2 }),
@@ -495,7 +499,9 @@ describe("incidentCommands — changeIncidentSeverity", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi.fn().mockResolvedValue(updated) as never,
+      updateIncludingLifecycleState: vi
+        .fn()
+        .mockResolvedValue(updated) as never,
     });
 
     const result = await changeIncidentSeverity(
@@ -526,7 +532,9 @@ describe("incidentCommands — resolveExamIncident", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi.fn().mockResolvedValue(updated) as never,
+      updateIncludingLifecycleState: vi
+        .fn()
+        .mockResolvedValue(updated) as never,
     });
 
     const result = await resolveExamIncident(
@@ -553,7 +561,9 @@ describe("incidentCommands — dismissExamIncident", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi.fn().mockResolvedValue(updated) as never,
+      updateIncludingLifecycleState: vi
+        .fn()
+        .mockResolvedValue(updated) as never,
     });
 
     const result = await dismissExamIncident(
@@ -757,7 +767,7 @@ describe("incidentCommands — required string normalization (fail closed)", () 
         ),
       ).rejects.toThrow(ValidationError);
     }
-    expect(repo.update).not.toHaveBeenCalled();
+    expect(repo.updateIncludingLifecycleState).not.toHaveBeenCalled();
   });
 
   it("dismissExamIncident rejects empty/whitespace reasonText", async () => {
@@ -781,7 +791,7 @@ describe("incidentCommands — required string normalization (fail closed)", () 
         ),
       ).rejects.toThrow(ValidationError);
     }
-    expect(repo.update).not.toHaveBeenCalled();
+    expect(repo.updateIncludingLifecycleState).not.toHaveBeenCalled();
   });
 });
 
@@ -825,7 +835,9 @@ describe("incidentCommands — event/audit evidence accuracy", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi.fn().mockResolvedValue(updated) as never,
+      updateIncludingLifecycleState: vi
+        .fn()
+        .mockResolvedValue(updated) as never,
     });
     const audit = vi.fn().mockResolvedValue(undefined);
     await changeIncidentSeverity(
@@ -868,7 +880,9 @@ describe("incidentCommands — event/audit evidence accuracy", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi.fn().mockResolvedValue(updated) as never,
+      updateIncludingLifecycleState: vi
+        .fn()
+        .mockResolvedValue(updated) as never,
     });
     const audit = vi.fn().mockResolvedValue(undefined);
     await resolveExamIncident(
@@ -895,7 +909,7 @@ describe("incidentCommands — canonical operationId identity", () => {
     const repo = makeRepo({
       findById: vi.fn().mockResolvedValue(incident) as never,
       findByIdForUpdate: vi.fn().mockResolvedValue(incident) as never,
-      update: vi
+      updateIncludingLifecycleState: vi
         .fn()
         .mockResolvedValue(
           makeIncident({ status: "investigating", version: 2 }),
