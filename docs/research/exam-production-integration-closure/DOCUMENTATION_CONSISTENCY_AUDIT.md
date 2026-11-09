@@ -108,7 +108,7 @@ grep -rInE '(已合并|已经合并|已发布|已经发布|merge 完成|merged t
 
 - 保留 4 份研究文档：`BASELINE_AND_OWNERSHIP.md`、`REQUEST_ID_GLOBAL_CONTRACT.md`、`UUID_FIXTURE_RECONCILIATION.md`、`FLAKE_INVESTIGATION_AND_FIX.md`（未改动）。
 - 新增 6 份：`PRODUCT_BEHAVIOR_MATRIX.md`、`SAVEANSWER_END_TO_END.md`、`SECURITY_AND_PRIVACY_VERIFICATION.md`、`DOCUMENTATION_CONSISTENCY_AUDIT.md`、`PERFORMANCE_AND_CI.md`、`FINAL_INTEGRATION_RECORD.md`。
-- `FINAL_PRODUCT_ADJUDICATION.md` 以最新裁决为准（本会话观察到 18:46「第 3 轮」与 18:57「基于四份 §7 独立评审」两版并发写入，裁决字段全部一致），追加「附录 D — 交付文档编辑附记」，不改写裁决正文。
+- `FINAL_PRODUCT_ADJUDICATION.md` 以最新裁决为准：本会话先后观察到 18:46「第 3 轮」、18:57「基于四份 §7 独立评审」与 19:37「第 2 轮 · 修复后独立复审裁决」三次并发覆写，**全部裁决字段一致**（verdict BLOCKED、4× KEEP_AND_MERGE、11 PASS + receipt UNCHANGED、CI FAIL、未合并 / 未发布）。最终进入受控历史的是 19:37 的「第 2 轮」版本；该版本为裁决员整篇重写，未保留前版的「附录 D — 交付文档编辑附记」，因此交付编辑的并发/交付说明统一落在 `FINAL_INTEGRATION_RECORD.md` §7–§9，不再跨文件引用附录 D（避免悬空引用）。裁决正文未被本角色改写。
 - `reviews/` 复制 7 份评审，字节一致（本会话 `cmp -s` 逐文件 OK）。
 - `SHA256SUMS` 对本目录交付文件与 `reviews/` 取相对路径 sha256；`sha256sum -c SHA256SUMS` 验证结果见 §5。
 - 以上把 SPEC §9「不能依赖未跟踪 `.tmp` 作为唯一交付依据」在**集成分支**上闭合；`CHANGELOG` / `implementation-status` / 四 PR 逐个合并 / 门禁绿后的 master smoke 仍属 SPEC §8.4 最终 master merge 条件，**未执行**。
@@ -152,10 +152,12 @@ sha256sum -c SHA256SUMS
 
 **attempt 1 复核（本 ask，全部 exit 0）**：`pnpm --filter @exam/api api:openapi:check` → `openapi.json is up to date.`（生成物无漂移）；`pnpm docs:build` → check-site.mjs 10 项全 PASS（380 内部链接与片段、16 路由、130 permalinks、search index en/zh 各 50 documents）；`pnpm format:check` → `All matched files use Prettier code style!`；`sha256sum -c SHA256SUMS` → 18 条目全 OK / 0 FAILED；`git diff --check` → 0。结论：**不存在文档 / 链接 / 生成物缺陷**；最终 exact-SHA CI FAIL（attempt 1，run `42608435613`，`Static checks fail 1s` + 6 required job `skipping` + `CodeRabbit skipping`）是外部 GitHub 计费导致 job 未启动，不是本类问题，不由代码/文档改动修复（#930 OPEN）。诊断、命令与处置见 `FINAL_INTEGRATION_RECORD.md` §8；四个文档一致性门禁仍 PASS，不声称 CI 通过、不声称已合并、不声称已发布。
 
+**attempt 2 复核（本 ask，全部 exit 0，覆盖 CI Static checks 的完整作用域）**：实读 `.github/workflows/ci.yml:33-92`，CI 的 `Static checks` job 恰好执行 `pnpm verify:static`(:87) 与 `pnpm docs:build`(:92)。在 exact 树上本地实跑：`pnpm verify:static` → exit 0（`pnpm format:check && pnpm lint && pnpm lint:arch && pnpm lint:db-config && pnpm lint:db-journal && pnpm lint:env-contract && pnpm lint:env-surface && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check`；`All matched files use Prettier code style!`、`Architecture checks passed.`、typecheck `Tasks: 17 successful, 17 total`、`openapi.json is up to date.`）；`pnpm docs:build` → exit 0（10 项 PASS）。⇒ **CI Static checks 作用域内不存在任何文档 / 链接 / 生成物缺陷**；attempt 2 的 FAIL（run `42609620433`）与 attempt 1 同签名，仍是外部计费使 job 未启动（ANNOTATIONS 原文见 `FINAL_INTEGRATION_RECORD.md` §9）。四个文档一致性门禁 **PASS** 保持不变；`DOC_BUILD_AND_TEST_COMMANDS` 由完整 `verify:static` 实跑进一步加固。不声称 CI 通过、不声称已合并、不声称已发布。
+
 ---
 
 ## 7. 结论
 
 四个文档一致性门禁 **PASS**（§0），9 份长期文档全部核查、5 份最小更新（其中 ADR 只加信息性附录、registry 只补登记不改闭合状态），README/CHANGELOG 按发布规范不更新，全局搜索未发现当前权威文档残留旧机制描述，历史记录与当前权威已明确区分。required CI 仍 FAIL (exit 1)（外部计费）——这是**外部门禁**，与文档一致性 PASS 正交；不声称 CI 通过、不声称已合并、不声称已发布。
 
-**并发写入说明（如实记录）**：本会话写入期间检测到同一 worktree 上还有其它代理进程活动——`FINAL_PRODUCT_ADJUDICATION.md` 被裁决进程先后覆写为两版（18:46「第 3 轮」/ 18:57「基于四份 §7 独立评审」，裁决字段全部一致，见 `FINAL_PRODUCT_ADJUDICATION.md` 附录 D）；另一个 blocker-fix 轮次复核了 run 42483066387 的 raw log 正文并据实更新了 `docs/standards/test-flakes.md` 中该 occurrence 的措辞（「同族待核」解除，确认为同签名）。本提交以最终落盘状态为准；并发复核只加强证据，不改变 #878 OPEN / DEFER、verdict BLOCKED 或未合并 / 未发布结论。
+**并发写入说明（如实记录）**：本会话写入期间检测到同一 worktree 上还有其它代理进程活动——`FINAL_PRODUCT_ADJUDICATION.md` 被裁决进程先后覆写为三版（18:46「第 3 轮」/ 18:57「基于四份 §7 独立评审」/ 19:37「第 2 轮 · 修复后独立复审裁决」，裁决字段全部一致，最终入库的是 19:37 版；并发与口径差异见 `FINAL_INTEGRATION_RECORD.md` §9）；另一个 blocker-fix 轮次复核了 run 42483066387 的 raw log 正文并据实更新了 `docs/standards/test-flakes.md` 中该 occurrence 的措辞（「同族待核」解除，确认为同签名）。本提交以最终落盘状态为准；并发复核只加强证据，不改变 #878 OPEN / DEFER、verdict BLOCKED 或未合并 / 未发布结论。19:37 版整篇重写移除了前版的「附录 D」，故本节及交付清单中的跨文件引用已改指向 `FINAL_INTEGRATION_RECORD.md` §7–§9，避免悬空引用。

@@ -115,7 +115,7 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 | 10 | `FINAL_INTEGRATION_RECORD.md` | 新增（本文件） |
 | 11–14 | `reviews/REVIEW_SECURITY.md`、`REVIEW_PROTOCOL.md`、`REVIEW_CI_FLAKE.md`、`REVIEW_ARCHITECTURE_DOCS.md` | 复制（字节一致） |
 | 附 | `reviews/REVIEW_FIXTURES_FLAKE.md`、`REVIEW_RERUN_1.md`、`REVIEW_RERUN_2.md` | 复制（字节一致） |
-| 15 | `FINAL_PRODUCT_ADJUDICATION.md` | 以最新裁决为准 + 附录 D 编辑附记 |
+| 15 | `FINAL_PRODUCT_ADJUDICATION.md` | 以最新裁决为准（19:37「第 2 轮 · 修复后独立复审裁决」版本，裁决字段与前两版一致）；交付编辑附记见本文件 §7–§9 |
 | 16 | `SHA256SUMS` | 新增（本目录交付文件与 reviews 的相对路径 sha256） |
 
 ---
@@ -177,7 +177,7 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 **诊断（CI 可解释的文档问题）**：这是**外部 GitHub 账户计费**导致 `Static checks` job 根本未启动（无 runner、1s 即失败、日志 404），6 个 required job 因依赖 `skipped`。它不是代码失败，也不是文档 / 链接 / 生成物失败；仓库侧的文档、链接与生成物门禁（下表）全部通过，CI 层面不存在可由文档修改修复的缺陷。按本 ask「只修文档/链接/生成物/CI 可解释的文档问题；不得改产品代码或放宽测试」，本次**零产品代码、零测试改动、零测试放宽**，仅做文档准确性修正：
 
 1. §1 `REQUIRED_CI_FAILURES`、§2 CI 行、§7 run 清单补入 `42608435613`（attempt 1），并把「所有已完成 run 全 FAIL、0 green run」固化为时间无关不变量（每次 push 的新 run 仍 FAIL）；
-2. `FINAL_PRODUCT_ADJUDICATION.md` 附录 D、`PERFORMANCE_AND_CI.md` §1、`DOCUMENTATION_CONSISTENCY_AUDIT.md` §6 同步补记；
+2. `FINAL_PRODUCT_ADJUDICATION.md`（当时的交付编辑附记，后由并发裁决覆写为「第 2 轮」版本并移除该附记；并发与口径差异见 §9）、`PERFORMANCE_AND_CI.md` §1、`DOCUMENTATION_CONSISTENCY_AUDIT.md` §6 同步补记；
 3. 新增本节记录 attempt 1 的 FAIL 与诊断；重新生成 `SHA256SUMS`（文档字节变更）。
 
 **本会话实跑的文档 / 链接 / 生成物检查（全部 exit 0，均为根 `package.json` 语义命令）**：
@@ -195,3 +195,42 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 > 附注：本 ask 期间检测到未跟踪 scratch `/home/hoo/Source/exam/.tmp/production-closure/reviews/REVIEW_RERUN_1.md` 被外部进程改写（`cmp -s` 与 `reviews/` 内已提交副本不一致）。`reviews/` 副本是受控 Git 历史中的交付快照、由 `SHA256SUMS` 钉住字节，依 SPEC §9「不能依赖未跟踪 `.tmp` 作为唯一交付依据」不从 scratch 重新复制，避免注入未经复核的内容。
 
 — 交付文档编辑，2026-11-09，attempt 1
+
+---
+
+## 9. attempt 2 — 外部计费门禁的收敛结论（本 ask）
+
+**ask 给定材料**：「最终 exact-SHA CI 未通过（attempt 2，state FAIL）」及 `gh pr checks 928` 输出尾部：`Static checks fail 2s`（run `42609620433` / job `129134382843`）；`API coverage / Build / CodeRabbit / E2E / Package coverage / Production transport regression / Web coverage` 全部 `skipping`。该 run 是 attempt 1 的非 force push 所触发。
+
+**本会话独立复核**：
+
+| 命令 | 输出 |
+| --- | --- |
+| `gh api "repos/jnhu76/exam/actions/runs/42609620433"` | `{"conclusion":"failure","event":"pull_request","head_sha":"0c7350af10df34ed4506f2769b7c33526c7d10d5","id":42609620433,"status":"completed"}`，created `2026-11-09T11:30:45Z` |
+| `gh api "…/runs/42609620433/jobs?per_page=100" --jq '[.jobs[]\|{name,conclusion}]'` | `Static checks=failure` + `Build / E2E / Package coverage / Web coverage / API coverage / Production transport regression` = 6 × `skipped` |
+| `gh run view 42609620433 --repo jnhu76/exam` | ANNOTATIONS 原文 *"The job was not started because recent account payments have failed or your spending limit needs to be increased…"* |
+| `gh pr checks 928 --repo jnhu76/exam` | `Static checks fail 2s` + 6 required `skipping` + `CodeRabbit skipping`；`PR_CHECKS_EXIT=1`（与 ask 给定输出一致） |
+
+**CI Static checks 的实际命令（本会话实读 `.github/workflows/ci.yml:33-92`）**：该 job 的两个步骤是 `run: pnpm verify:static`（:87）与 `run: pnpm docs:build`（:92）。在 exact 树 `0c7350af…` 上本地实跑这两条**完整**命令：
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `pnpm verify:static` | **`0`** | 展开为 `pnpm format:check && pnpm lint && pnpm lint:arch && pnpm lint:db-config && pnpm lint:db-journal && pnpm lint:env-contract && pnpm lint:env-surface && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check`（日志首行实证）；`All matched files use Prettier code style!`、`Architecture checks passed.`、`Tasks: 17 successful, 17 total`（typecheck）、`openapi.json is up to date.` |
+| `pnpm docs:build` | **`0`** | check-site.mjs 10 项全 PASS → `All documentation checks passed.` |
+
+⇒ **CI Static checks 作用域内不存在任何文档 / 链接 / 生成物缺陷**：两条 CI 命令在本地对同一棵树全部 exit 0。CI 侧的 FAIL 完全由外部 GitHub 账户计费引起（`Static checks` job 根本未启动、无 runner、1–2s 失败、日志 404），6 个 required job 因依赖 `skipped`。按本 ask 允许范围（只修文档/链接/生成物/CI 可解释的文档问题），**没有可修的产品性文档缺陷**：本次仅补记该收敛结论、把两条完整 CI 命令的本地 exit 0 证据写入交付记录，并重新生成 `SHA256SUMS`；**零产品代码、零测试改动、零测试放宽**。
+
+**收敛结论（时间无关，不再逐次枚举 run ID）**：每次非 force push 都会在同一外部计费条件下触发一个新的 FAIL run（attempt 1 → `42608435613`，attempt 2 → `42609620433`，后续同理），§7 的「所有已完成 run 全 FAIL、0 green run / 0 success job」不变量已覆盖全部此类 run；继续为每一个新 run ID 追加文档提交会形成无限循环，且不能产生绿 CI，**不属本 ask 的可修范围，不再执行**。解除条件是外部账户计费恢复（Issue #930 OPEN）后，在 clean tree 的 exact SHA 上重跑完整 CI、取得 7 个 required job 全 success，并按 SPEC §7.2 产生新 SHA 与独立复审；这不是任何代码 / 文档改动能替代的。
+
+verdict 仍 **BLOCKED**；4× KEEP_AND_MERGE 不变；`FULL_CI = FAIL`、`POST_MERGE_SMOKE = NOT_RUN`、`MERGE_STATUS = BLOCKED`、`RELEASE_STATUS = NOT_RELEASED`；**未合并、未发布**。
+
+### 9.1 并发裁决覆写（本 ask 期间，如实记录）
+
+attempt 2 执行期间检测到未跟踪的并发裁决进程**整篇覆写** `FINAL_PRODUCT_ADJUDICATION.md`（mtime 2026-11-09 19:37，21811 B，174 行），版本标题由「本轮 · 基于四份 §7 独立评审」变为「**第 2 轮 · 修复后独立复审裁决**」。本会话已完整实读该版本（174 行）并逐项核对：
+
+- **裁决字段一致**：verdict `BLOCKED`、4× `KEEP_AND_MERGE`、12 契约字段 11 PASS + `SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`、required CI FAIL（外部计费 #930 OPEN）、`未合并 / 未发布`、不执行 merge / commit / push —— 与 18:46「第 3 轮」、18:57「基于四份 §7 独立评审」两版在全部裁决字段上一致；差异仅在 blocker 2 口径（见下）与证据台账。按任务「以最新裁决为准」，本次提交把 19:37 版作为权威裁决纳入受控历史。
+- **口径差异（不静默改写）**：19:37 版把 blocker 2 定义为「flake/occurrence **登记面**」并判为**已闭合**（`test-flakes.md` 三条补登已落地、#878 仍 OPEN/DEFER、green-CI 前置与 blocker 1 耦合）；本文件 §1 / §4 沿用第 1 轮口径，把 blocker 2（含 #878 Acceptance 或 post-fix 权威绿灯前置）列为与 blocker 1 耦合未闭合。两版对**唯一决定性 blocker 1 未解、verdict BLOCKED、未合并 / 未发布**完全一致；此处仅记录差异，不伪造任一方的结论。
+- **悬空引用修复（本 ask 的文档/链接问题）**：19:37 版整篇重写移除了前版的「附录 D — 交付文档编辑附记」，使 `DOCUMENTATION_CONSISTENCY_AUDIT.md` §3/§7 与本文件 §3/§8 共 4 处跨文件引用失效。本次已把这 4 处引用改指向本文件 §7–§9，并在此记录版本演进；`SHA256SUMS` 按最终落盘字节重新生成（生成前 `sha256sum -c` 曾因该覆写报 `FINAL_PRODUCT_ADJUDICATION.md: FAILED`，如实记录）。
+- 本角色**未改写裁决正文**，也未提交任何未经实读的内容；裁决文件的逐字节状态由 `SHA256SUMS` 钉住。
+
+— 交付文档编辑，2026-11-09，attempt 2
