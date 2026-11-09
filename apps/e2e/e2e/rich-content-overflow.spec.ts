@@ -557,15 +557,28 @@ test.describe.serial("rich-content overflow contract", () => {
     expect(await promptViewport.getAttribute("aria-label")).toBe(
       "公式，可横向滚动",
     );
+    // Wait for the SETTLED KaTeX projection before any scroll geometry (the
+    // same rule as the result-page flow below): the raw-LaTeX fallback and
+    // the rendered formula have different scroll ranges, so a sample taken
+    // across the lazy swap would read a transient surface, not the contract.
+    await expect(promptViewport.locator(".katex")).toHaveCount(1);
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+    });
+    // The settled region must still be the focused, really-overflowing stop.
+    await expect(promptViewport).toBeFocused();
+    await expect(promptViewport).toHaveAttribute("data-overflowing", "true");
     const promptScrollBefore = await promptViewport.evaluate(
       (el) => el.scrollLeft,
     );
     await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(150);
-    const promptScrollAfter = await promptViewport.evaluate(
-      (el) => el.scrollLeft,
-    );
-    expect(promptScrollAfter).toBeGreaterThan(promptScrollBefore);
+    // Chrome animates arrow-key scrolling: the scroll is proven by an
+    // explicit settled-position condition, not a fixed sleep (#878).
+    await expect
+      .poll(() => promptViewport.evaluate((el) => el.scrollLeft), {
+        timeout: 5_000,
+      })
+      .toBeGreaterThan(promptScrollBefore);
     await page.keyboard.press("Shift+Tab");
     await expect(
       section.getByRole("button", { name: "取消标记" }),
