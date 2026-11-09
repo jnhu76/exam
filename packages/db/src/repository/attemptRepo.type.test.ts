@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { createAttemptRepo } from "./attemptRepo.js";
+import type { createEnrollmentRepo } from "./enrollmentRepo.js";
+import type { createExamRepo } from "./examRepo.js";
 
 /**
  * Compile-time pin for the EXSEM-014 public API boundary (F43).
@@ -16,6 +18,12 @@ type GenericUpdateInput = Parameters<AttemptRepo["update"]>[2];
 type SeamUpdateInput = Parameters<
   AttemptRepo["updateIncludingLifecycleState"]
 >[2];
+type ExamUpdateInputShape = Parameters<
+  ReturnType<typeof createExamRepo>["update"]
+>[2];
+type EnrollmentUpdateInputShape = Parameters<
+  ReturnType<typeof createEnrollmentRepo>["update"]
+>[2];
 
 type Assert<T extends true> = T;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -29,6 +37,14 @@ type GenericExcludesGradingStatus = Assert<
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 type SeamAcceptsStatus = Assert<
   "status" extends keyof SeamUpdateInput ? true : false
+>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type ExamGenericExcludesStatus = Assert<
+  "status" extends keyof ExamUpdateInputShape ? false : true
+>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type EnrollmentGenericExcludesStatus = Assert<
+  "status" extends keyof EnrollmentUpdateInputShape ? false : true
 >;
 
 describe("attemptRepo lifecycle update boundary (compile-time)", () => {

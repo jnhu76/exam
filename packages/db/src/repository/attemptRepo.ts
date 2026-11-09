@@ -24,6 +24,18 @@ type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
 
 /**
+ * Attempt statuses that are not finalized (`graded` / `voided` are final).
+ * Single source for the unresolved predicate shared by the close/scores/
+ * export guards and the exam-list availability projection.
+ */
+const UNRESOLVED_ATTEMPT_STATUSES = [
+  "queued",
+  "in_progress",
+  "disrupted",
+  "submitted",
+] as const;
+
+/**
  * Non-lifecycle update input for the `exam_attempts` row (EXSEM-014).
  * `status` and `gradingStatus` are the attempt lifecycle/scoring state:
  * they are written only by the engine command funnel through
@@ -829,12 +841,7 @@ export function createAttemptRepo(db: Database) {
           and(
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.examId, examId),
-            inArray(examAttempts.status, [
-              "queued",
-              "in_progress",
-              "disrupted",
-              "submitted",
-            ]),
+            inArray(examAttempts.status, [...UNRESOLVED_ATTEMPT_STATUSES]),
           ),
         );
       return pgNum((rows[0] as { count: number }).count);
@@ -856,13 +863,22 @@ export function createAttemptRepo(db: Database) {
       const rows = await db
         .select({
           gradedCount: sql<number>`count(*) filter (where ${examAttempts.status} = 'graded' and ${examAttempts.score} is not null)`,
-          unresolvedCount: sql<number>`count(*) filter (where ${examAttempts.status} in ('queued', 'in_progress', 'disrupted', 'submitted'))`,
+          unresolvedCount: sql<number>`count(*) filter (where ${inArray(
+            examAttempts.status,
+            [...UNRESOLVED_ATTEMPT_STATUSES],
+          )})`,
         })
         .from(examAttempts)
         .where(
           and(
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.examId, examId),
+            // Union of both predicates: keeps the (org, exam, status) index
+            // selective and excludes finalized `voided`/`not_started` rows.
+            inArray(examAttempts.status, [
+              "graded",
+              ...UNRESOLVED_ATTEMPT_STATUSES,
+            ]),
           ),
         );
       const row = rows[0] as {
