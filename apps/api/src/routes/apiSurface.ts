@@ -1,4 +1,3 @@
-import Fastify from "fastify";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import {
