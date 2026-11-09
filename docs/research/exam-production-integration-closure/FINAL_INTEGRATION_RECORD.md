@@ -144,3 +144,16 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 `GLOBAL_PRODUCT_CONSISTENCY = PASS`、`DOCUMENTATION_CONSISTENCY = PASS`、产品契约面全 PASS，但 `FULL_CI = FAIL`（外部 GitHub 计费）、`MERGE_STATUS = BLOCKED`、`RELEASE_STATUS = NOT_RELEASED`。本次交付把证据与文档纳入受控 Git 历史，不改变裁决 verdict，不完成最终 master 收口，**不声称 CI 通过、不声称已合并、不声称已发布**。
 
 — 交付文档编辑，2026-11-09，分支 `integration/production-closure-20261109`（Draft PR #928）
+
+---
+
+## 7. 推送后状态补记（本会话实查）
+
+非 force 快进 push（`a5df2c90..e97e15fb`，`PUSH_EXIT=0`）后重新查询：
+
+- PR #928 `headRefOid = e97e15fb604f33e5fc8e99c8c547004f9b05149d` = 本地 `git rev-parse HEAD` = 远端分支 ref（`gh api .../git/ref/heads/integration/production-closure-20261109`）；`state=OPEN, isDraft=true, mergedAt=null, baseRefName=master`。`git status --short` 为空（clean tree）。
+- 新 HEAD 的 `gh api "repos/jnhu76/exam/actions/runs?head_sha=e97e15fb…&per_page=100"` → `total_count=0`（尚无 CI run）；`gh pr checks 928` 在本时点仅返回 `CodeRabbit skipping`、`PR_CHECKS_EXIT=0`。**这不是绿 CI**：7 个 required job 在新 HEAD 上零执行 / 零 success；`mergeStateStatus=CLEAN` 仅表示当前无挂起或失败的 check，不构成 required CI 通过证据。本交付提交后 required CI 仍未被触发完成。
+- 被审 exact SHA 的 FAIL 记录仍在：分支 run 列表 `total_count=2`，`42593850473`(a5df2c90) 与 `42572487639`(0b2e2d8a) 均 `conclusion=failure`；全 SHA 范围 0 green run。外部 GitHub 账户计费故障（#930 OPEN）未解除，代码/文档改动不能修复。
+- 因此 §1 的 `FULL_CI = FAIL` / `MERGE_STATUS = BLOCKED` / `RELEASE_STATUS = NOT_RELEASED` 与「未合并、未发布」结论**不变**。§1 / §2 中 `gh pr checks 928 → EXIT=1` 是**推送前**在 `a5df2c90` head 上本会话实跑的记录，作为该 SHA 的 CI 事实保留，不冒充新 HEAD 的当前检查状态。
+
+> 最终 `FinalResult.finalSha` = 本分支最终 HEAD（含本补记提交）= PR #928 `headRefOid`；提交不能自含其 SHA，故以 Git ref / GitHub headRefOid 为权威。
