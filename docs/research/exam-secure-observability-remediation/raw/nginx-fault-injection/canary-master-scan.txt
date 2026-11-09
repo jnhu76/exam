@@ -1,0 +1,26 @@
+# FIJ canary leak master scan — 2026-11-08T13:26:45Z
+# columns: run | canary-in-access.log | canary-in-error.log
+lvl-s02-c | 0 | 0
+lvl-s02-w | 0 | 1
+lvl-s03-c | 0 | 0
+lvl-s03-w | 0 | 1
+lvl-s04-c | 0 | 0
+lvl-s04-w | 0 | 1
+lvl-s05-c | 0 | 0
+lvl-s05-w | 0 | 1
+lvl-s09-c | 0 | 0
+lvl-s09-w | 0 | 1
+lvl-s10-w | 0 | 0
+s01-normal | 0 | 0
+s02-upstream-stopped | 0 | 1
+s03-connection-refused | 0 | 1
+s04-upstream-timeout | 0 | 1
+s05-upstream-close | 0 | 1
+s06-resolver-dead | 0 | 1
+s07-no-such-host | 0 | 1
+s07b-name-unregistered | 0 | 1
+s08-upstream-errors | 0 | 0
+s09-malformed-uri | 0 | 0
+s10-client-disconnect | 0 | 0
+s11-static-spa | 0 | 0
+s12-https | 0 | 0

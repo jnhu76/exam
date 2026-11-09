@@ -1,0 +1,13 @@
+readiness: base=200 int=200
+{"stage":"api-200","n":300,"perVariant":{"base":{"codes":{"200":300},"accessBytes":58748,"errorBytes":0,"accessBytesPerReq":195.8,"errorBytesPerReq":0},"int":{"codes":{"200":300},"accessBytes":37500,"errorBytes":0,"accessBytesPerReq":125,"errorBytesPerReq":0}}}
+{"stage":"api-200-with-token-query","n":100,"perVariant":{"base":{"codes":{"200":100},"accessBytes":22980,"errorBytes":0,"accessBytesPerReq":229.8,"errorBytesPerReq":0},"int":{"codes":{"200":100},"accessBytes":12500,"errorBytes":0,"accessBytesPerReq":125,"errorBytesPerReq":0}}}
+{"stage":"spa-index","n":200,"perVariant":{"base":{"codes":{"200":200},"accessBytes":31200,"errorBytes":0,"accessBytesPerReq":156,"errorBytesPerReq":0},"int":{"codes":{"200":200},"accessBytes":16800,"errorBytes":0,"accessBytesPerReq":84,"errorBytesPerReq":0}}}
+{"stage":"spa-deeplink","n":100,"perVariant":{"base":{"codes":{"200":100},"accessBytes":20800,"errorBytes":0,"accessBytesPerReq":208,"errorBytesPerReq":0},"int":{"codes":{"200":100},"accessBytes":8400,"errorBytes":0,"accessBytesPerReq":84,"errorBytesPerReq":0}}}
+{"stage":"api-upstream-404","n":100,"perVariant":{"base":{"codes":{"404":100},"accessBytes":18000,"errorBytes":0,"accessBytesPerReq":180,"errorBytesPerReq":0},"int":{"codes":{"404":100},"accessBytes":12500,"errorBytes":0,"accessBytesPerReq":125,"errorBytesPerReq":0}}}
+{"stage":"api-upstream-500","n":50,"perVariant":{"base":{"codes":{"500":50},"accessBytes":8600,"errorBytes":0,"accessBytesPerReq":172,"errorBytesPerReq":0},"int":{"codes":{"500":50},"accessBytes":6250,"errorBytes":0,"accessBytesPerReq":125,"errorBytesPerReq":0}}}
+{"stage":"malformed-uri","n":50,"perVariant":{"base":{"codes":{"400":50},"accessBytes":9500,"errorBytes":0,"accessBytesPerReq":190,"errorBytesPerReq":0},"int":{"codes":{"400":50},"accessBytes":4050,"errorBytes":0,"accessBytesPerReq":81,"errorBytesPerReq":0}}}
+{"stage":"client-abort-slow","n":30,"perVariant":{"base":{"codes":{"aborted":30},"accessBytes":5100,"errorBytes":0,"accessBytesPerReq":170,"errorBytesPerReq":0},"int":{"codes":{"aborted":30},"accessBytes":2610,"errorBytes":0,"accessBytesPerReq":87,"errorBytesPerReq":0}}}
+{"stage":"fault-upstream-refused","n":100,"perVariant":{"base":{"codes":{"200":100},"accessBytes":19586,"errorBytes":0,"accessBytesPerReq":195.9,"errorBytesPerReq":0},"int":{"codes":{"200":100},"accessBytes":12500,"errorBytes":0,"accessBytesPerReq":125,"errorBytesPerReq":0}}}
+{"stage":"fault-upstream-unresolvable","n":100,"perVariant":{"base":{"codes":{"502":100},"accessBytes":19962,"errorBytes":18788,"accessBytesPerReq":199.6,"errorBytesPerReq":187.9},"int":{"codes":{"502":100},"accessBytes":8500,"errorBytes":18791,"accessBytesPerReq":85,"errorBytesPerReq":187.9}}}
+NGINX_AB_DONE
+EXIT=0

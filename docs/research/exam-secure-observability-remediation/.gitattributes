@@ -1,0 +1,10 @@
+# Byte-exact evidence: these captures contain CRLF/mixed line endings and
+# SHA256SUMS is computed over their raw bytes. Disable Git text conversion
+# so a clean checkout reproduces the archived bytes.
+TASK-CONTRACT.md -text
+raw/nginx-fault-injection/runs/lvl-s09-c/nc-response.txt -text
+raw/nginx-fault-injection/runs/lvl-s09-w/nc-response.txt -text
+raw/nginx-fault-injection/runs/s01-normal/hdr.txt -text
+raw/nginx-fault-injection/runs/s09-malformed-uri/nc-response.txt -text
+raw/perf-ab/hdr-base.txt -text
+raw/perf-ab/hdr-int.txt -text
