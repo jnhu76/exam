@@ -298,6 +298,7 @@ async function mintCapability(ctx: MockContext) {
 
 async function runRestore(
   ctx: MockContext,
+  now: Date = NOW,
 ): Promise<RestoreInterruptionResult> {
   const capability = await mintCapability(ctx);
   return restoreInterruptedAttempt(
@@ -309,7 +310,7 @@ async function runRestore(
     ctx.adjustmentRepo,
     ctx.gradingWorksetRepo,
     capability,
-    NOW,
+    now,
   );
 }
 
@@ -603,6 +604,38 @@ describe("restoreInterruptedAttempt", () => {
         throw new Error("Event write failure");
       };
       await expect(runRestore(ctx)).rejects.toThrow("Event write failure");
+    });
+  });
+
+  describe("restore × deadline reconciliation overlap", () => {
+    it("expired deadline during restore → reconciliation terminalizes, lifecycle terminal, no restored event", async () => {
+      const attempt = makeAttempt(); // disrupted, deadlineAt = DEADLINE (02:00Z)
+      const ctx = setupMocks({ attempt, detected: makeDetectedEvent() });
+      // Keep the read view consistent with in-flight writes so the
+      // reconciliation's submit/freeze/grade chain observes its own commits.
+      const innerUpdate = ctx.attemptRepo.update;
+      ctx.attemptRepo.update = async (id, data) => {
+        Object.assign(attempt, data);
+        return innerUpdate(id, data);
+      };
+      const enrollment = makeEnrollment();
+      ctx.enrollmentRepo.findByExamAndCandidate = async () => enrollment;
+
+      // Restore timestamp past the attempt deadline: reconciliation must win
+      // the lifecycle race and terminalize instead of restoring.
+      const result = await runRestore(
+        ctx,
+        new Date("2026-01-01T02:30:00.000Z"),
+      );
+
+      expect(result.lifecycle).toBe("terminal");
+      expect(attempt.status).toBe("graded");
+      expect(attempt.submittedAt).toEqual(DEADLINE);
+      const eventTypes = ctx.insertedEvents.map(
+        (e) => (e as { eventType: string }).eventType,
+      );
+      expect(eventTypes).not.toContain("restored");
+      expect(eventTypes).toContain("terminalized");
     });
   });
 });

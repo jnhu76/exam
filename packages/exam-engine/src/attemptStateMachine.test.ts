@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { transition } from "./attemptStateMachine.js";
+import { AttemptStatus } from "@exam/domain";
+import { transition, type AttemptCommand } from "./attemptStateMachine.js";
 
 describe("attemptStateMachine", () => {
   describe("valid transitions", () => {
@@ -65,4 +66,58 @@ describe("attemptStateMachine", () => {
   // The isTransitionOk guard is a 1-line `return result.ok` pass-through
   // exercised implicitly by every transition() row above; it has no separate
   // hand-built-literal tests.
+});
+
+/**
+ * Exhaustive matrix over `Object.values(AttemptStatus) × all commands`,
+ * derived from the domain enum (same closed-tuple derivation pattern as
+ * `packages/contracts/src/recovery.ts:33-42`). A new AttemptStatus value
+ * automatically enters the matrix; the type assertion below keeps COMMANDS
+ * closed over AttemptCommand vocabulary growth.
+ */
+describe("attemptStateMachine exhaustive matrix", () => {
+  const COMMANDS = [
+    "submit",
+    "disrupt",
+    "restore",
+    "grade",
+  ] as const satisfies readonly AttemptCommand[];
+
+  type Assert<T extends true> = T;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  type CommandsExhaustive = Assert<
+    Exclude<AttemptCommand, (typeof COMMANDS)[number]> extends never
+      ? true
+      : false
+  >;
+
+  // The canonical valid cells; every other (status, command) combination must
+  // be rejected with INVALID_SOURCE_STATUS. These five rows are the authority
+  // markDisrupted/restoreAttemptState write points consult via transition().
+  const EXPECTED_NEXT: Partial<
+    Record<AttemptStatus, Partial<Record<AttemptCommand, AttemptStatus>>>
+  > = {
+    in_progress: { submit: "submitted", disrupt: "disrupted" },
+    disrupted: { submit: "submitted", restore: "in_progress" },
+    submitted: { grade: "graded" },
+  };
+
+  for (const status of Object.values(AttemptStatus)) {
+    for (const command of COMMANDS) {
+      const expectedNext = EXPECTED_NEXT[status]?.[command];
+      it(`${status} × ${command} → ${
+        expectedNext ?? "INVALID_SOURCE_STATUS"
+      }`, () => {
+        const result = transition(status, command);
+        if (expectedNext) {
+          expect(result).toEqual({ ok: true, next: expectedNext });
+        } else {
+          expect(result).toEqual({
+            ok: false,
+            reason: "INVALID_SOURCE_STATUS",
+          });
+        }
+      });
+    }
+  }
 });
