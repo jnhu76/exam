@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPostgresDatabase } from "@exam/db/postgres";
@@ -43,7 +44,9 @@ interface PinoLine {
   reqId?: string;
   msg?: string;
   res?: { statusCode?: number };
-  req?: { url?: string; method?: string };
+  // #925: the incoming line carries the trusted route template (or the
+  // fixed placeholder) — never the raw url.
+  req?: { route?: string; method?: string; url?: string | undefined };
   responseTime?: number;
 }
 
@@ -197,13 +200,19 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
       // Probe 3: envelope ↔ pino correspondence for the 404 request. Pino
       // stamps every line of a request with the SAME reqId the error handler
       // passed to buildErrorResponse (request.id). The "incoming request"
-      // line carries req.url; the completion line carries res.statusCode —
-      // correlate the pair through their shared reqId.
+      // line carries the #925 route field (never a raw url); the completion
+      // line carries res.statusCode — correlate the pair through reqId.
       let requestLine: PinoLine | undefined;
       await expect
         .poll(() => {
-          requestLine = parsePinoLines(server.stdout()).find(
-            (line) => line.req?.url === notFoundPath && line.reqId,
+          const lines = parsePinoLines(server.stdout());
+          const reqId404 = lines
+            .filter((l) => l.res?.statusCode === 404 && l.reqId)
+            .map((l) => l.reqId!)
+            .at(-1);
+          requestLine = lines.find(
+            (line) =>
+              line.msg === "incoming request" && line.reqId === reqId404,
           );
           return requestLine?.reqId;
         })
@@ -212,6 +221,11 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
       expect(reqId).not.toBe(forgedLower);
       expect(reqId).not.toBe(forgedUpper);
       expect(body.error.requestId).toBe(reqId);
+      // #925: the incoming line for an unmatched route carries the trusted
+      // template/placeholder — never the raw path bytes.
+      expect(requestLine!.req?.url).toBeUndefined();
+      expect(requestLine!.req?.route).toBeTruthy();
+      expect(requestLine!.req?.route).not.toContain(notFoundPath);
 
       const completionLines = parsePinoLines(server.stdout()).filter(
         (line) => line.reqId === reqId && line.res?.statusCode === 404,
@@ -220,6 +234,53 @@ PG_DESCRIBE("production UUIDv4 requestId and header guard (#860)", () => {
         completionLines.length,
         `expected a pino completion line for ${notFoundPath}`,
       ).toBeGreaterThanOrEqual(1);
+
+      // Probe 4 (#925): an unmatched NON-/api path with a query canary.
+      // Both root layouts must stay leak-free — and the caller-visible
+      // policy differs by layout:
+      //  - public/ present (production image / built CI): the static
+      //    surface owns the root policy → 200 SPA shell for GET deep links;
+      //  - public/ absent (API-only): registerRootNotFoundBoundary answers
+      //    the canonical JSON envelope (the default basic404 would log
+      //    "Route <raw url> not found" — raw URL bytes).
+      // Either way the canary must never reach the log stream.
+      const rootCanary = `EXAMAUDIT-CANARY-LOG-root-${crypto.randomUUID()}`;
+      const staticLayout = existsSync(
+        resolve(__dirname, "..", "public", "index.html"),
+      );
+      const rootRes = await fetch(
+        `http://127.0.0.1:${server.port}/outside-api?token=${rootCanary}`,
+      );
+      let rootRequestId: string | null = null;
+      if (staticLayout) {
+        expect(rootRes.status).toBe(200);
+        expect(await rootRes.text()).toContain("<");
+      } else {
+        expect(rootRes.status).toBe(404);
+        const rootBody = (await rootRes.json()) as {
+          error: { code: string; requestId: string };
+        };
+        expect(rootBody.error.code).toBe("RESOURCE_NOT_FOUND");
+        expect(rootBody.error.requestId).toMatch(UUID_V4_REQUEST_ID_RE);
+        rootRequestId = rootBody.error.requestId;
+      }
+      // Explicit barrier: wait for the root request's completion line
+      // (same reqId) before the negative assertions — no fixed sleep.
+      if (rootRequestId !== null) {
+        await expect
+          .poll(() => server.stdout().includes(`"reqId":"${rootRequestId}"`), {
+            timeout: 2_000,
+          })
+          .toBe(true);
+      } else {
+        await expect
+          .poll(() => server.stdout().includes('"msg":"request completed"'), {
+            timeout: 2_000,
+          })
+          .toBe(true);
+      }
+      expect(server.stdout()).not.toContain(rootCanary);
+      expect(server.stdout()).not.toContain("Route GET");
 
       // The server-generated UUIDv4 format on the wire: no log line anywhere in
       // this boot may carry a forged header value as its reqId, and the

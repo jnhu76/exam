@@ -111,7 +111,11 @@ services:
       app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      # /healthz: the HTTPS activation recipe exempts this exact path from
+      # the 80→443 redirect (deploy/nginx/web.conf), keeping the loopback
+      # probe plain-HTTP verifiable behind a self-signed certificate.
+      test:
+        ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

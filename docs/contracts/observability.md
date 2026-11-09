@@ -31,7 +31,7 @@ Every request has a correlation id. The minimum traceable shape:
 |---|---|---|---|
 | requestId | `request.id` (server UUIDv4 `genReqId`) | `"550e8400-e29b-41d4-a716-446655440000"` | server-generated; error envelope, `x-request-id` response header (#865), Pino and HTTP audit correlation |
 | method | HTTP method | `POST` | pino default request log |
-| path / route | request path | `/api/attempts/:id/submit` | pino default |
+| path / route | matched route template (`routeOptions.url`; #925 serializer) | `/api/attempts/:attemptId/submit` | fixed `(unrouted)` placeholder when no route matched — never the raw URL/query |
 | statusCode | reply status | `200` | pino onResponse log |
 | durationMs | response time | `42` | pino onResponse log |
 | timestamp | pino `time` | ISO | pino default |
@@ -120,6 +120,30 @@ required merely to identify an HTTP request.
 - **Background work.** Background scanner/incident operations continue to
   use their existing workerInstanceId/operationId; do not fabricate an HTTP
   requestId for work that did not originate from an HTTP request.
+- **Raw URLs never persisted in app pathways (#925).** No application-side
+  log pathway writes the raw client URL (query or path): the pino request
+  line logs the matched route template via the `req` serializer in
+  `lib/logRedaction.ts`; error, authz-denial and 404 logging use the same
+  `routeTemplateOf`. This is a separate claim from the nginx edge below —
+  do not merge them into one statement.
+- **nginx access-log privacy vs error-log risk acceptance (#925 / Owner
+  Decision A).** The nginx edge access log keeps the secret-free
+  `exam_privacy` format (`deploy/nginx/web.conf`): fixed prefix-level
+  route placeholder plus server-observed fields only — raw request
+  line/URI, Referer, Cookie and Authorization are banned from it forever.
+  The nginx error_log stays at the native `error` level so a self-managed
+  deployment keeps upstream/resolution fault diagnostics; nginx core quotes
+  the FULL request line (including query secrets) in error-level messages
+  during upstream/DNS failures — verified by container fault injection
+  (access log: zero raw-URL leaks across all scenarios/levels; error log:
+  leaks in the upstream-failure family; `crit` suppresses all diagnosis;
+  `warn` adds no failure-diagnostic value but additionally leaks malformed
+  request lines via uninitialized-variable warnings) — and that raw-URL
+  exposure is an explicitly accepted, bounded risk (no `crit` suppression,
+  no log-filtering proxy). Access-log
+  privacy and error-log exposure are reported as separate verdicts; any
+  third-party log collector outside the deployment boundary remains a
+  documented residual, not a verified surface.
 - **Multi-instance boundary.** Generating unique request IDs does NOT make
   the current deployment multi-instance safe. Scanner ownership, scheduling,
   deployment and lifecycle concerns require a separate architecture decision.
@@ -258,7 +282,7 @@ Additional rules (policy, partially enforced):
 
 Request trace (pino, error path):
 ```json
-{"level":"info","time":1730000000000,"req":{"method":"POST","url":"/api/attempts/a1/submit"},"reqId":"r1"}
+{"level":"info","time":1730000000000,"req":{"method":"POST","route":"/api/attempts/:attemptId/submit","remoteAddress":"10.1.2.3"},"reqId":"r1"}
 {"level":"error","time":1730000000042,"reqId":"r1","msg":"attempt submit failed","actorId":"u7","organizationId":"org1","errorCode":"ATTEMPT_CLOSED"}
 {"level":"info","time":1730000000042,"res":{"statusCode":409},"reqId":"r1","responseTime":42}
 ```
