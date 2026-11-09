@@ -147,13 +147,13 @@ END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 
 ---
 
-## 7. 推送后状态补记（本会话实查）
+## 7. 推送后状态补记（本会话实查，时间无关表述）
 
-非 force 快进 push（`a5df2c90..e97e15fb`，`PUSH_EXIT=0`）后重新查询：
+本轮交付产生两次非 force 快进 push：`a5df2c90..e97e15fb`、`e97e15fb..<final>`（`PUSH_EXIT=0`）。以下结论不依赖「某个瞬间是否已有新 run」，因为提交不能自含其 SHA、且每次 push 都可能触发新的 CI run：
 
-- PR #928 `headRefOid = e97e15fb604f33e5fc8e99c8c547004f9b05149d` = 本地 `git rev-parse HEAD` = 远端分支 ref（`gh api .../git/ref/heads/integration/production-closure-20261109`）；`state=OPEN, isDraft=true, mergedAt=null, baseRefName=master`。`git status --short` 为空（clean tree）。
-- 新 HEAD 的 `gh api "repos/jnhu76/exam/actions/runs?head_sha=e97e15fb…&per_page=100"` → `total_count=0`（尚无 CI run）；`gh pr checks 928` 在本时点仅返回 `CodeRabbit skipping`、`PR_CHECKS_EXIT=0`。**这不是绿 CI**：7 个 required job 在新 HEAD 上零执行 / 零 success；`mergeStateStatus=CLEAN` 仅表示当前无挂起或失败的 check，不构成 required CI 通过证据。本交付提交后 required CI 仍未被触发完成。
-- 被审 exact SHA 的 FAIL 记录仍在：分支 run 列表 `total_count=2`，`42593850473`(a5df2c90) 与 `42572487639`(0b2e2d8a) 均 `conclusion=failure`；全 SHA 范围 0 green run。外部 GitHub 账户计费故障（#930 OPEN）未解除，代码/文档改动不能修复。
-- 因此 §1 的 `FULL_CI = FAIL` / `MERGE_STATUS = BLOCKED` / `RELEASE_STATUS = NOT_RELEASED` 与「未合并、未发布」结论**不变**。§1 / §2 中 `gh pr checks 928 → EXIT=1` 是**推送前**在 `a5df2c90` head 上本会话实跑的记录，作为该 SHA 的 CI 事实保留，不冒充新 HEAD 的当前检查状态。
+- **分支与 PR 同一性**（可复核）：PR #928 `headRefOid` = 本地 `git rev-parse HEAD` = `gh api .../git/ref/heads/integration/production-closure-20261109` 的 `object.sha`，三者始终相等；`state=OPEN, isDraft=true, mergedAt=null, baseRefName=master`；`git status --short` 为空（clean tree）。最终 HEAD 的 SHA = `FinalResult.finalSha`，以 Git ref / GitHub headRefOid 为权威。
+- **required CI 在本分支任何 SHA 上从未取得绿灯**：本会话观察到的所有已完成 run —— `42572487639`(0b2e2d8a)、`42593850473`(a5df2c90)、`42607941019`(交付 HEAD) —— 全部 `conclusion=failure`；`Static checks` 因外部 GitHub 账户计费未启动（1–2s 失败、日志 404），6 个 required job 全部 `skipped`，0 success job / 0 green run；阻断登记于 Issue **#930**（OPEN）。`gh pr checks 928` 在最后查询为 `PR_CHECKS_EXIT=1`；`mergeStateStatus=UNSTABLE`。
+- **瞬时态的正确读法**：若某个新 push 之后 GitHub 尚未触发 run，`gh pr checks 928` 可能短暂只显示 `CodeRabbit skipping`、`EXIT=0`、`mergeStateStatus=CLEAN`。这**不是绿 CI**：7 个 required job 零执行 / 零 success，`CLEAN` 只表示当前无挂起或失败的 check，不构成 required CI 通过证据。一旦 run 触发，其结论仍为本节上一条的 FAIL（外部计费，代码/文档改动不能修复）。
+- 因此 §1 的 `FULL_CI = FAIL` / `MERGE_STATUS = BLOCKED` / `RELEASE_STATUS = NOT_RELEASED` 与「未合并、未发布」结论**不变**；§1 / §2 中 `gh pr checks 928 → EXIT=1` 是推送前在 `a5df2c90` head 上本会话实跑的记录，作为该 SHA 的 CI 事实保留。外部计费恢复后须在 clean tree 的 exact SHA 上重跑完整 CI、取得 7 个 required job 全 success，并按 SPEC §7.2 产生新 SHA 与独立复审；在此之前维持 draft / OPEN。
 
 > 最终 `FinalResult.finalSha` = 本分支最终 HEAD（含本补记提交）= PR #928 `headRefOid`；提交不能自含其 SHA，故以 Git ref / GitHub headRefOid 为权威。
