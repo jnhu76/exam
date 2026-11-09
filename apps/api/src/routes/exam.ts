@@ -68,6 +68,7 @@ import {
   ExamPublishResultsNotAllowedError,
 } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
+import { isExamEnded } from "./resultsAccessPolicy.js";
 import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
 import { executeAdminExamTransition } from "./examTransitionExecutor.js";
@@ -204,10 +205,7 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
     } as const;
   }
 
-  const examEnded =
-    exam.status === "closed" ||
-    exam.status === "archived" ||
-    (exam.closeAt !== null && now >= exam.closeAt);
+  const examEnded = isExamEnded(exam, now);
 
   if (!examEnded) {
     return {
