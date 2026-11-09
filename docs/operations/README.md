@@ -121,6 +121,22 @@ docker compose --env-file .env.production logs -f app          # tail all
 docker compose --env-file .env.production logs app | jq 'select(.level >= 40)'  # warn+
 ```
 
+**nginx edge logs (`web` service).** The access log (`exam_privacy` format) is
+secret-free by construction — it never records raw URLs. The error log
+(Owner Decision A, `error` level) MAY quote full request lines including
+query strings during upstream/DNS failures (verified by fault injection;
+see the #925/#926 evidence archive). Handle it accordingly:
+
+- restrict who may run `docker logs web` / read
+  `/var/lib/docker/containers/**.log` on the host (operators only — Docker
+  access is near-host privilege; app RBAC does not cover OS logs);
+- set explicit log rotation (compose `logging:` `max-size`/`max-file`, or
+  the daemon default) — the bundled compose file does not cap log growth
+  by itself;
+- redact query strings before sharing error-log excerpts outside the
+  ops team.
+
+
 ## Incident and Recovery
 
 - **Candidate disrupted attempts**: heartbeat scanner marks attempts

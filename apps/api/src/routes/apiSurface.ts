@@ -1,4 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
+import Fastify from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import {
   buildReadinessProbeDeps,
@@ -9,6 +10,7 @@ import { ErrorResponseSchema } from "@exam/contracts";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { healthResponseSchema, readyResponseSchema } from "./healthSchema.js";
 import { registerApiRouteModules } from "./registerApiRouteModules.js";
+import { sendResourceNotFound } from "../plugins/rootNotFoundBoundary.js";
 
 /**
  * The single Fastify scope that owns the whole /api namespace.
@@ -102,9 +104,7 @@ const apiSurfacePlugin: FastifyPluginAsync = async (api) => {
   // Canonical unmatched-request policy for the /api namespace (#429): any
   // request the router classifies as /api without a matching route stays in
   // the JSON error boundary — never HTML, never the static/SPA fallback.
-  api.setNotFoundHandler((request, reply) => {
-    reply.code(404).send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-  });
+  api.setNotFoundHandler(sendResourceNotFound);
 };
 
 export default apiSurfacePlugin;

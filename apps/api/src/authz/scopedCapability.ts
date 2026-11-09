@@ -26,6 +26,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import type { RuntimeRequestContext } from "../types/requestContext.js";
+import { routeTemplateOf } from "../lib/logRedaction.js";
 import {
   isScopeDenied,
   Role,
@@ -220,7 +221,7 @@ export function buildScopedCapabilityPreHandler(
       // Configuration error: a route declared a resolver no plugin registered.
       // Never fail open (ADR §3.9); surface as 503 so it is not masked as 403.
       request.log.error(
-        { resolverKey, permission, route: request.url },
+        { resolverKey, permission, route: routeTemplateOf(request) },
         "authz scoped-capability resolver not registered",
       );
       return reply
@@ -236,7 +237,12 @@ export function buildScopedCapabilityPreHandler(
     if (!resourceId || typeof resourceId !== "string") {
       // No resource id on the request (mis-declared route). Fail closed.
       request.log.error(
-        { resolverKey, permission, resourceIdKey, route: request.url },
+        {
+          resolverKey,
+          permission,
+          resourceIdKey,
+          route: routeTemplateOf(request),
+        },
         "authz scoped-capability resource id missing on request",
       );
       return reply
@@ -295,7 +301,7 @@ export function buildScopedCapabilityPreHandler(
         // Configuration error: a route declared Proctor assignment scope
         // without wiring the gate. Never fail open.
         request.log.error(
-          { resolverKey, permission, route: request.url },
+          { resolverKey, permission, route: routeTemplateOf(request) },
           "authz proctor-assignment gate not wired",
         );
         return reply
@@ -309,7 +315,7 @@ export function buildScopedCapabilityPreHandler(
           // The resolution produced no Exam identity — the enforcement cannot
           // run. Fail closed (mis-declared route).
           request.log.error(
-            { resolverKey, permission, route: request.url },
+            { resolverKey, permission, route: routeTemplateOf(request) },
             "authz proctor-assignment enforcement: no resolved Exam id",
           );
           return reply
@@ -329,7 +335,7 @@ export function buildScopedCapabilityPreHandler(
               resolverKey,
               permission,
               examId,
-              route: request.url,
+              route: routeTemplateOf(request),
             },
             "authz proctor-assignment lookup failed",
           );
@@ -357,7 +363,7 @@ export function buildScopedCapabilityPreHandler(
         // Configuration error: a route declared Teacher assignment scope
         // without wiring the gate. Never fail open.
         request.log.error(
-          { resolverKey, permission, route: request.url },
+          { resolverKey, permission, route: routeTemplateOf(request) },
           "authz teacher-assignment gate not wired",
         );
         return reply
@@ -371,7 +377,7 @@ export function buildScopedCapabilityPreHandler(
           // The resolution produced no Course identity — the enforcement
           // cannot run. Fail closed (mis-declared route).
           request.log.error(
-            { resolverKey, permission, route: request.url },
+            { resolverKey, permission, route: routeTemplateOf(request) },
             "authz teacher-assignment enforcement: no resolved Course id",
           );
           return reply
@@ -390,7 +396,7 @@ export function buildScopedCapabilityPreHandler(
               resolverKey,
               permission,
               courseId,
-              route: request.url,
+              route: routeTemplateOf(request),
             },
             "authz teacher-assignment lookup failed",
           );
@@ -418,7 +424,7 @@ export function buildScopedCapabilityPreHandler(
         // Configuration error: a route declared Grader assignment scope
         // without wiring the gate. Never fail open.
         request.log.error(
-          { resolverKey, permission, route: request.url },
+          { resolverKey, permission, route: routeTemplateOf(request) },
           "authz grader-assignment gate not wired",
         );
         return reply
@@ -432,7 +438,7 @@ export function buildScopedCapabilityPreHandler(
           // The resolution produced no Exam identity — the enforcement
           // cannot run. Fail closed (mis-declared route).
           request.log.error(
-            { resolverKey, permission, route: request.url },
+            { resolverKey, permission, route: routeTemplateOf(request) },
             "authz grader-assignment enforcement: no resolved Exam id",
           );
           return reply
@@ -451,7 +457,7 @@ export function buildScopedCapabilityPreHandler(
               resolverKey,
               permission,
               examId,
-              route: request.url,
+              route: routeTemplateOf(request),
             },
             "authz grader-assignment lookup failed",
           );
