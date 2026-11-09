@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "@/lib/api";
@@ -1058,6 +1065,9 @@ export function TakeExamPage() {
         // Snapshot reload is best-effort here; result page is the canonical
         // post-submit destination and will surface any backend error.
       }
+      // The reload is another await window: if the route switched while it
+      // was in flight, the settled submit must not navigate the new route.
+      if (stale()) return;
       navigate(routes.exam.result(attemptId));
     } catch (err) {
       trackExamEvent(
@@ -1367,7 +1377,10 @@ export function TakeExamPage() {
     return () => window.removeEventListener("online", onOnline);
   }, [retryFailedSaves]);
 
-  useEffect(() => {
+  // Layout effect cleanup runs synchronously on unmount, closing the
+  // commit→passive-cleanup window in which a settling POST could still see
+  // mountedRef === true and navigate the router.
+  useLayoutEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
