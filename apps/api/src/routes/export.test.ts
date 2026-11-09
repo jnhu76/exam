@@ -21,12 +21,34 @@ import candidateFieldRoutes from "./candidateField.js";
 import attemptRoutes from "./attempts.js";
 import { exportRoutes } from "./export.js";
 import { createAuditLogRepo } from "@exam/db/repository/auditLogRepo";
+import { createExamRepo } from "@exam/db/repository/examRepo";
 import { schema } from "@exam/db/schema/pg";
 import { eq } from "drizzle-orm";
 
 describe("CSV export integration", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
+
+  function adminRequestContext() {
+    return {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+  }
+
+  /** Moves the exam window into the past (scores.test.ts markExamClosed
+   * method): ADR-005 close & export policy requires an ended exam before
+   * scores/export may return data, so export fixtures must age their exams
+   * via the DB once their candidate flows are done. */
+  async function markExamEnded(examId: string) {
+    await createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+      closeAt: new Date(Date.now() - 1000),
+    });
+  }
 
   beforeAll(async () => {
     ctx = await buildTestApp(async (fastify) => {
@@ -52,6 +74,10 @@ describe("CSV export integration", () => {
       totalScore: 100,
     });
     await publishExamViaApi(ctx.app, ctx.adminToken, examId);
+    // The shared fixture exam feeds the headers-only / disposition / BOM
+    // tests; under the ADR-005 export gate it must be ended (zero graded →
+    // headers-only 200) instead of a live published exam.
+    await markExamEnded(examId);
   });
 
   afterAll(async () => {
@@ -96,6 +122,159 @@ describe("CSV export integration", () => {
     expect(body).toContain("考生姓名");
     expect(body).toContain("成绩");
     expect(body).toContain("及格状态");
+  });
+
+  // ── ADR-005 close & export policy: examEnded gate on the export route ──
+  // F01 regression: the export route previously skipped the examEnded check
+  // that GET /exams/:id/scores enforces, so a live published exam exported a
+  // (partial) CSV while the scores list correctly returned 409.
+
+  it("returns 409 RESOURCE_CONFLICT with EXAM_NOT_FINISHED while the exam window is still open", async () => {
+    const openExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Open Window Export Exam",
+      courseCode: "OGATE101",
+      courseName: "Open Gate Course",
+      questionContent: "Is the gate closed before the exam ends?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, openExamId);
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${openExamId}/export/scores`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    // D0.5: the top-level message is the registry compat text; the condition
+    // itself rides the machine reason (D0.13), same line as the scores route.
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    expect(body.error.message).toBe("资源状态冲突");
+    expect(body.error.details?.reason).toBe("EXAM_NOT_FINISHED");
+    expect(body.error.requestId).toEqual(expect.any(String));
+  });
+
+  it("returns 409 UNRESOLVED_ATTEMPTS_EXIST while an in-progress attempt remains", async () => {
+    const unresolvedExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Unresolved Export Exam",
+      courseCode: "UGATE101",
+      courseName: "Unresolved Gate Course",
+      questionContent: "Is a mid-exam export blocked?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, unresolvedExamId);
+
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      ctx.adminToken,
+      `export-unresolved-${uniquePrefix()}`,
+      ctx.org.id,
+    );
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${unresolvedExamId}/enrollments`,
+      payload: { candidateIds: [candidate.candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // START (not submit) — the attempt stays in_progress (unresolved).
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${unresolvedExamId}/start`,
+      cookies: { "auth-token": candidate.token },
+    });
+    expect(startRes.statusCode).toBe(201);
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${unresolvedExamId}/export/scores`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    expect(body.error.details?.reason).toBe("UNRESOLVED_ATTEMPTS_EXIST");
+    expect(body.error.details?.activeAttemptCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns 200 headers-only CSV for an ended exam (DB closeAt) with zero graded attempts", async () => {
+    const endedExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Ended Empty Export Exam",
+      courseCode: "EGATE101",
+      courseName: "Ended Gate Course",
+      questionContent: "Is an ended exam exportable?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, endedExamId);
+    await markExamEnded(endedExamId);
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${endedExamId}/export/scores`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    const body = typeof res.body === "string" ? res.body : res.body.toString();
+    const lines = body.split("\n").filter((l: string) => l.length > 0);
+    expect(lines.length).toBe(1);
+  });
+
+  it("examEnded boundary: 409 strictly before closeAt, allowed at now === closeAt (shared >= predicate)", async () => {
+    const boundaryExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Boundary Export Exam",
+      courseCode: "BGATE101",
+      courseName: "Boundary Gate Course",
+      questionContent: "Does the gate flip exactly at closeAt?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, boundaryExamId);
+    const closeAt = new Date(Date.now() + 60_000);
+    await createExamRepo(ctx.db).update(adminRequestContext(), boundaryExamId, {
+      closeAt,
+    });
+
+    try {
+      // Strictly before the boundary the exam has not ended.
+      ctx.setNow(new Date(closeAt.getTime() - 1));
+      const before = await ctx.app.inject({
+        method: "GET",
+        url: `/api/exams/${boundaryExamId}/export/scores`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(before.statusCode).toBe(409);
+      expect(before.json().error.details?.reason).toBe("EXAM_NOT_FINISHED");
+
+      // At the boundary (now === closeAt) the shared >= predicate ends the
+      // exam, so the export proceeds (zero graded → headers-only 200).
+      ctx.setNow(closeAt);
+      const at = await ctx.app.inject({
+        method: "GET",
+        url: `/api/exams/${boundaryExamId}/export/scores`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(at.statusCode).toBe(200);
+      const body = typeof at.body === "string" ? at.body : at.body.toString();
+      const lines = body.split("\n").filter((l: string) => l.length > 0);
+      expect(lines.length).toBe(1);
+    } finally {
+      ctx.setNow(null);
+    }
   });
 
   it("returns 401 ErrorResponse v0 with AUTH_REQUIRED and requestId when unauthenticated", async () => {
@@ -177,6 +356,9 @@ describe("CSV export integration", () => {
       gradedExamId,
       gradedUsername,
     );
+    // ADR-005: the export gate requires an ended exam; age the window only
+    // after the candidate flow (which needs the open window) is complete.
+    await markExamEnded(gradedExamId);
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
       ctx.adminToken,
@@ -211,6 +393,8 @@ describe("CSV export integration", () => {
       auditedExamId,
       auditedUsername,
     );
+    // ADR-005 export gate: age the window after the candidate flow completes.
+    await markExamEnded(auditedExamId);
 
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
@@ -331,6 +515,9 @@ describe("CSV export integration", () => {
     });
     expect(submitRes.statusCode).toBe(200);
 
+    // ADR-005 export gate: age the window after the candidate flow completes.
+    await markExamEnded(escapeExamId);
+
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
       ctx.adminToken,
@@ -418,6 +605,9 @@ describe("CSV export integration", () => {
       cookies: { "auth-token": candidateToken },
     });
     expect(submitRes.statusCode).toBe(200);
+
+    // ADR-005 export gate: age the window after the candidate flow completes.
+    await markExamEnded(injExamId);
 
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
@@ -532,6 +722,9 @@ describe("CSV export integration", () => {
       cookies: { "auth-token": candidateToken },
     });
 
+    // ADR-005 export gate: age the window after the candidate flow completes.
+    await markExamEnded(labelExamId);
+
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
       ctx.adminToken,
@@ -640,6 +833,9 @@ describe("CSV export integration", () => {
       cookies: { "auth-token": candidateToken },
     });
 
+    // ADR-005 export gate: age the window after the candidate flow completes.
+    await markExamEnded(fallbackExamId);
+
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
       ctx.adminToken,
@@ -694,6 +890,9 @@ describe("CSV export integration", () => {
       examAId,
       filterUsername,
     );
+    // ADR-005 export gate: both windows must have ended before export.
+    await markExamEnded(examAId);
+    await markExamEnded(examBId);
 
     const exportB = await exportResultsCsvAsAdmin(
       ctx.app,
@@ -824,6 +1023,9 @@ describe("CSV export integration", () => {
     }));
 
     await ctx.db.insert(schema.examAttempts).values(attemptRows);
+
+    // ADR-005 export gate: age the window for the bulk graded fixture.
+    await markExamEnded(largeExamId);
 
     const start = Date.now();
     const { body } = await exportResultsCsvAsAdmin(

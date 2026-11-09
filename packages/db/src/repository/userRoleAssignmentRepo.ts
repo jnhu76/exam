@@ -709,7 +709,12 @@ export function createUserRoleAssignmentRepo(db: Database) {
   }
 
   return {
-    ...repo,
+    // The generic tenant CRUD surface is deliberately NOT spread (EXSEM-014
+    // family): `isPrimary` × `isActive` lifecycle writes are owned by the
+    // named transition methods below, and the full-field write members
+    // (create / update / the wide lifecycle-state seam / delete) had zero
+    // callers. Only `findById` is reused from the base repo.
+    findById: repo.findById,
     listForUser,
     listActiveForUser,
     listActiveForUsers,

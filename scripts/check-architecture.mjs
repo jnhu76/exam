@@ -2,9 +2,11 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
+  LIFECYCLE_STATE_WRITE_SCAN_ROOTS,
   RUNTIME_DEPENDENCY_BOUNDARIES,
   forbiddenImportPattern,
   forbiddenRuntimeDependencies,
+  lifecycleStateWriteViolations,
 } from "../config/architecture-policy.mjs";
 
 const violations = [];
@@ -152,6 +154,27 @@ await forbid("apps/api/src/routes", [
     "routes must not import DB schema directly",
   ],
 ]);
+
+// EXSEM-014 lifecycle-state write funnels (#927 F43). The repo layer makes
+// the boundary typable (narrowed `update` inputs; the named
+// `updateIncludingLifecycleState` seam), and these scans anchor the two
+// named write funnels to their reviewed caller allowlists so a future
+// route or script that grabs a repo handle cannot silently acquire a
+// lifecycle writer. Patterns and allowlists derive from
+// config/architecture-policy.mjs — the same table the regression test
+// (apps/web/src/lifecycleStateWriteBoundary.test.ts) imports; this file
+// holds no second copy. A scan root that is missing or renamed away makes
+// the walker throw here — fail closed, never a vacuous exempt tree.
+for (const root of LIFECYCLE_STATE_WRITE_SCAN_ROOTS) {
+  const scanned = [];
+  for (const file of await files(root)) {
+    scanned.push({
+      path: relative(".", file),
+      text: await readFile(file, "utf8"),
+    });
+  }
+  violations.push(...lifecycleStateWriteViolations(scanned));
+}
 
 // ---------------------------------------------------------------------------
 // #794 — workspace module resolution governance. The unified contract lives

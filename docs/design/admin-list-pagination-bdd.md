@@ -54,8 +54,8 @@ Authorization/Tenant Scope → Search/Status Predicate → Stable Ordering (crea
 三个独立事实，互不替代：
 
 - `status`：考试生命周期事实（`ExamStatusEnum`：draft/published/open/closed/canceled/archived）。
-- `canViewScores`：成绩查看操作可用性事实，由服务端 `getScoreViewMeta` 依据状态、结束时间与已批改数量计算。
-- `scoreViewDisabledReasonCode`：操作不可用原因（`EXAM_CANCELED` / `EXAM_NOT_FINISHED` / `NO_GRADED_ATTEMPTS`），UI 用既有 i18n 键呈现。
+- `canViewScores`：成绩查看操作可用性事实，由服务端 `getScoreViewMeta` 通过共享 `resolveAdminResultsAccess` 依据状态、结束时间、已批改数量与未完成作答数量计算。
+- `scoreViewDisabledReasonCode`：操作不可用原因（`EXAM_CANCELED` / `EXAM_NOT_FINISHED` / `UNRESOLVED_ATTEMPTS_EXIST` / `NO_GRADED_ATTEMPTS`），UI 用既有 i18n 键呈现。
 
 成绩总览列表成员资格由状态集合决定（服务端过滤），操作可用性仅由 `canViewScores` 决定；`published ≠ 成绩可查看`，`closed ≠ 必定有成绩`。
 
@@ -131,7 +131,7 @@ Authorization/Tenant Scope → Search/Status Predicate → Stable Ordering (crea
 **B05_StatusVsScorePermission**
 - Given published（未结束）、closed（无成绩）等状态与成绩准备情况不同的考试
 - When 打开成绩总览
-- Then 状态标签反映 status；按钮可用性仅由 canViewScores 决定；published 不等于可查看；closed 无成绩仍禁用并显示 `NO_GRADED_ATTEMPTS` 文案；列表成员资格不受影响
+- Then 状态标签反映 status；按钮可用性仅由 canViewScores 决定；published 不等于可查看；closed 无成绩仍禁用并显示 `NO_GRADED_ATTEMPTS` 文案；考试已结束但仍有未完成作答时禁用并显示 `UNRESOLVED_ATTEMPTS_EXIST`（与 GET /scores 的 409 一致）；列表成员资格不受影响
 
 **B06_StatusFilterPaginationCombo**
 - Given 六种状态各有 >pageSize/2 条（跨分页边界）

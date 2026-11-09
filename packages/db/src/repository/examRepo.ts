@@ -10,12 +10,24 @@ import {
 import {
   createAsyncTenantCrudRepo,
   resolveOrganizationId,
+  type TenantCrudUpdateInput,
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { ExamStatus, RequestContext } from "@exam/domain";
 import { and, asc, count, eq, exists, inArray, sql } from "drizzle-orm";
 
 type ExamSelect = typeof exams.$inferSelect;
+
+/**
+ * Non-lifecycle update input for the `exams` row (EXSEM-014). `status` is
+ * the exam lifecycle state: it is written only by the engine command funnel
+ * through {@link createExamRepo}'s `updateIncludingLifecycleState` seam
+ * (ADR-005 lock-reconcile-assert-mutate), never through `update`.
+ */
+export type ExamUpdateInput = Omit<
+  TenantCrudUpdateInput<typeof exams>,
+  "status" | "gradingStatus"
+>;
 
 /** Filter options for listing exams with DB-level filtering. */
 export interface ExamListFilters {
@@ -41,6 +53,20 @@ export function createExamRepo(db: Database) {
 
   return {
     ...repo,
+    /**
+     * EXSEM-014: input excludes the lifecycle column `status`. Lifecycle
+     * transitions run through the engine command funnel
+     * (`updateIncludingLifecycleState`), which owns the ADR-005
+     * lock-reconcile-assert-mutate protocol; this override forwards to it
+     * for non-lifecycle fields only.
+     */
+    update(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+      input: ExamUpdateInput,
+    ) {
+      return repo.update(ctx, examId, input);
+    },
     /**
      * Proctor-discoverable exams (J4-I1B, ADR-015 §8). Admin callers list all
      * in-org exams; when `assignedProctorUserId` is provided the query filters

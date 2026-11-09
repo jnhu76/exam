@@ -2273,16 +2273,24 @@ export function deriveStatusActionCandidates(
 }
 
 /**
- * Status-derived attempt action candidates (contract §6.4, frozen from the
- * canonical attempt-command preconditions):
+ * Status-derived attempt action candidates (contract §6.4):
  *
  * - `time_grant`: the canonical grant seam requires the attempt to be
  *   `in_progress | disrupted` AFTER deadline reconciliation (operatorGrant:
- *   resurrecting `submitted | grading | graded | voided` is forbidden).
- * - `force_submit`: `voided` is the only truly invalid state (the Admin
- *   force-submit route; `submitted` rows are recovered to `graded`, and
- *   `grading`/`graded` are idempotent no-ops).
+ *   resurrecting a terminal state is forbidden).
+ * - `force_submit`: excluded exactly on the engine planner's rejection set —
+ *   `planForceSubmitExecution` (apps/api/src/orchestrators/
+ *   forceSubmitExecution.ts) throws `InvalidStateTransitionError` for
+ *   `voided | not_started | queued`; `submitted`/`graded` plan terminal
+ *   no-ops. The candidate↔engine biconditional is pinned by
+ *   forceSubmitCandidateParity.test.ts; divergence here would advertise a
+ *   button whose click is guaranteed to 409.
  * - `misconduct_mark`: allowed on ANY attempt status (no status excluded).
+ *
+ * EXSEM-019: `not_started` / `queued` / `voided` are reserved statuses with
+ * no production writer — excluding them from force_submit candidates keeps
+ * the read model from advertising a command the engine authority refuses;
+ * it does not make the reserved statuses reachable.
  *
  * These are status-derived candidates ONLY. The route layer further filters
  * by the caller's capabilities (attempt.time.grant / attempt.force_submit /
@@ -2290,14 +2298,14 @@ export function deriveStatusActionCandidates(
  * `allowedActions` (contract §6.4: eligibility = caller capability ∩ Attempt
  * state ∩ resource scope).
  */
-function deriveAttemptStatusActionCandidates(
+export function deriveAttemptStatusActionCandidates(
   status: string,
 ): AttemptAllowedAction[] {
   const candidates: AttemptAllowedAction[] = [];
   if (status === "in_progress" || status === "disrupted") {
     candidates.push("time_grant");
   }
-  if (status !== "voided") {
+  if (status !== "voided" && status !== "not_started" && status !== "queued") {
     candidates.push("force_submit");
   }
   candidates.push("misconduct_mark");

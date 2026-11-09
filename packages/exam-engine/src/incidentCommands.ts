@@ -49,7 +49,15 @@ export interface IncidentRepo {
     examId: string,
     statusFilter?: string[],
   ): Promise<ExamIncident[]>;
-  update(
+  /**
+   * PROTOCOL / INVARIANT (EXSEM-014): the ONLY write path for the incident
+   * row's lifecycle fields (`status`, `severity`, `version`). Implementations
+   * run behind the engine's lock-reconcile-assert-mutate protocol
+   * (ADR-014 §9); the call form `.updateIncludingLifecycleState(` is
+   * arch-anchored (pnpm lint:arch, EXSEM014_* rules), so a new caller must
+   * be reviewed into the policy allowlist.
+   */
+  updateIncludingLifecycleState(
     ctx: RequestContext,
     incidentId: string,
     input: Record<string, unknown>,
@@ -1169,7 +1177,11 @@ async function versionBumpCommand(
 
   const newVersion = locked.version + 1;
   const updates = deps.updateFields(locked, newVersion, now);
-  const updated = await repo.update(ctx, incidentId, updates);
+  const updated = await repo.updateIncludingLifecycleState(
+    ctx,
+    incidentId,
+    updates,
+  );
   if (!updated) throw new NotFoundError("Incident not found");
 
   // Append self-describing event (before/after where relevant).

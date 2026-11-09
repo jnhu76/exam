@@ -2037,6 +2037,183 @@ describe("attemptCommands", () => {
 
       expect(result.outcome).toBe("missing");
     });
+
+    function makeRecordingInterruptionRepos(): {
+      episodeRepo: InterruptionEpisodeRepository;
+      eventRepo: InterruptionEventRepository;
+      createdEpisodes: string[];
+      insertedEvents: Record<string, unknown>[];
+    } {
+      const createdEpisodes: string[] = [];
+      const insertedEvents: Record<string, unknown>[] = [];
+      let episodeIdCounter = 0;
+      return {
+        createdEpisodes,
+        insertedEvents,
+        episodeRepo: {
+          create: async (attemptId) => {
+            createdEpisodes.push(attemptId);
+            return {
+              id: `episode-${++episodeIdCounter}`,
+              organizationId: "org-1",
+              attemptId,
+              createdAt: new Date("2025-01-01T10:05:00Z"),
+            } as AttemptInterruption;
+          },
+          findById: async () => null,
+          findByAttemptForUpdate: async () => null,
+          findLatestByAttempt: async () => null,
+        },
+        eventRepo: {
+          insert: async (input) => {
+            insertedEvents.push({ ...input });
+            return { id: "evt-rec", ...input } as never;
+          },
+          findDetected: async () => null,
+          findOutcome: async () => null,
+          findLatestOutcomeByAttempt: async () => null,
+        },
+      };
+    }
+
+    function makeUpdateRecorder(attRepo: AttemptRepository): {
+      updateCalls: Record<string, unknown>[];
+    } {
+      const updateCalls: Record<string, unknown>[] = [];
+      const innerUpdate = attRepo.update.bind(attRepo);
+      attRepo.update = async (id, data) => {
+        updateCalls.push({ ...data });
+        return innerUpdate(id, data);
+      };
+      return { updateCalls };
+    }
+
+    // The disrupt rejection surface must be exhaustive over every status the
+    // table rejects: retained values (voided), pre-start values
+    // (not_started/queued), and post-submit values (submitted/graded) all
+    // leave zero episode/event/attempt-write residue.
+    it("retained-value statuses → state_changed_before_lock with zero episode/event/write residue", async () => {
+      for (const status of [
+        "submitted",
+        "graded",
+        "voided",
+        "not_started",
+        "queued",
+      ] as const) {
+        const attempt = makeAttempt({ status });
+        const attRepo = makeAttemptRepo([attempt]);
+        const { updateCalls } = makeUpdateRecorder(attRepo);
+        const { episodeRepo, eventRepo, createdEpisodes, insertedEvents } =
+          makeRecordingInterruptionRepos();
+
+        const result = await markDisrupted(
+          attRepo,
+          episodeRepo,
+          eventRepo,
+          "attempt-1",
+          new Date("2025-01-01T10:05:00Z"),
+          60,
+        );
+
+        expect(result.outcome).toBe("state_changed_before_lock");
+        expect(createdEpisodes).toHaveLength(0);
+        expect(insertedEvents).toHaveLength(0);
+        expect(updateCalls).toHaveLength(0);
+        expect(attempt.status).toBe(status);
+      }
+    });
+
+    // Rollback-injection (mirror of restoreInterruption.test.ts): the failure
+    // surfaces at the detected-event write point after the episode parent was
+    // created in-transaction; the caller's transaction discards both. Evidence
+    // of "no residue" at this seam is that no attempt-row write followed.
+    it("detected-event insert failure → rejects, no disrupted attempt write lands", async () => {
+      const attempt = makeAttempt({
+        lastActivityAt: new Date("2025-01-01T09:55:00Z"),
+        interruptionTimingPolicySnapshot: {
+          schemaVersion: 1,
+          policy: "strict",
+          perIncidentCapSeconds: null,
+          perAttemptAggregateCapSeconds: null,
+        },
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const { updateCalls } = makeUpdateRecorder(attRepo);
+      const { episodeRepo, eventRepo, createdEpisodes, insertedEvents } =
+        makeRecordingInterruptionRepos();
+      eventRepo.insert = async () => {
+        throw new Error("DB write failure");
+      };
+
+      await expect(
+        markDisrupted(
+          attRepo,
+          episodeRepo,
+          eventRepo,
+          "attempt-1",
+          new Date("2025-01-01T10:05:00Z"),
+          60,
+        ),
+      ).rejects.toThrow("DB write failure");
+
+      expect(createdEpisodes).toHaveLength(1);
+      expect(insertedEvents).toHaveLength(0);
+      expect(updateCalls).toHaveLength(0);
+      expect(attempt.status).toBe("in_progress");
+    });
+
+    // Deferred-lock interleave: while the scanner waits on the attempt row
+    // lock, a concurrent candidate submit commits; the post-lock re-read must
+    // observe the committed value (a real FOR UPDATE reads after acquiring
+    // the lock), so the disruption must not touch the interruption ledger.
+    it("concurrent submit committing between scan and row lock → state_changed_before_lock, zero ledger writes", async () => {
+      const attempt = makeAttempt({
+        lastActivityAt: new Date("2025-01-01T09:55:00Z"),
+        interruptionTimingPolicySnapshot: {
+          schemaVersion: 1,
+          policy: "strict",
+          perIncidentCapSeconds: null,
+          perAttemptAggregateCapSeconds: null,
+        },
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const { updateCalls } = makeUpdateRecorder(attRepo);
+      const { episodeRepo, eventRepo, createdEpisodes, insertedEvents } =
+        makeRecordingInterruptionRepos();
+
+      const innerFindForUpdate = attRepo.findByIdForUpdate.bind(attRepo);
+      attRepo.findByIdForUpdate = async (id) => {
+        const concurrentRepo: AttemptRepository = {
+          ...attRepo,
+          findByIdForUpdate: innerFindForUpdate,
+        };
+        await submitAttempt(
+          concurrentRepo,
+          makeWorksetRepo(),
+          id,
+          new Date("2025-01-01T10:04:59Z"),
+          { source: "candidate", resolution: noneResolution },
+        );
+        return innerFindForUpdate(id);
+      };
+
+      const result = await markDisrupted(
+        attRepo,
+        episodeRepo,
+        eventRepo,
+        "attempt-1",
+        new Date("2025-01-01T10:05:00Z"),
+        60,
+      );
+
+      expect(result.outcome).toBe("state_changed_before_lock");
+      // The concurrent submit replaced the stored row (submit freeze + freeze
+      // snapshot), so read the committed value through the repo view.
+      expect((await attRepo.findById("attempt-1"))?.status).toBe("submitted");
+      expect(createdEpisodes).toHaveLength(0);
+      expect(insertedEvents).toHaveLength(0);
+      expect(updateCalls.some((u) => u.status === "disrupted")).toBe(false);
+    });
   });
 
   describe("restoreAttemptState (lifecycle-only)", () => {

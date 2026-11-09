@@ -3,6 +3,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import examRoutes from "./exam.js";
 import candidateRoutes from "./candidate.js";
 import courseRoutes from "./course.js";
+import scoreRoutes from "./scores.js";
 import {
   buildTestApp,
   createAssignedUserForTest,
@@ -41,6 +42,7 @@ describe("#785 admin list pagination / search / status contracts (B01–B10)", (
       await fastify.register(examRoutes);
       await fastify.register(candidateRoutes);
       await fastify.register(courseRoutes);
+      await fastify.register(scoreRoutes);
     });
   });
 
@@ -776,6 +778,92 @@ describe("#785 admin list pagination / search / status contracts (B01–B10)", (
       .items.find((e: ExamRow) => e.title === "B05 canceled");
     expect(canceled.scoreViewDisabledReasonCode).toBe("EXAM_CANCELED");
     expect(canceled.canViewScores).toBe(false);
+  });
+
+  it("B05b ended exam with an unresolved attempt: list metadata matches the scores gate (F01)", async () => {
+    await clearOrgData();
+    const courseId = await insertCourse({
+      name: "B05b course",
+      code: `B05b-${uniquePrefix()}`,
+    });
+    // The clock has passed closeAt (examEnded = true) while one attempt is
+    // still unresolved — the exact state where the list projection used to
+    // advertise canViewScores=true and GET /scores answered 409.
+    const examId = await insertExam({
+      title: "B05b ended with unresolved",
+      status: "open",
+      courseId,
+      closeAt: new Date(BASE_TIME.getTime() - 60_000),
+    });
+    const gradedCandidate = await insertCandidate({
+      name: "B05b graded",
+      username: `b05b-g-${uniquePrefix()}`,
+    });
+    const gradedEnrollment = await insertEnrollment(
+      examId,
+      gradedCandidate.profileId,
+    );
+    await insertGradedAttempt({
+      examId,
+      enrollmentId: gradedEnrollment,
+      candidateId: gradedCandidate.profileId,
+    });
+    const pendingCandidate = await insertCandidate({
+      name: "B05b pending",
+      username: `b05b-p-${uniquePrefix()}`,
+    });
+    const pendingEnrollment = await insertEnrollment(
+      examId,
+      pendingCandidate.profileId,
+    );
+    await ctx.db.insert(schema.examAttempts).values({
+      id: randomUUID(),
+      organizationId: ctx.org.id,
+      examId,
+      enrollmentId: pendingEnrollment,
+      candidateId: pendingCandidate.profileId,
+      attemptNo: 1,
+      status: "in_progress",
+      questionSnapshot: [],
+      answers: [],
+    });
+
+    const list = await getAdmin("/api/exams?statuses=open&pageSize=100");
+    expect(list.statusCode).toBe(200);
+    const row = list
+      .json()
+      .items.find((e: ExamRow) => e.id === examId) as ExamRow;
+    expect(row).toBeDefined();
+    expect(row.canViewScores).toBe(false);
+    expect(row.scoreViewDisabledReasonCode).toBe("UNRESOLVED_ATTEMPTS_EXIST");
+
+    const scores = await getAdmin(`/api/exams/${examId}/scores`);
+    expect(scores.statusCode).toBe(409);
+    expect(scores.json().error.details?.reason).toBe(
+      "UNRESOLVED_ATTEMPTS_EXIST",
+    );
+
+    // Finalizing the trailing attempt settles the exam's results: both
+    // surfaces must agree again, and the graded row remains viewable.
+    await ctx.db
+      .update(schema.examAttempts)
+      .set({ status: "voided" })
+      .where(
+        and(
+          eq(schema.examAttempts.examId, examId),
+          eq(schema.examAttempts.status, "in_progress"),
+        ),
+      );
+
+    const settledList = await getAdmin("/api/exams?statuses=open&pageSize=100");
+    const settledRow = settledList
+      .json()
+      .items.find((e: ExamRow) => e.id === examId) as ExamRow;
+    expect(settledRow.canViewScores).toBe(true);
+    expect(settledRow.scoreViewDisabledReasonCode).toBeNull();
+
+    const settledScores = await getAdmin(`/api/exams/${examId}/scores`);
+    expect(settledScores.statusCode).toBe(200);
   });
 
   // ── B06 — 状态过滤与分页组合 ──────────────────────────────────────────

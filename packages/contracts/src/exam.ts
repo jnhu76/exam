@@ -133,6 +133,10 @@ export const ScoreViewDisabledReasonCodeEnum = z.enum([
   // RESOURCE_CONFLICT + EXAM_NOT_FINISHED details.reason — one condition,
   // one name across the reason vocabulary.
   "EXAM_NOT_FINISHED",
+  // Exam ended but attempts are still unfinalized: results stay hidden until
+  // they settle. Mirrors the scores/export RESOURCE_CONFLICT
+  // details.reason vocabulary.
+  "UNRESOLVED_ATTEMPTS_EXIST",
   "NO_GRADED_ATTEMPTS",
 ]);
 

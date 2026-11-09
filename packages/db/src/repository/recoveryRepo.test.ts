@@ -4261,6 +4261,11 @@ describe("recovery attempt operations context repository", () => {
     const submitted = await createAttempt({ status: "submitted" });
     // voided → misconduct_mark only.
     const voided = await createAttempt({ status: "voided" });
+    // not_started / queued → misconduct_mark only (the force-submit engine
+    // planner rejects both with InvalidStateTransitionError, so the read
+    // model must not advertise the action).
+    const notStarted = await createAttempt({ status: "not_started" });
+    const queued = await createAttempt({ status: "queued" });
     try {
       const submittedCtx = await repo.getAttemptOperationsContext(
         fx.ctx,
@@ -4275,8 +4280,20 @@ describe("recovery attempt operations context repository", () => {
         voided.attemptId,
       );
       expect(voidedCtx!.statusActionCandidates).toEqual(["misconduct_mark"]);
+      const notStartedCtx = await repo.getAttemptOperationsContext(
+        fx.ctx,
+        notStarted.attemptId,
+      );
+      expect(notStartedCtx!.statusActionCandidates).toEqual([
+        "misconduct_mark",
+      ]);
+      const queuedCtx = await repo.getAttemptOperationsContext(
+        fx.ctx,
+        queued.attemptId,
+      );
+      expect(queuedCtx!.statusActionCandidates).toEqual(["misconduct_mark"]);
     } finally {
-      for (const attempt of [submitted, voided]) {
+      for (const attempt of [submitted, voided, notStarted, queued]) {
         await deleteAttemptGraph(attempt);
       }
     }

@@ -1142,14 +1142,101 @@ export function TakeExamPage() {
     setShowSubmitDialog(false);
   }, [attemptId]);
 
-  /** Handles exam timer expiry by flushing saves then auto-submitting. */
-  const handleTimeout = useCallback(async () => {
+  /**
+   * One deadline auto-submit episode, shared by BOTH triggers — the page's 1s
+   * deadline tick and ExamTimer's onTimeout — so they cannot run competing
+   * flows (F16; ADR-009 narrow scope: one episode, one declarer). Guards, in
+   * order:
+   *   1. the episode is already declared → no-op (the other trigger's view of
+   *      the same deadline);
+   *   2. a submit POST is already in flight → skip this tick WITHOUT
+   *      declaring, so the next tick re-checks and the episode still fires
+   *      once the in-flight submit settles. Declaring here would let the
+   *      flow's handleSubmit silently no-op and record a phantom
+   *      deadline_auto_submit_success while permanently disarming the retry
+   *      path;
+   *   3. otherwise declare and own the episode: flush (flush-before-submit is
+   *      unchanged), then submit.
+   *   4. the episode is bound to the attempt that declared it: if the route
+   *      changes while flush() is awaiting, this invocation is abandoned. It
+   *      must not submit/navigate the old attempt, toast onto the new route,
+   *      or clear the new attempt's deadline indicator. Identity comes from
+   *      the same currentAttemptIdRef + scope-generation authority as
+   *      runSubmitFlush — no second token.
+   * Success/failure telemetry and autoSubmitFailed record only the REAL
+   * result of this invocation's own submit: the submittingRef re-check below
+   * is synchronous with the handleSubmit call, so a pass through it
+   * guarantees the submit actually ran. A submit that started while the
+   * flush was awaiting releases the declaration instead — that submit's own
+   * outcome (navigate on success, released guard on failure) is the truth.
+   */
+  const runDeadlineAutoSubmit = useCallback(async () => {
+    if (!attemptId || deadlineHandledRef.current) return;
+    if (submittingRef.current) return;
+    const attemptAtStart = attemptId;
+    const scopeGenAtStart = getScopeGeneration();
+    const stale = () =>
+      currentAttemptIdRef.current !== attemptAtStart ||
+      getScopeGeneration() !== scopeGenAtStart;
+    deadlineHandledRef.current = true;
+    trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
+    setDeadlineAutoSubmitting(true);
+
+    let flushFailed = false;
     try {
       await flush();
-    } finally {
-      void handleSubmit();
+    } catch {
+      flushFailed = true;
     }
-  }, [flush, handleSubmit]);
+
+    if (flushFailed) {
+      // A real flush failure stays attributable to the attempt that declared
+      // the episode, even if the route has already moved on.
+      trackExamEvent(
+        "deadline_auto_submit_failed",
+        { stage: "flush", errorCode: "FLUSH_ERROR" },
+        { attemptId, level: "error" },
+      );
+    }
+
+    if (stale()) {
+      // The new route's render-time reset already owns its refs and UI.
+      return;
+    }
+
+    if (flushFailed) {
+      toast.error(t("candidateRuntime.errors.saveError"));
+    }
+
+    if (submittingRef.current) {
+      // A submit started while the flush was awaiting (user-initiated).
+      // This invocation's handleSubmit would silently no-op, so that
+      // submit's outcome — not ours — is the real result: success
+      // navigates away; failure releases submittingRef. Re-arm the
+      // episode so the next tick can act on the settled truth. Never
+      // claim success.
+      deadlineHandledRef.current = false;
+    } else {
+      try {
+        await handleSubmit();
+        trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
+      } catch {
+        trackExamEvent(
+          "deadline_auto_submit_failed",
+          { stage: "submit", errorCode: "SUBMIT_ERROR" },
+          { attemptId, level: "error" },
+        );
+        setAutoSubmitFailed(true);
+        toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+      }
+    }
+    setDeadlineAutoSubmitting(false);
+  }, [attemptId, flush, getScopeGeneration, handleSubmit, t]);
+
+  /** Handles exam timer expiry through the shared deadline auto-submit seam. */
+  const handleTimeout = useCallback(() => {
+    void runDeadlineAutoSubmit();
+  }, [runDeadlineAutoSubmit]);
 
   /** Controls the submit dialog open/close state, preventing close while flushing. */
   const handleSubmitDialogOpenChange = useCallback(
@@ -1311,8 +1398,10 @@ export function TakeExamPage() {
 
   // Deadline auto-submit. The deadline value comes from the snapshot's
   // effectiveDeadline (authoritative); the auto-submit side-effect is a UI
-  // concern and remains here. After auto-submit fires, handleSubmit reloads
-  // the authoritative snapshot (Step 8) so durable state is backend-sourced.
+  // concern and remains here. The flow itself lives in runDeadlineAutoSubmit,
+  // shared with ExamTimer's onTimeout so both triggers declare ONE episode
+  // (F16). After auto-submit fires, handleSubmit reloads the authoritative
+  // snapshot (Step 8) so durable state is backend-sourced.
   useEffect(() => {
     if (!view?.effectiveDeadline || !view.canSubmit) return;
 
@@ -1324,38 +1413,8 @@ export function TakeExamPage() {
     if (deadlineHandledRef.current) return;
 
     const checkDeadline = () => {
-      if (deadlineHandledRef.current) return;
       if (nowByServerClock() >= new Date(view.effectiveDeadline!).getTime()) {
-        deadlineHandledRef.current = true;
-        void (async () => {
-          trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
-          setDeadlineAutoSubmitting(true);
-          try {
-            await flush();
-          } catch {
-            trackExamEvent(
-              "deadline_auto_submit_failed",
-              { stage: "flush", errorCode: "FLUSH_ERROR" },
-              { attemptId, level: "error" },
-            );
-            toast.error(t("candidateRuntime.errors.saveError"));
-          } finally {
-            try {
-              await handleSubmit();
-              trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
-            } catch {
-              trackExamEvent(
-                "deadline_auto_submit_failed",
-                { stage: "submit", errorCode: "SUBMIT_ERROR" },
-                { attemptId, level: "error" },
-              );
-              setAutoSubmitFailed(true);
-              toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
-            } finally {
-              setDeadlineAutoSubmitting(false);
-            }
-          }
-        })();
+        void runDeadlineAutoSubmit();
       }
     };
 
@@ -1365,11 +1424,8 @@ export function TakeExamPage() {
   }, [
     view?.effectiveDeadline,
     view?.canSubmit,
-    flush,
-    handleSubmit,
+    runDeadlineAutoSubmit,
     nowByServerClock,
-    attemptId,
-    t,
   ]);
 
   if (isLoading) {

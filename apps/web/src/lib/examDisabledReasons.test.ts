@@ -18,6 +18,9 @@ describe("examDisabledReasons", () => {
     expect(scoreViewDisabledReasonKey("EXAM_NOT_FINISHED")).toBe(
       "admin.exams.disabledReasons.notFinished",
     );
+    expect(scoreViewDisabledReasonKey("UNRESOLVED_ATTEMPTS_EXIST")).toBe(
+      "admin.exams.disabledReasons.unresolvedAttempts",
+    );
     expect(scoreViewDisabledReasonKey("NO_GRADED_ATTEMPTS")).toBe(
       "admin.exams.disabledReasons.noGradedAttempts",
     );
@@ -37,6 +40,7 @@ describe("examDisabledReasons", () => {
     for (const code of [
       "EXAM_CANCELED",
       "EXAM_NOT_FINISHED",
+      "UNRESOLVED_ATTEMPTS_EXIST",
       "NO_GRADED_ATTEMPTS",
     ] as const) {
       const key = scoreViewDisabledReasonKey(code);

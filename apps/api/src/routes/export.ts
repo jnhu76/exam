@@ -5,6 +5,7 @@ import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createExamRepo } from "@exam/db/repository/examRepo";
 import { createCandidateFieldRepo } from "@exam/db/repository/candidateFieldRepo";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
+import { isExamEnded } from "./resultsAccessPolicy.js";
 import { generateCSV } from "@exam/import-export";
 import { Permission } from "@exam/authz";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -50,6 +51,9 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { id: examId } = request.params as { id: string };
       const ctx = ensureTargetOrg(getRequestContext(request));
+      // ADR-006: capture the operation now once from the time authority and
+      // thread it through every time-sensitive decision in this request.
+      const now = fastify.now();
 
       const examRepo = createExamRepo(fastify.db);
       const exam = await examRepo.findById(ctx, examId);
@@ -83,6 +87,18 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
           buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
             reason: "UNRESOLVED_ATTEMPTS_EXIST",
             activeAttemptCount: unresolvedCount,
+          }),
+        );
+      }
+      // ADR-005 §Close & export policy (binding): results may not be exported
+      // before the exam has ended, even with no unresolved attempts — the
+      // same gate GET /exams/:id/scores enforces via the shared
+      // resultsAccessPolicy predicate. Zero graded attempts still export
+      // (headers-only CSV), preserving the established export line.
+      if (!isExamEnded(exam, now)) {
+        return reply.code(409).send(
+          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            reason: "EXAM_NOT_FINISHED",
           }),
         );
       }
