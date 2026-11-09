@@ -350,7 +350,7 @@ Deadline 触发：
 | `voidAttempt` | — | **无生产 writer**：`voided` 是保留值（EXSEM-019），不因任何文档列出而激活 |
 | `ensureAttemptDeadlineReconciled`（`deadlineReconciliation.ts`） | in_progress/disrupted | 过期则走同一 submit 冻结屏障 + 工作集物化 |
 
-每个命令使用 transition matrix + business guard，在数据库事务内用 `FOR UPDATE` row lock 落库。
+每个命令使用 transition matrix + business guard，在数据库事务内用 `FOR UPDATE` row lock 落库。`markDisrupted` 与 `restoreAttemptState` 的迁移合法性同样来自 `attemptStateMachine.ts` 的同一 transition table（F03）；`restoreAttemptState` 的 `in_progress` / terminal 特例是业务结果，在表查询之前保留，不构成第二份合法性判断。
 
 > **历史命令已移除**：旧的 `completeManualGrading` 不存在于当前生产代码。当前协议唯一的人工评分完成命令是 `gradeQuestion`（`packages/exam-engine/src/manualGrading.ts`）。任何对 `completeManualGrading` 的引用都是历史文档漂移。
 
@@ -912,6 +912,14 @@ type TransientEvent =
 ### 7.4 刷新恢复
 
 页面刷新后，前端调用 `GET /candidate/attempts/:attemptId/take` 获取最新 snapshot。`isEditable=false` 时自动进入锁定态。前端不靠本地状态判断 attempt 是否可编辑。
+
+### 7.5 Deadline 自动提交（客户端 UX，非权威）
+
+Candidate 页面在本地观察由 snapshot 派生的 `effectiveDeadline`，到点后可以发起自动提交。这是 UX 便利，不是时间或提交权威：即使客户端从未触发，服务端 deadline reconciliation 仍会按同一 submit 冻结屏障物化 `submissionReason='deadline'`（§5）。
+
+两种客户端触发源——页面 1s tick 与 `ExamTimer.onTimeout`——收敛为**一个 attempt 级 episode**（F16）：先尽力 flush 待保存答案，再调用与人工提交相同的 `handleSubmit`。`SUBMIT_SUCCESS` 只是瞬态事件；成功/失败的真实持久状态始终由随后的 authoritative snapshot 重建。
+
+episode 绑定声明它的 attempt：flush 是异步的，若期间路由切换到另一个 attempt，旧 episode 必须放弃——不得向旧 attempt 发 submit、不得导航回旧结果页、不得把旧 attempt 的 UI/遥测写到新 attempt，也不得清除新 attempt 的截止指示。身份判定复用页面既有的 `currentAttemptIdRef` 与 submit-flush 的 scope generation，不建立第二套 generation token。
 
 ---
 
