@@ -134,17 +134,26 @@ function LocationProbe() {
   return <span data-testid="current-path">{location.pathname}</span>;
 }
 
-/** Test-only route switch: simulates the candidate leaving attempt att-1. */
+/** Test-only routes: switch attempt or leave the take page entirely. */
 function AttemptSwitcher() {
   const navigate = useNavigate();
   return (
-    <button
-      type="button"
-      data-testid="switch-attempt"
-      onClick={() => navigate("/exam/exam-1/take/att-2")}
-    >
-      switch
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid="switch-attempt"
+        onClick={() => navigate("/exam/exam-1/take/att-2")}
+      >
+        switch
+      </button>
+      <button
+        type="button"
+        data-testid="leave-page"
+        onClick={() => navigate("/exam/list")}
+      >
+        leave
+      </button>
+    </>
   );
 }
 
@@ -181,6 +190,7 @@ function renderPage(options: { withAttemptSwitcher?: boolean } = {}) {
               path="/exam/:attemptId/result"
               element={<span>result</span>}
             />
+            <Route path="/exam/list" element={<span>list</span>} />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -1007,15 +1017,22 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
   /** A /submit POST that stays in flight until the test settles it. */
   interface DeferredSubmit {
     promise: Promise<unknown>;
+    resolve: (value: unknown) => void;
     reject: (err: unknown) => void;
   }
 
   function deferredSubmit(): DeferredSubmit {
+    let resolve!: (value: unknown) => void;
     let reject!: (err: unknown) => void;
-    const promise = new Promise<unknown>((_, rej) => {
+    const promise = new Promise<unknown>((res, rej) => {
+      resolve = res;
       reject = rej;
     });
-    return { promise, reject: (err: unknown) => reject(err) };
+    return {
+      promise,
+      resolve: (value: unknown) => resolve(value),
+      reject: (err: unknown) => reject(err),
+    };
   }
 
   function submitPostCount(): number {
@@ -1299,6 +1316,270 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
     expect(screen.getByTestId("current-path")).toHaveTextContent(
       "/exam/exam-1/take/att-2",
     );
+  });
+
+  it("attempt switch during the auto-submit POST failure: no failure UI on the new attempt; telemetry stays attributed to the old one", async () => {
+    const send = installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const lockedB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+      isEditable: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "deadline",
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return path.includes("att-1") ? editableA : lockedB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+
+    // The POST is in flight when the candidate switches to att-2.
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+    expect(
+      within(screen.getByTestId("deadline-overlay")).queryByRole("button", {
+        name: "重试提交",
+      }),
+    ).toBeNull();
+
+    // att-1's submit settles FAILED after the switch.
+    await act(async () => {
+      pendingSubmits[0]!.reject(new Error("network down"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    // No failure toast / autoSubmitFailed retry entry may land on att-2.
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+    expect(
+      within(screen.getByTestId("deadline-overlay")).queryByRole("button", {
+        name: "重试提交",
+      }),
+    ).toBeNull();
+    // The real failure is still attributable to the attempt that submitted.
+    const failures = telemetryEvents(send, "deadline_auto_submit_failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.attemptId).toBe("att-1");
+  });
+
+  it("attempt switch during the auto-submit POST success: the new attempt is not navigated to the old result", async () => {
+    installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    const editableB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return path.includes("att-1") ? editableA : editableB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    await act(async () => {
+      pendingSubmits[0]!.resolve({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+  });
+
+  it("leaving the take page during the auto-submit POST: the settled old submit does not navigate the router", async () => {
+    installRecordingBuffer();
+    const editableA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: nearDeadline,
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return editableA;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: DeferredSubmit[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferredSubmit();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("leave-page"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/exam/list");
+
+    await act(async () => {
+      pendingSubmits[0]!.resolve({ ok: true });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flushAll();
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/exam/list");
+  });
+
+  it("a stale heartbeat success does not retry the new attempt's failed save against the old attempt", async () => {
+    installRecordingBuffer();
+    const farDeadline = new Date(T0.getTime() + 600_000).toISOString();
+    const snapA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    const snapB = buildSnapshot({
+      attemptId: "att-2",
+      timingMode: "deadline",
+      serverNow: T0_ISO,
+      effectiveDeadline: farDeadline,
+    });
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return path.includes("att-1") ? snapA : snapB;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    let heartbeat: DeferredSubmit | null = null;
+    const oldAttemptSavePaths: string[] = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        heartbeat = deferredSubmit();
+        return heartbeat.promise;
+      }
+      if (typeof path === "string" && path.includes("/answers/")) {
+        if (path.includes("/attempts/att-1/")) {
+          oldAttemptSavePaths.push(path);
+        }
+        throw new Error("save transport down");
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderWithFakeClock({ withAttemptSwitcher: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // att-1's heartbeat is in flight when the candidate switches to att-2.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(heartbeat).not.toBeNull();
+    fireEvent.click(screen.getByTestId("switch-attempt"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-2",
+    );
+
+    // att-2 now has a failed save of its own.
+    fireEvent.click(screen.getByRole("radio", { name: "A" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+
+    // The OLD attempt's heartbeat settles success after the switch.
+    await act(async () => {
+      heartbeat!.resolve({ ok: true, serverNow: T0_ISO });
+      await vi.advanceTimersByTimeAsync(1_600);
+    });
+    await flushAll();
+
+    // Its stale retry must not replay att-2's failed save against att-1.
+    expect(oldAttemptSavePaths).toHaveLength(0);
   });
 
   it("ExamTimer onTimeout and the deadline effect in the same window: one declaration, one submit POST, one real failure record", async () => {

@@ -452,6 +452,9 @@ export function TakeExamPage() {
   // loader (initial load, retry, post-submit reload) and any concurrent GET.
   const loadGenerationRef = useRef(0);
   const currentAttemptIdRef = useRef<string | undefined>(attemptId);
+  // Unmount guard: a settled submit/auto-submit/heartbeat episode must not
+  // call the router or write page state after the take page is gone.
+  const mountedRef = useRef(true);
   // In-flight guard for the terminal-signal reconciliation re-read.
   // Concurrent terminal signals (heartbeat 409 + a settling autosave
   // rejection in the same episode) collapse into at most one active take GET.
@@ -1031,10 +1034,20 @@ export function TakeExamPage() {
     submittingRef.current = true;
     setTransientState((s) => transientReducer(s, { type: "SUBMIT_REQUEST" }));
     trackExamEvent("submit_requested", {}, { attemptId });
+    // The POST may settle after the route switches attempts or unmounts.
+    // Bind the episode to its issuing attempt/scope and never write the new
+    // route's state, navigate it, or release its submittingRef.
+    const attemptAtStart = attemptId;
+    const scopeGenAtStart = getScopeGeneration();
+    const stale = () =>
+      !mountedRef.current ||
+      currentAttemptIdRef.current !== attemptAtStart ||
+      getScopeGeneration() !== scopeGenAtStart;
     try {
       await api.post(`/api/attempts/${attemptId}/submit`);
-      setTransientState((s) => transientReducer(s, { type: "SUBMIT_SUCCESS" }));
       trackExamEvent("submit_success", {}, { attemptId });
+      if (stale()) return;
+      setTransientState((s) => transientReducer(s, { type: "SUBMIT_SUCCESS" }));
       // Reload the authoritative snapshot so the locked /
       // submitted view is reconstructed from backend truth, then navigate.
       // The snapshot endpoint runs deadline reconciliation and returns the
@@ -1047,17 +1060,18 @@ export function TakeExamPage() {
       }
       navigate(routes.exam.result(attemptId));
     } catch (err) {
-      submittingRef.current = false;
-      setTransientState((s) => transientReducer(s, { type: "SUBMIT_FAILED" }));
       trackExamEvent(
         "submit_failed",
         { errorCode: err instanceof Error ? "SUBMIT_ERROR" : "UNKNOWN" },
         { attemptId, level: "error" },
       );
+      if (stale()) throw err;
+      submittingRef.current = false;
+      setTransientState((s) => transientReducer(s, { type: "SUBMIT_FAILED" }));
       toast.error(t("candidateRuntime.errors.submitFailed"));
       throw err;
     }
-  }, [attemptId, navigate, loadSnapshot, t]);
+  }, [attemptId, getScopeGeneration, navigate, loadSnapshot, t]);
 
   /**
    * Flushes all pending answer saves and records the flush result.
@@ -1145,9 +1159,16 @@ export function TakeExamPage() {
   const runDeadlineAutoSubmit = useCallback(async () => {
     if (!attemptId || deadlineHandledRef.current) return;
     if (submittingRef.current) return;
+    // An interval callback from the previous attempt can fire between the
+    // route commit and its effect cleanup; it must not declare an episode
+    // (or set the indicator) for the new attempt.
+    if (!mountedRef.current || currentAttemptIdRef.current !== attemptId) {
+      return;
+    }
     const attemptAtStart = attemptId;
     const scopeGenAtStart = getScopeGeneration();
     const stale = () =>
+      !mountedRef.current ||
       currentAttemptIdRef.current !== attemptAtStart ||
       getScopeGeneration() !== scopeGenAtStart;
     deadlineHandledRef.current = true;
@@ -1198,11 +1219,15 @@ export function TakeExamPage() {
           { stage: "submit", errorCode: "SUBMIT_ERROR" },
           { attemptId, level: "error" },
         );
-        setAutoSubmitFailed(true);
-        toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+        if (!stale()) {
+          setAutoSubmitFailed(true);
+          toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+        }
       }
     }
-    setDeadlineAutoSubmitting(false);
+    if (!stale()) {
+      setDeadlineAutoSubmitting(false);
+    }
   }, [attemptId, flush, getScopeGeneration, handleSubmit, t]);
 
   /** Handles exam timer expiry through the shared deadline auto-submit seam. */
@@ -1248,11 +1273,21 @@ export function TakeExamPage() {
   /** Sends a heartbeat to the server to keep the attempt alive and update connectivity status. */
   const handleHeartbeat = useCallback(async () => {
     if (!attemptId) return;
+    // A heartbeat may cross a route switch; its result belongs to the attempt
+    // that issued it and must not touch the new attempt's connectivity state
+    // or replay the new attempt's failed saves against the old URL.
+    const attemptAtStart = attemptId;
+    const scopeGenAtStart = getScopeGeneration();
+    const stale = () =>
+      !mountedRef.current ||
+      currentAttemptIdRef.current !== attemptAtStart ||
+      getScopeGeneration() !== scopeGenAtStart;
     try {
       const result = await api.post<{
         ok: true;
         serverNow: string;
       }>(`/api/attempts/${attemptId}/heartbeat`);
+      if (stale()) return;
       if (result.serverNow) {
         serverOffsetRef.current =
           new Date(result.serverNow).getTime() - Date.now();
@@ -1276,6 +1311,7 @@ export function TakeExamPage() {
         void retryFailedSaves();
       }
     } catch (err) {
+      if (stale()) return;
       // A terminal heartbeat (409 INVALID_STATE_TRANSITION) is the
       // server reporting the attempt left in_progress — an authority signal,
       // NOT a connectivity failure. Re-read the frozen snapshot once (the
@@ -1312,7 +1348,12 @@ export function TakeExamPage() {
         );
       }
     }
-  }, [attemptId, reconcileAuthoritativeAttempt, retryFailedSaves]);
+  }, [
+    attemptId,
+    getScopeGeneration,
+    reconcileAuthoritativeAttempt,
+    retryFailedSaves,
+  ]);
 
   // Browser network restoration: automatically re-save failed answers
   // (#677 F6 acceptance — no new keystroke required).
@@ -1325,6 +1366,13 @@ export function TakeExamPage() {
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
   }, [retryFailedSaves]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => void handleHeartbeat(), 30000);
