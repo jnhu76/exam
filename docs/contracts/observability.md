@@ -97,6 +97,21 @@ required merely to identify an HTTP request.
   log retention. Use the known server time, origin, tenant/actor and request
   lifecycle to interpret evidence; NO_MATCH may mean UNKNOWN and multiple
   plausible records remain AMBIGUOUS.
+- **Save success, retries and UNKNOWN (#924 / #861).** A 2xx response, the
+  presence of a `requestId`, or a readable `x-request-id` header is never
+  proof that an answer was saved: save success is decided only by the
+  server's `accepted: true` response and its receipt / attempt domain state
+  (`apps/web/src/pages/exam/TakeExamPage.tsx`,
+  `docs/operations/save-failure-evidence.md`). The `accepted: false` body
+  deliberately carries no `requestId`; the header id is a correlation
+  candidate, not a save verdict. Each retry is a NEW HTTP request with its
+  own server-minted id, so a reported failure is correlated by
+  `attemptId` + `questionId` + `clientSeq` + server time window, not by
+  reusing an earlier request id. When the response is never observed
+  (connection destroyed, ACK dropped, timeout) there is no client-visible
+  id; the server-side fact is settled by receipts / domain state, and a
+  missing record is an evidence gap (UNKNOWN, F6), never proof of
+  non-arrival.
 - **Client-claimed candidates.** A requestId sent inside client telemetry
   remains an unverified claim about a previous interaction. The "客户端声明，
   未经服务端核验" label applies to all such metadata until corroborated by

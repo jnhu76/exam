@@ -100,6 +100,37 @@ telemetry claims unverified, historical values immutable) apply unchanged.
   only; it authenticates nothing, and a requestId presented in later client
   telemetry remains an unverified claim (decision 5).
 
+## Addendum — 2026-11-09, #923 (scope 864-C): client-telemetry requestId shape gate
+
+> **Status: RECORDED (informational).** This note documents an existing #923
+> implementation detail in the terms of decisions 4–6. It amends nothing,
+> supersedes nothing, and introduces no new product behavior.
+
+- **Authority location.** The single shape gate is
+  `REQUEST_ID_UUID_SHAPE` in `apps/api/src/lib/proctorMonitoringService.ts`,
+  applied in `projectSafeMetadata`. It governs only the allowlisted
+  `metadata.requestId` that client-event telemetry contributes to the admin
+  monitoring timeline: a claim that is not a well-formed UUID string is
+  dropped from that projection (default-deny), not stored or returned.
+- **Shape is not identity (decisions 4–5).** Passing the gate does not make
+  the value a server-generated id, a business identity, or proof of message
+  origin. It stays an unverified client claim under decision 5; the gate
+  narrows what is *rendered*, not what is *trusted*. No authorization or
+  SaveAnswer production path reads client-claimed telemetry `requestId`.
+- **Legacy `req-*` treatment (decision 6).** Decision 6 covers stored history
+  — logs, audit rows and audit-CSV exports — which is immutable and read as
+  opaque correlation strings; `docs/contracts/observability.md` already states
+  "do not rewrite them or infer provenance solely from ID shape", and the
+  runbook keeps a legacy `req-<base36>` example. The shape gate is a separate
+  rule on a separate surface: the live projection of a value the client
+  supplies now, not a rewrite of anything stored. Dropping a legacy-shaped
+  claim from the timeline migrates or mutates no historical row.
+- **Decision 6 is not narrowed.** The two rules act on different surfaces
+  (stored history vs. live projection), so this note records no contradiction
+  and does not narrow, amend, or supersede decision 6. Narrowing decision 6 to
+  reclassify historical values by shape would require its own superseding
+  decision under the authority precedence; that question is left open here.
+
 ## Costs
 
 - Log and audit id volume grows (UUID string vs a short counter) — accepted
@@ -140,8 +171,12 @@ work item:
 
 This ADR is the authority for the requestId wording in
 `docs/contracts/observability.md` (request-trace row and correlation
-semantics), `docs/contracts/api-contract.md`, `docs/contracts/api-reference.md`,
-and the deployment runbook's log-lookup examples. Those files currently
-carry superseded default-generator wording or placeholder examples and are
-updated by the in-flight implementation changes; until they merge, this ADR
-outranks them per the authority precedence.
+semantics), `docs/contracts/api-contract.md` (error-envelope field and the
+`x-request-id` header row), `docs/contracts/api-reference.md` (error-response
+example), the deployment runbook's log-lookup examples
+(`docs/deployment/mvp-deployment-runbook.md`), and the save-failure correlation
+runbook (`docs/operations/save-failure-evidence.md`). These files state the
+current UUIDv4 id, the #865 `x-request-id` carrier where it applies, and the
+decision-6 rule for historical `req-*` values, and are consistent with this
+ADR. If a future change makes one of them diverge, this ADR remains the
+authority per the authority precedence.

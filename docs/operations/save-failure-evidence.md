@@ -108,6 +108,63 @@ logs/domain state settle F2/F3.
    client retry is safe while the attempt is open; F5 is a client-observation
    inconsistency, not a data loss; F6 is an evidence gap.
 
+## Worked example — 200 `accepted:false` → X-Request-Id → Pino WARN → receipt / domain verification
+
+A candidate reports "my answer did not save" and shows a rejection alert with
+请求编号 `R` (the 200 response's `x-request-id` header value, surfaced by
+#924). Walk the evidence in authority order:
+
+1. **Business rejection (F2).** `POST /attempts/:attemptId/answers/:questionId`
+   returned HTTP 200 with `accepted: false`, `reason`, `serverVersion`,
+   `savedAt`. The 200 body deliberately contains no `requestId`
+   (`SaveAnswerRejectedSchema.strict()` in `packages/contracts/src/attempt.ts`);
+   `R` came from the header, not the body. The server evaluated the save and
+   refused it — this is a protocol verdict, NOT a transport failure. No new
+   receipt is created and no answer is changed.
+2. **X-Request-Id.** `R` equals the server's `request.id` for that request
+   (`apps/api/src/plugins/requestIdHeader.ts`). In the app logs, search the
+   exact `reqId = R` and the `"Answer save rejected"` WARN line whose
+   `attemptId` / `questionId` / `clientSeq` / `reason` match. The WARN line's
+   automatic `reqId` is the same value: the header and the WARN line are one
+   request. `R` is a correlation key, not proof of processing and never proof
+   of save success.
+3. **Pino WARN.** The line records `organizationId`, `actorId`, `actorRole`,
+   `attemptId`, `questionId`, `clientSeq`, `reason`, `serverVersion`, plus the
+   automatic `reqId`. It contains no answer content. A missing line is an
+   evidence gap, not proof that no request arrived.
+4. **Receipt / domain verification.** Query `exam_answer_save_receipts` for
+   `(organizationId, attemptId, questionId, clientSeq)` and read
+   `exam_attempts.answers` for the current version. `accepted: false` has NO
+   receipt for that `clientSeq`; an EARLIER receipt for the same key may still
+   exist (`CONFLICTING_PAYLOAD`) — receipt-first investigation must not stop
+   at "a receipt exists". The authoritative saved value/version is the attempt
+   domain state, never the client's belief.
+5. **Client telemetry.** The `answer_autosave_failed` client-event metadata
+   may carry the same `R` as an allowlisted `requestId`. That is the browser's
+   unverified claim about the header it saw, projected under "客户端声明，
+   未经服务端核验". It can corroborate step 2 but is NOT an independent
+   server-side fact and cannot by itself establish F2 or F5. Confirm it
+   against the server's own request log; one match is a working hypothesis,
+   several are AMBIGUOUS, none is an evidence gap.
+6. **Classify and record.** With the 200 body + matching WARN line: **F2**.
+   Follow the F2 follow-up for the concrete `reason` (fresh `clientSeq` for
+   `INVALID_ANSWER`; reload/refresh for `STALE_VERSION`; never retry a
+   `CONFLICTING_PAYLOAD` key; lifecycle/deadline reasons are not retryable).
+
+Contrast the other outcomes with the same correlation surface:
+
+| Outcome | Server fact | `requestId` role |
+| --- | --- | --- |
+| **Accepted save (F5)** | receipt + `accepted: true` observed | success is decided by `accepted === true`, never by `R` |
+| **Coordinated success (F4)** | older receipt + consistent version lineage, ACK lost | client adopts server-authoritative `serverAnswer` on the next `STALE_VERSION`; no ACK is fabricated |
+| **Transport failure (F1/F3)** | no response observed; 5xx / 409 envelope carries `requestId`; no new receipt | `classifyWireFailure` yields `requestId: null` on the client; no surface claims an id |
+| **Server fault (F3)** | 5xx error envelope with `error.requestId` = same request id | correlation only; retryable, check a concurrent winner's receipt first |
+| **Missing evidence (F6)** | logs rotated, no `reqId` retained, time window ambiguous, receipts cascaded | report **UNKNOWN** explicitly; "no row + no log line" is never proof of non-arrival |
+| **UNKNOWN / ACK loss** | receipt exists but client never observed `accepted: true` | F4 if the receipt settles it, otherwise F6; never downgrade to F1 without client-side proof |
+
+Retries are new HTTP requests with new server-minted ids; correlate them by
+`attemptId` + `questionId` + `clientSeq` + server time, not by reusing `R`.
+
 ## Why there is no durable refusal record (#861 decision)
 
 The #861 decision frame compared three options: (a) a new durable refusal
