@@ -1,8 +1,8 @@
 # SECURITY_AND_PRIVACY_VERIFICATION — 安全与隐私边界验证
 
 - 状态：**最终交付文档**（SPEC §9 交付物 7）。记录 as-built 信任边界、隐私投影与已接受残余风险，不修改产品代码。
-- 集成 SHA：`a5df2c90ace6366e69c951e6660dc268327b6e8a`（任务给定 exact 集成 SHA；本会话 `git rev-parse HEAD` 一致）。
-- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md` — verdict **BLOCKED**（required CI FAIL，外部计费，非产品代码缺陷）；安全 / 协议 / 架构三个 Subagent 均 GO，CI/Flake Subagent BLOCKED，复审 NO_GO。未合并、未发布。
+- 集成 SHA：`52a58d4da7ec51423381510d5e19bff6425965b7`（本轮收口任务给定 exact 集成 SHA；= worktree HEAD = PR #928 headRefOid；自四 PR 合并完成点 `0b2e2d8a…` 起纯 docs 演进，产品代码逐字节一致）。
+- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md` — verdict **READY_FOR_HUMAN_MERGE**（第 3 轮；required CI 已由 exact SHA 上 run 42611431690 attempt 2 全绿解除，历史 FAIL 为外部计费、保留未删）；安全 / 协议 / 架构三个 Subagent 均 GO，CI/Flake Subagent 的计费 blocker 已解除（原始 BLOCKED / NO_GO 记录保留于 `reviews/`）。merge 待人工门禁，未合并、未发布。
 - 证据纪律：代码锚点本会话 `grep` / 实读；测试数字来自给定材料（REVIEW_SECURITY 164 定向测试、REVIEW_PROTOCOL 306、`FINAL_PRODUCT_ADJUDICATION.md` 307/342、`pr-body.md`、`logs/`），本会话未复跑这些套件。
 
 ---
@@ -74,7 +74,7 @@ ingest 端 org/user 来自 `request.ctx`、`receivedAt` 服务端时钟、引用
 
 **已接受（有 Owner 决策或边界声明）**
 - nginx error log 携带 raw request line（Owner Decision A，换 error 级诊断）；第三方 collector / 日志文件权限 `NOT_VERIFIED`。
-- #878 几何 flake：Owner 2026-11-09 明确 defer，`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS`，4 处固定 150ms 残留；新签名 `:555` 与 A3-F7 `:341` 已补登 `docs/standards/test-flakes.md`（登记信息面），但 #878 仍 OPEN、4 条 Acceptance 未勾选、无 post-fix 权威绿灯。
+- #878 几何 flake：Owner 2026-11-09 明确 defer，`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS`，4 处固定 150ms 残留；新签名 `:555` 与 A3-F7 `:341` 已补登 `docs/standards/test-flakes.md`（登记信息面），#878 仍 OPEN、4 条 Acceptance 未勾选。post-fix 权威绿灯已取得（run 42611431690 attempt 2，两个 E2E shard success、未复发），但单次绿 run 不构成根因消除或 flake-rate 证明，#878 defer 维持。
 - #922 归档含已接受的主机标识/地址类别与合成压测凭据；发布/共享前需 sanitization；归档内 `SHA256SUMS` 318/318 复算通过（给定材料）。
 - 429 状态路径 `NOT_TESTED`；多实例 / 跨进程日志关联未验证（ADR-025 明确非多实例支持）。
 - transport 边界（连接销毁、socket framing 失败、Node 超时、`FST_ERR_BAD_URL`）的 header 缺失：文档声明为协议边界，未做故障注入。
@@ -90,6 +90,6 @@ ingest 端 org/user 来自 `request.ctx`、`receivedAt` 服务端时钟、引用
 
 ## 8. 验证边界（诚实声明）
 
-- 本会话实跑：代码锚点 `grep` / `nl`、`gh pr checks 928`（exit 1）、PR / Issue 状态、`git` 差异/祖先、`pnpm format:check`、`pnpm docs:build`（命令与退出码见 `DOCUMENTATION_CONSISTENCY_AUDIT.md` / `PERFORMANCE_AND_CI.md`）。
-- 本会话**未复跑**：164 / 306 / 307 / 342 定向测试、全量 `pnpm verify` / `pnpm test` / `pnpm e2e`、浏览器级 E2E、nginx 容器故障注入、性能基准、归档 318 文件语义复核。
-- required CI 在 exact SHA 上 FAIL（外部 GitHub 计费，#930 OPEN）；本地绿灯不替代 required CI。本文档不声称 CI 通过、不声称已合并、不声称已发布。
+- 本会话实跑：代码锚点 `grep` / `nl`、`gh api …/runs/42611431690` 与 `gh pr checks 928`（exit 0，绿 run 取证）、PR / Issue 状态、`git` 差异/祖先、`pnpm format:check`、`pnpm docs:build`（命令与退出码见 `DOCUMENTATION_CONSISTENCY_AUDIT.md` §8 / `PERFORMANCE_AND_CI.md` §8）。
+- 本会话**未复跑**：164 / 306 / 307 / 342 定向测试、全量 `pnpm verify` / `pnpm test` / `pnpm e2e`、浏览器级 E2E、nginx 容器故障注入、性能基准、归档 318 文件语义复核。required CI 由 exact SHA `52a58d4d` 上的绿 run 42611431690 attempt 2 承载（8 job 全 success）。
+- required CI 已在 exact SHA 上全绿；attempt 1 及此前全部 FAIL run 为外部 GitHub 计费签名（#930 OPEN，待计费稳定后卫生关闭）。本文档不声称已合并、不声称已发布；nginx error log 残余与各 `NOT_VERIFIED` 边界维持原状（§7）。

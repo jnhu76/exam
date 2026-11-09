@@ -1,13 +1,16 @@
 # FINAL_INTEGRATION_RECORD — 最终集成记录
 
 - 状态：**最终交付文档**（SPEC §9 交付物 10 / §10 最终报告格式）。本文件是本次交付的记录与导航，不修改产品代码。
-- 任务给定 exact 集成 SHA：`a5df2c90ace6366e69c951e6660dc268327b6e8a`。**本文件所在的交付提交是该 SHA 之上的纯文档提交**（见 §0 SHA 口径说明）。
-- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（verdict **BLOCKED**，决定性理由 = required CI FAIL 外部 GitHub 计费；4× KEEP_AND_MERGE；产品契约 PASS / receipt UNCHANGED）。
-- 证据纪律：`git` / `gh` 查询与代码锚点为本会话实跑/实读；测试与本地门禁数字来自给定材料（四份评审、两版裁决、`pr-body.md`、`.tmp/production-closure/logs/`），本会话未复跑；静态/文档检查的实跑命令与退出码见 `DOCUMENTATION_CONSISTENCY_AUDIT.md` §6 / `PERFORMANCE_AND_CI.md` §4。
+- **当前权威状态：§1 报告与 §10（第 3 轮收口，2026-11-09）**。§0 与 §2–§9 是 `a5df2c90…f32693c7` 各时点的历史记录（含 FAIL run 取证），其时态结论已被第 3 轮裁决与本轮收口取代/推进；历史 FAIL run 记录全部保留。
+- 任务给定 exact 集成 SHA（本轮）：`52a58d4da7ec51423381510d5e19bff6425965b7`（= worktree HEAD = PR #928 headRefOid；绿 CI run 42611431690 attempt 2 附着于此）。此前轮次的 exact SHA 演进：`a5df2c90` → `e97e15fb` → `b6be2591` → `f32693c7` → `0c7350af` → `52a58d4d`（自四 PR 合并完成点 `0b2e2d8a` 起全部为纯 docs 提交）。**本文件所在的交付提交是该 SHA 之上的纯文档提交**（见 §0 SHA 口径说明与 §10）。
+- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md` — **verdict = READY_FOR_HUMAN_MERGE**（第 3 轮，2026-11-09；唯一 blocker required CI 已由 exact SHA `52a58d4d` 上 run 42611431690 attempt 2 全绿解除；12 契约字段 11 PASS + receipt UNCHANGED；4× KEEP_AND_MERGE）。merge 属 AGENTS.md §7 人工门禁，本轮未执行。
+- 证据纪律：`git` / `gh` 查询与代码锚点为本会话实跑/实读；测试与本地门禁数字来自给定材料（四份评审、历版裁决、`pr-body.md`、`.tmp/production-closure/logs/`），本会话未复跑；静态/文档检查的实跑命令与退出码见 `DOCUMENTATION_CONSISTENCY_AUDIT.md` §6 / §8 与 `PERFORMANCE_AND_CI.md` §4 / §8。
 
 ---
 
 ## 0. SHA 口径说明（避免混淆）
+
+> 本节为 `a5df2c90` 时点记录（当时的 ask 给定 SHA）；本轮收口后 exact 集成 SHA 推进为 `52a58d4d`、`FINAL_DELIVERY_SHA` 为本提交，见 §10。
 
 | 名称 | 值 | 角色 |
 | --- | --- | --- |
@@ -22,14 +25,14 @@
 
 ---
 
-## 1. SPEC §10 最终报告（严格格式）
+## 1. SPEC §10 最终报告（严格格式；当前值，2026-11-09 第 3 轮收口后）
 
 ```text
 BEGIN_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 
 BASE_MASTER_SHA = 5140c3dd0f9dbde1bdad8f5b757161f3ed96945d
 FINAL_MASTER_SHA = 5140c3dd0f9dbde1bdad8f5b757161f3ed96945d
-FINAL_INTEGRATION_SHA = a5df2c90ace6366e69c951e6660dc268327b6e8a
+FINAL_INTEGRATION_SHA = 52a58d4da7ec51423381510d5e19bff6425965b7
 
 UUID_GLOBAL_CONTRACT = PASS
 UUID_TEST_FIXTURES = PASS
@@ -48,20 +51,20 @@ NGINX_ERROR_LOG_DIAGNOSTICS = PASS
 FLAKE_INVESTIGATION = PARTIAL
 FLAKES_FIXED = 2 deterministic UUID-fixture contract failures (ca7e62ec / 9dd1d5f4) + partial #878 geometry fix 1f29b614 (1/5 probes)
 FLAKES_DEFERRED = 1 (#878 geometry flake, OPEN/DEFER, 4 residual fixed-150ms waits, ROOT_CAUSE_CONFIDENCE=HYPOTHESIS) + 2 new signatures registered (:555 toBeFocused, A3-F7 :341) + run 42483066387 occurrence
-FLAKE_ISSUES_CREATED_OR_UPDATED = #878 (OPEN, 4 unchecked Acceptance; registry updated) / #930 (OPEN, GitHub billing)
-REQUIRED_CI_FAILURES = 4+ (every completed run on the integration branch is FAIL: e.g. 42572487639 / 42593850473 / 42607941019 / 42608435613 (final exact SHA, attempt 1); Static checks fail, 6 required jobs skipped, billing annotation; gh pr checks 928 = FAIL exit 1; 0 green runs)
+FLAKE_ISSUES_CREATED_OR_UPDATED = #878 (OPEN, 4 unchecked Acceptance; registry updated, temporal statements rewritten at closure to cite green run) / #930 (OPEN; recovery documented in comments, closure pending)
+REQUIRED_CI_FAILURES = 6 FAIL runs retained and never deleted (42572487639 / 42593850473 / 42607941019 / 42608435613 / 42609620433 / 42611431690 attempt 1), all external GitHub billing signature; RESOLVED by run 42611431690 attempt 2 = success on exact SHA 52a58d4d (8/8 jobs, 2026-11-09T12:07:30Z); FAIL records retained
 
 GLOBAL_PRODUCT_CONSISTENCY = PASS
 DOCUMENTATION_CONSISTENCY = PASS
 PERFORMANCE = PASS
 
 CLEAN_TREE_INTEGRATION = PASS
-FULL_CI = FAIL
+FULL_CI = PASS (on exact SHA 52a58d4d: run 42611431690 attempt 2, 8 required jobs all success; re-run semantics, no force push / no skip / no relaxation; the docs-only closure commit on top records its own CI outcome in §10)
 POST_MERGE_SMOKE = NOT_RUN
 
 SECURITY_SUBAGENT = PASS
 PROTOCOL_SUBAGENT = PASS
-CI_SUBAGENT = BLOCKED
+CI_SUBAGENT = PASS (billing blocker F1 resolved by green run and independently re-verified; original BLOCKED / NO_GO records preserved in reviews/)
 ARCHITECTURE_SUBAGENT = PASS
 
 PR_922 = OPEN / draft / KEEP_AND_MERGE / not merged
@@ -70,20 +73,22 @@ PR_924 = OPEN / draft / KEEP_AND_MERGE / not merged
 PR_926 = OPEN / draft / KEEP_AND_MERGE / not merged
 
 GITHUB_WRITEBACK = delivery docs committed + pushed to PR #928 branch; headRefOid == new HEAD; no Issue/PR body writeback in this ask
-MERGE_STATUS = BLOCKED
+MERGE_STATUS = READY_FOR_HUMAN_MERGE (merge is the human gate per AGENTS.md §7 / SPEC §8.2; NOT merged in this ask)
 RELEASE_STATUS = NOT_RELEASED
 
-UNRESOLVED_BLOCKERS = blocker 1 (clean-tree exact-SHA required CI FAIL, external GitHub billing #930); blocker 2 (#878 flake/occurrence closure needs #878 Acceptance OR post-fix authoritative green CI, coupled with blocker 1)
-ACCEPTED_RESIDUAL_RISKS = nginx error_log raw request line (Owner Decision A, bounded); #878 deferred geometry flake; #922 archive sanitization before sharing; OpenAPI 401/403 top-level requestId (pre-existing master drift, 203 occurrences); getWithMeta zero production callers; 429 status path NOT_TESTED; transport-boundary header fault injection not run; multi-instance log correlation NOT_VERIFIED; third-party log collector / INFRA_LOG_ACCESS NOT_VERIFIED; BACKUP_RETENTION UNKNOWN
+UNRESOLVED_BLOCKERS = (none — round-3 adjudication READY_FOR_HUMAN_MERGE; human merge gate pending)
+ACCEPTED_RESIDUAL_RISKS = nginx error_log raw request line (Owner Decision A, bounded); #878 deferred geometry flake (single green run is not root-cause elimination); #922 archive sanitization before sharing; OpenAPI 401/403 top-level requestId (pre-existing master drift, 203 occurrences); getWithMeta zero production callers; 429 status path NOT_TESTED; transport-boundary header fault injection not run; multi-instance log correlation NOT_VERIFIED; third-party log collector / INFRA_LOG_ACCESS NOT_VERIFIED; BACKUP_RETENTION UNKNOWN
 
 END_EXAM_PRODUCTION_INTEGRATION_CLOSURE
 ```
 
-> `FINAL_INTEGRATION_SHA` 在此严格格式块中指被审的 exact 集成树（`a5df2c90`，见 §0）；含交付文档的当前分支 HEAD 为 `FinalResult.finalSha`。`CLEAN_TREE_INTEGRATION = PASS` 指本交付提交后受控树干净（此前唯一未跟踪的裁决文档现已纳入受控历史）。`PERFORMANCE = PASS` 指既有 A/B 证据与四个评审未观察到回归，**不是** exact-SHA CI 门控下的新基准测量（required CI 仍 FAIL）。
+> `FINAL_INTEGRATION_SHA` 在此严格格式块中指被审的 exact 集成树（`52a58d4d`，绿 CI 附着点；见 §0 与 §10）；含交付文档的当前分支 HEAD 为 `FinalResult.finalSha`（其相对 `52a58d4d` 为纯 docs 提交）。`FULL_CI = PASS` 指 required CI 在 exact SHA `52a58d4d` 上的 run 42611431690 attempt 2 全绿（本会话 `gh api` / `gh pr checks 928` 实查 exit=0）；交付提交自身触发的新 run 的结局见 §10 记录，不在本块内预支。`PERFORMANCE = PASS` 指既有 A/B 证据与四个评审未观察到回归，**不是**新基准测量。本报告取代 §7–§9 中「所有已完成 run 全 FAIL」的不变量表述与 `FULL_CI = FAIL` 时态值；那些段落的其余取证内容作为历史记录保留。
 
 ---
 
 ## 2. 未合并 / 未发布的事实（本会话实查）
+
+> 本节为 `a5df2c90` 时点记录；当前 CI 状态（绿 run 42611431690 attempt 2、`gh pr checks 928` exit=0）与本轮收口值见 §10。「未合并、未发布」结论在本轮仍然成立（第 3 轮收口后复核）。
 
 | 项 | 值 | 命令 |
 | --- | --- | --- |
@@ -234,3 +239,66 @@ attempt 2 执行期间检测到未跟踪的并发裁决进程**整篇覆写** `F
 - 本角色**未改写裁决正文**，也未提交任何未经实读的内容；裁决文件的逐字节状态由 `SHA256SUMS` 钉住。
 
 — 交付文档编辑，2026-11-09，attempt 2
+
+---
+
+## 10. 第 3 轮收口 — 绿 CI 与 READY_FOR_HUMAN_MERGE（本 ask，2026-11-09）
+
+**ask 给定材料**：exact 集成 SHA `52a58d4da7ec51423381510d5e19bff6425965b7`、四份 §7 独立评审、第 3 轮裁决
+（`FINAL_PRODUCT_ADJUDICATION.md`，verdict **READY_FOR_HUMAN_MERGE**）、修复记录（零代码提交；`52a58d4d` 由并发进程
+提交并 push）与 CI FAIL (exit 1)（即 `reviews/REVIEW_RERUN_2.md` 直读的 run 42611431690 **attempt 1** 计费失败）。
+
+### 10.1 绿 CI 独立复核（本会话实跑，未沿用裁决结论）
+
+| 命令 | 输出 |
+| --- | --- |
+| `gh api repos/jnhu76/exam/actions/runs/42611431690` | `{"id":42611431690,"head_sha":"52a58d4da7ec5142…","status":"completed","conclusion":"success","run_attempt":2,"run_started_at":"2026-11-09T11:59:40Z","updated_at":"2026-11-09T12:07:30Z","event":"pull_request","head_branch":"integration/production-closure-20261109"}` |
+| `gh api …/runs/42611431690/jobs?per_page=100` | 8 job 全 `success`：`Static checks / Build / API coverage / Web coverage / Package coverage / Production transport regression / E2E (shard 1/2) / E2E (shard 2/2)` |
+| `gh pr checks 928 --repo jnhu76/exam` | 8 项 `pass`（Static checks 1m28s / Build 50s / API coverage 5m25s / Web coverage 4m34s / Package coverage 2m11s / Production transport 2m45s / E2E 3m35s+3m28s）+ `CodeRabbit skipping`；`PR_CHECKS_EXIT=0` |
+| `gh pr view 928` | `state=OPEN, isDraft=true, mergeStateStatus=CLEAN, mergedAt=null, headRefOid=52a58d4d…, baseRefName=master` |
+| `gh pr view 922/923/924/926` | 四源 PR 全 `state=OPEN, draft=true, mergedAt=null` |
+| `gh issue view 878` / `gh issue view 930` | 均 `OPEN`；#930 12:09:48Z 新评论记录 #929 头 `4162bfde` 上 run 42607359553 attempt 2 同样取得 success（外部计费恢复的另一佐证），Issue 本身仍 OPEN（卫生项） |
+| `git rev-parse HEAD` / `git merge-base --is-ancestor 52a58d4d master` | HEAD = `52a58d4d…`；exit 1（集成树未并入 master `5140c3dd`） |
+
+判定与裁决一致：SPEC §8.1.7 required CI 门禁在 exact SHA `52a58d4d` 上已满足（attempt 2 为同一 SHA 的标准 re-run，
+非 force push、非 skip/放宽；attempt 1 与全部历史 FAIL run 保留未删）。**merge 未执行**（人工门禁），
+`RELEASE_STATUS = NOT_RELEASED` 维持，§1 严格格式报告已按本节值更新。
+
+### 10.2 交付面更新（本 ask 实际改动）
+
+1. **`reviews/` 快照更新**：按 ask 把 `.tmp/production-closure/reviews/` 七份评审复制入库。`REVIEW_SECURITY / PROTOCOL /
+   CI_FLAKE / ARCHITECTURE_DOCS / FIXTURES_FLAKE` 五份与已提交副本逐字节一致（`cmp -s` OK）；`REVIEW_RERUN_1.md`（改审
+   `b6be2591`，verdict BLOCKED）与 `REVIEW_RERUN_2.md`（改审 `52a58d4d` attempt 1，verdict NO_GO）为复审员的同名新版，
+   覆盖前确认旧版（审 `a5df2c90`）已在受控 Git 历史中无损保留（`git show 52a58d4d:<path>` 可恢复），新版各自头部含
+   覆写说明。此前 §8 附注「不从 scratch 复制」的保守立场由本 ask 的显式指令取代：复制对象经 `cmp`/verdict 逐项核对，
+   与第 2/3 轮裁决引用的复审版本一致。
+2. **时态语句改写（裁决 §2.4 处置的落地）**：本文件 §1 严格格式报告与头部改为引用绿 run（本节值）；§0/§2 加时点指针。
+   `docs/standards/test-flakes.md` 两处「无 post-fix 权威绿灯（GitHub 账户计费）」（`:3378`、`:3388-3389`）改为引用
+   run 42611431690 attempt 2，同时保持 #878 OPEN / DEFER、`HYPOTHESIS`、「绿 run ≠ 根因消除」与「登记不表述为已修复」。
+   其余 8 份长期文档核查无漂移（`DOCUMENTATION_CONSISTENCY_AUDIT.md` §8）。
+3. **CHANGELOG / README / implementation-status 不更新**：`## [Unreleased]` 仍为空，无发布事实；收口仍属 SPEC §8.4
+   最终 master merge 条件。**不声称已发布。**
+4. `SHA256SUMS` 按最终落盘字节重新生成（`DOCUMENTATION_CONSISTENCY_AUDIT.md` §8 记录命令与校验）。
+
+### 10.3 本会话实跑的静态 / 文档检查
+
+| 命令（集成 worktree 内实跑） | 退出码 | 结果 |
+| --- | --- | --- |
+| `pnpm format:check` | **`0`** | `All matched files use Prettier code style!`（`.prettierignore` 含 `*.md`，不校验 Markdown） |
+| `pnpm docs:build` | **`0`** | check-site.mjs 10 项全 PASS：allowlist 8/8、16 页哈希、16 路由、中英路由对应、380 内部链接与片段、16 路由可达、130 permalinks、404、search index en/zh 各 50 documents → `All documentation checks passed.` |
+| `sha256sum -c SHA256SUMS`（本目录，最终生成后） | **`0`** | 全部条目 `OK`、`0 FAILED` |
+| `git diff --check` | **`0`** | 无空白 / 冲突标记 |
+
+> 执行环境说明：`format:check` 必须在本集成 worktree 内运行。主 checkout `/home/hoo/Source/exam` 的同名命令在本 ask 期间
+> exit 2，原因是该树内存在与本分支无关的外来未跟踪产物（`.worktrees/*` 构建产物、`test-results/.last-run.json`）被
+> prettier 扫描；集成 worktree 不含这些路径，命令干净通过。本 ask 未清理、未修改他树文件。
+
+### 10.4 交付提交自身的 CI（如实声明）
+
+本节所在交付提交是 `52a58d4d` 之上的**纯 docs 提交**（`git diff 52a58d4d..HEAD --name-only` 全部位于
+`docs/`；push 后 `FinalResult.finalSha` = PR #928 新 `headRefOid`）。提交不能自含其 SHA，故本文件不内嵌该值；
+push 后每个新 commit 都会触发一个新 CI run，其结局（含可能的 transient billing 复发）不在本文件内预支、
+由 GitHub run 历史承载。绿 CI 证据锚定在 exact SHA `52a58d4d`；四 PR 合并的人类门禁按裁决 §5（#922 → #923 →
+#924 → #926 逐个 ready + merge，#928 不直接合并）执行。
+
+— 交付文档编辑，2026-11-09，第 3 轮收口（绿 CI 后）

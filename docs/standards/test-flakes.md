@@ -3375,7 +3375,7 @@ success，复跑通过 ≠ 根因消除。
 - A3-F7 `:341` 下拉时序（`恢复事件` menuitem 点击：`element is not stable` → `detached from the DOM`）：最终裁决 §2.3 在集成树 `a5df2c90` 以 `E2E_WORKERS=2 E2E_WORKER_BASE_PORT=21000 bash scripts/e2e/run.sh investigation-ui-acceptance` 实跑 2 次均 `1 failed / 9 passed`（同一唯一失败点），同时刻同命令的 pr-865 @ `9dd1d5f4` 控制实验 EXIT=0，M3/M4/M5 两次均通过。归属：同一代码 14:13 全量 2-shard E2E 曾 `E2E_EXIT=0`（`logs/e2e.log` / `pr-body.md`）、`git diff 5140c3dd..0b2e2d8a -- apps/web/src/pages/admin apps/web/src/components/shared` 为空 ⇒ 条件敏感非确定性，不构成可归属于四 PR 的产品正确性缺陷；精确触发路径未定位。
 - F-04（REVIEW_ARCHITECTURE_DOCS web 单测一次性并行失败，3 files / 3 tests，随后两次重跑含同组合全部复绿）作为低优先观察项一并裁定；本轮未复现，不定级。
 
-补登只闭合 blocker 2 的**登记信息面**：#878 仍 OPEN / DEFER、4 条 Acceptance 未勾选、`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS`、4 处固定 150ms 残留、无 post-fix 完整权威绿灯（GitHub 账户计费，外部非代码）、`CASE_ID` 仍 NONE。登记不替代 #878 验收，也不替代 required CI 绿灯；本条目不表述为已修复。
+补登只闭合 blocker 2 的**登记信息面**：#878 仍 OPEN / DEFER、4 条 Acceptance 未勾选、`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS`、4 处固定 150ms 残留、`CASE_ID` 仍 NONE。post-fix 完整权威绿灯已于 2026-11-09 取得：GitHub 账户计费恢复后，exact 集成 SHA `52a58d4da7ec51423381510d5e19bff6425965b7`（集成验证分支）上的 run 42611431690 **attempt 2** 全部 8 job success（含两个 E2E shard；`gh api repos/jnhu76/exam/actions/runs/42611431690` 实查 `conclusion=success`，attempt 1 为计费失败、记录保留未删；此前全部 FAIL run 同为外部计费签名）。该绿 run 中本条 spec 未复发，但单次绿 run 不构成根因消除或 flake-rate 证明（同上文「复跑通过 ≠ 根因消除」）。登记不替代 #878 验收，required CI 绿灯也不替代 #878 的因果收口；本条目不表述为已修复。
 
 ### 已交付的部分修复（不是 closure，#878 仍 OPEN）
 
@@ -3385,8 +3385,9 @@ success，复跑通过 ≠ 根因消除。
 `waitForTimeout(150)`。未删除/放宽断言，未加 retry、全局 timeout 或 skip。
 
 同一族其余 4 处固定 150ms（修复后 `:934`/`:1011`/`:1092`/`:1133`）未纳入；
-`FIRST_CAUSAL_DIVERGENCE` 仍未执行；修复后无 2-shard 负载下 instrumented 采样证据，也无 post-fix
-权威 CI 绿灯（GitHub 账户计费故障，外部非代码）。本地 `pnpm e2e` 通过不构成 flake-rate 证明。
+`FIRST_CAUSAL_DIVERGENCE` 仍未执行；修复后无 2-shard 负载下 instrumented 采样证据。post-fix
+权威 CI 绿灯已取得（run 42611431690 attempt 2，两个 E2E shard 均 success、本条 spec 未复发），但该证明仍不构成
+根因消除（`CURRENT_INTERPRETATION` 保持 HYPOTHESIS；单次绿 run 非 flake-rate 证据）。本地 `pnpm e2e` 通过不构成 flake-rate 证明。
 
 ### 已知不是的原因（附证据）
 

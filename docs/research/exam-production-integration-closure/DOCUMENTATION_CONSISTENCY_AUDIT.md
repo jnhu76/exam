@@ -1,8 +1,8 @@
 # DOCUMENTATION_CONSISTENCY_AUDIT — 文档与静态一致性审计
 
 - 状态：**最终交付文档**（SPEC §5.5 / §9 交付物 8）。记录本次交付对长期文档的核查、最小更新、全局一致性搜索与门禁命令结果。
-- 集成 SHA：`a5df2c90ace6366e69c951e6660dc268327b6e8a`（任务给定 exact 集成 SHA；本会话 `git rev-parse HEAD` 一致）。
-- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（verdict **BLOCKED**，required CI FAIL 外部计费；blocker 3 文档一致性已解决）。未合并、未发布。
+- 集成 SHA：`52a58d4da7ec51423381510d5e19bff6425965b7`（本轮收口任务给定 exact 集成 SHA；= worktree HEAD = PR #928 headRefOid；早期收口时点为 `a5df2c90…`，二者产品代码逐字节一致）。§1–§7 为 `a5df2c90` 时点审计记录；第 3 轮收口复核见 §8。
+- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（**第 3 轮**，verdict **READY_FOR_HUMAN_MERGE**；required CI 已由 exact SHA 上 run 42611431690 attempt 2 全绿解除）。四个文档一致性门禁 PASS 维持（§0 与 §8）。未合并、未发布。
 - 证据纪律：下列每一项「实查」均为本会话实际执行的命令 / 读取；给定材料（评审、裁决、`pr-body.md`、`logs/`）单独标注，不冒充本会话实跑。
 
 ---
@@ -161,3 +161,58 @@ sha256sum -c SHA256SUMS
 四个文档一致性门禁 **PASS**（§0），9 份长期文档全部核查、5 份最小更新（其中 ADR 只加信息性附录、registry 只补登记不改闭合状态），README/CHANGELOG 按发布规范不更新，全局搜索未发现当前权威文档残留旧机制描述，历史记录与当前权威已明确区分。required CI 仍 FAIL (exit 1)（外部计费）——这是**外部门禁**，与文档一致性 PASS 正交；不声称 CI 通过、不声称已合并、不声称已发布。
 
 **并发写入说明（如实记录）**：本会话写入期间检测到同一 worktree 上还有其它代理进程活动——`FINAL_PRODUCT_ADJUDICATION.md` 被裁决进程先后覆写为三版（18:46「第 3 轮」/ 18:57「基于四份 §7 独立评审」/ 19:37「第 2 轮 · 修复后独立复审裁决」，裁决字段全部一致，最终入库的是 19:37 版；并发与口径差异见 `FINAL_INTEGRATION_RECORD.md` §9）；另一个 blocker-fix 轮次复核了 run 42483066387 的 raw log 正文并据实更新了 `docs/standards/test-flakes.md` 中该 occurrence 的措辞（「同族待核」解除，确认为同签名）。本提交以最终落盘状态为准；并发复核只加强证据，不改变 #878 OPEN / DEFER、verdict BLOCKED 或未合并 / 未发布结论。19:37 版整篇重写移除了前版的「附录 D」，故本节及交付清单中的跨文件引用已改指向 `FINAL_INTEGRATION_RECORD.md` §7–§9，避免悬空引用。
+
+---
+
+## 8. 第 3 轮收口复核（本 ask，2026-11-09，exact SHA `52a58d4d`）
+
+第 3 轮裁决（READY_FOR_HUMAN_MERGE）与绿 CI（run 42611431690 attempt 2）之后，本节在本轮收口任务中重新执行文档一致性核查。§1–§7 的结论与门禁值维持；本节记录增量。
+
+### 8.1 九份长期文档核查（SPEC §5 清单，本会话实查）
+
+| 文档 | 本会话核查 | 动作 |
+| --- | --- | --- |
+| `docs/contracts/observability.md` | `:34` `:attemptId` 示例、`:100` Save success/retries/UNKNOWN 段在场 | 无需改动 |
+| `docs/contracts/api-contract.md` | `:93` `x-request-id` header 契约（含 non-carriable 边界）、`:110` CORS `exposedHeaders`、`:141` `FST_ERR_BAD_URL` 无 requestId 均当前 | 无需改动 |
+| `docs/operations/save-failure-evidence.md` | `:111` worked example（200 `accepted:false` → X-Request-Id → Pino WARN → receipt/domain verification）在场 | 无需改动 |
+| `docs/architecture/exam-system/security-model.md` | `:296-327` retention 四要素（cutoff 边界 / 清理失败补偿 / 备份恢复 / 备份保留 UNKNOWN）在场；`:353-365` 旧 route 行为均带 pre-#864 历史标注 | 无需改动 |
+| `docs/adr/ADR-025-…md` | `:135` delivery-closure informational addendum（`RECORDED (informational)`、amends/supersedes nothing）在场；历史决策正文未改写 | 无需改动 |
+| `docs/deployment/README.md` / `docs/operations/README.md` | healthz / exam_privacy / error 级 Decision A 条款在场；无「彻底脱敏」表述 | 无需改动 |
+| `docs/standards/testing.md` | §5 命令与根 `package.json` scripts（`verify:static` / `docs:build` / `e2e` 等）逐条比对一致 | 无需改动 |
+| `docs/standards/test-flakes.md` | `:3378`、`:3388-3389`「无 post-fix 权威绿灯（GitHub 账户计费）」与绿 run 事实相悖（本会话 `gh api` 复核 run 42611431690 attempt 2 = success） | **更新**：两处改写为引用绿 run（8 job 全 success、含两个 E2E shard、attempt 1 计费失败记录保留），同时保持 #878 OPEN / DEFER、`HYPOTHESIS`、「绿 run ≠ 根因消除」「登记不表述为已修复」 |
+| CHANGELOG / README / Release notes | `## [Unreleased]` 为空；无发布事实（四源 PR + #928 全 OPEN/draft/mergedAt=null，本会话实查） | 不更新（显式 DEFER 至 SPEC §8.4 最终 master 收口） |
+
+### 8.2 全局一致性搜索复跑（SPEC §5.5 / 任务 §4，本会话实跑）
+
+对本轮新增关注点（绿 CI 后的时态漂移）与既有六类模式在当前权威文档（排除 `docs/archive/`、`docs/research/`、`docs/releases/`）复跑：
+
+| 模式 | 结果 |
+| --- | --- |
+| `无 post-fix 完整权威绿灯\|无 post-fix 权威 CI 绿灯\|账户计费\|billing\|REQUIRED_CI_FAILURES\|0 green run` | 权威文档命中仅 `test-flakes.md:3378/:3389`（已按 §8.1 更新）；`testing.md:370` 为测试隔离规则（语境无关）；其余命中全在本目录历史记录内 |
+| 旧 requestId 机制（`无法获取 requestId`/`时间窗`/`KEEP_DEFAULT_OPTION_B`/`requestId 证明`） | 零当前权威命中；`KEEP_DEFAULT_OPTION_B` 仅存于 ADR/observability 的 supersession 引用（合法历史引用） |
+| requestId 当保存证明 / telemetry 当服务器证据 | 零命中（含 `docs/` 全域） |
+| nginx 全脱敏 / 旧 error 日志等级 | 零当前权威命中 |
+| 旧 route 存储行为（`normalizeRouteForStorage`/pathname-only） | 仅 `security-model.md:353/359/365`，均带 pre-#864 历史标注 |
+| 过时测试命令 | 零过时命令；`pnpm --filter @exam/e2e exec playwright test --shard=…` 命中为 CI shard 命令的真实文档（`testing.md` §CI）与 ledger 取证记录 |
+| 已合并/已发布声明 | 零命中本轮 PR（命中均为领域语义「已发布考试」与 #859 历史 case）；本会话 `gh` 复核四源 PR + #928 全 OPEN/draft/mergedAt=null，#878/#930 OPEN |
+
+### 8.3 交付面动作（本 ask）
+
+- `reviews/REVIEW_RERUN_1.md`（改审 `b6be2591`）与 `REVIEW_RERUN_2.md`（改审 `52a58d4d` attempt 1）按 ask 以复审员新版覆盖入库；其余五份 `cmp -s` 逐字节一致；旧版在受控 Git 历史无损保留（详见 `FINAL_INTEGRATION_RECORD.md` §10.2）。
+- `FINAL_PRODUCT_ADJUDICATION.md` 以第 3 轮裁决为准入库（裁决正文未被本角色改写）。
+- `SHA256SUMS` 在全部 `.md` 落盘后于本目录重新生成（相对路径，`{ ls -1 *.md; ls -1 reviews/*.md; } | sort | xargs sha256sum`）；生成后实跑 `sha256sum -c SHA256SUMS` → 全部 `OK`、exit 0。
+
+### 8.4 文档 / 静态检查（本会话实跑，集成 worktree 内）
+
+| 命令 | 退出码 | 结果 |
+| --- | --- | --- |
+| `pnpm format:check` | **`0`** | `All matched files use Prettier code style!`（`.prettierignore` 含 `*.md`，不校验 Markdown） |
+| `pnpm docs:build` | **`0`** | 10 项全 PASS（allowlist 8/8、16 页哈希、16 路由、中英路由对应、380 内部链接与片段、16 路由可达、130 permalinks、404、search index en/zh 各 50 documents） |
+| `sha256sum -c SHA256SUMS` | **`0`** | 全部条目 `OK`、`0 FAILED` |
+| `git diff --check` | **`0`** | 无空白 / 冲突标记 |
+
+> 执行环境说明：主 checkout `/home/hoo/Source/exam` 的 `pnpm format:check` 在本 ask 期间 exit 2，由该树内外来未跟踪产物（`.worktrees/*` 构建产物、`test-results/.last-run.json`）被 prettier 扫描导致，与本分支无关；集成 worktree 无这些路径，命令干净通过。本 ask 未清理他树文件。
+
+### 8.5 第 3 轮收口结论
+
+四个文档一致性门禁 **PASS** 维持；9 份长期文档 8 份无漂移、1 份（`test-flakes.md`）按时态事实最小更新；全局搜索无当前权威文档残留旧机制或虚假状态描述；历史记录（§1–§7、本目录各时点交付文档的历史段落）与当前权威（第 3 轮裁决、§8、更新后的长期文档）明确区分。required CI 已绿（exact SHA `52a58d4d`），merge 待人工门禁——不声称已合并、不声称已发布。

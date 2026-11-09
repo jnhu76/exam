@@ -1,12 +1,12 @@
 # PERFORMANCE_AND_CI — 性能与 CI 状态记录
 
 - 状态：**最终交付文档**（SPEC §6.2 / §6.3 / §9 交付物 9）。记录 exact-SHA CI 事实、既有性能证据与未运行边界，不修改产品代码。
-- 集成 SHA：`a5df2c90ace6366e69c951e6660dc268327b6e8a`（任务给定 exact 集成 SHA；本会话 `git rev-parse HEAD` 一致；tree `736a38f6…`，父 `0b2e2d8a…` = 四 PR 合并完成点，二者产品代码逐字节一致）。
-- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md` — verdict **BLOCKED**（唯一决定性理由为 required CI 失败，外部 GitHub 计费）。未合并、未发布。
+- 集成 SHA：`52a58d4da7ec51423381510d5e19bff6425965b7`（本轮收口任务给定 exact 集成 SHA；= worktree HEAD = PR #928 headRefOid；自四 PR 合并完成点 `0b2e2d8a…` 起纯 docs 演进，产品代码逐字节一致，早期收口时点为 `a5df2c90…`）。
+- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md` — verdict **READY_FOR_HUMAN_MERGE**（第 3 轮）：required CI 门禁已由 exact SHA `52a58d4d` 上 run 42611431690 **attempt 2** 全绿解除（8 job 全 success；§1 的 FAIL 记录为 attempt 1 与此前 run 的历史取证，全部保留未删）。merge 待人工门禁，未合并、未发布。当前 CI 状态见 §8。
 
 ---
 
-## 1. exact-SHA required CI：FAIL (exit 1)（本会话独立实跑）
+## 1. exact-SHA required CI：FAIL (exit 1)（本会话独立实跑；历史记录——已由 §8 绿 run 解除）
 
 | 命令 | 输出 |
 | --- | --- |
@@ -41,7 +41,7 @@
 
 ## 3. 性能裁决（SPEC §6.3，基于既有证据）
 
-**verdict：PASS（未观察到回归）**，依据为既有 A/B 证据 + 四个独立评审的结构性核查；**INCONCLUSIVE** 仅限「exact-SHA CI 门控下的性能确认」，因 required CI 为 FAIL（外部计费），且本会话未重放基准。
+**verdict：PASS（未观察到回归）**，依据为既有 A/B 证据 + 四个独立评审的结构性核查；本会话未重放基准。第 1 轮时的「exact-SHA CI 门控下的性能确认 INCONCLUSIVE」已随 required CI 全绿（§8，run 42611431690 attempt 2 含 Build / 3 coverage lanes / Production transport regression 全 success）闭合为通过；该绿 run 不含新基准测量，性能结论仍以结构性核查 + 既有 A/B 为据。
 
 | 关注项（SPEC §6.3） | 既有证据结论 | 依据 |
 | --- | --- | --- |
@@ -82,8 +82,9 @@
 | `reviews/REVIEW_CI_FLAKE.md` | **BLOCKED** | F1 clean-tree exact-SHA CI 从未完成（计费）；F2 修复后新签名 `:555` 非确定性失败（1F/2P） |
 | `reviews/REVIEW_ARCHITECTURE_DOCS.md` | GO（架构与文档范围） | 合并前须闭环 F-03 三项门禁条件（外部 CI / clean tree / 最终合并交付物） |
 | `reviews/REVIEW_FIXTURES_FLAKE.md` | GO（夹具/flake 范围） | 两个命名验证实跑通过 |
-| `reviews/REVIEW_RERUN_1.md` / `REVIEW_RERUN_2.md` | 均 NO_GO | 决定性 blocker 1 未解、`gh pr checks 928` 仍 FAIL (exit 1) |
-| `FINAL_PRODUCT_ADJUDICATION.md`（18:57 最新 / 18:46 第 3 轮） | **BLOCKED** | 两版裁决字段一致；blocker 1（CI）+ blocker 2（flake/occurrence 台账）；4× KEEP_AND_MERGE |
+| `reviews/REVIEW_RERUN_1.md`（审 `b6be2591`） | BLOCKED（历史记录） | blocker 1 未解（计费）；blocker 2 已闭合；无回归 |
+| `reviews/REVIEW_RERUN_2.md`（审 `52a58d4d` attempt 1） | NO_GO（历史记录） | 决定性 blocker 1 未解、`gh pr checks 928` FAIL (exit 1) |
+| `FINAL_PRODUCT_ADJUDICATION.md`（第 3 轮，当前权威） | **READY_FOR_HUMAN_MERGE** | blocker 1 由绿 run 42611431690 attempt 2 解除；12 契约字段 11 PASS + receipt UNCHANGED；无剩余 blocker；4× KEEP_AND_MERGE |
 
 ---
 
@@ -97,8 +98,27 @@
 
 ## 7. 未运行 / 未知边界（诚实声明）
 
-- 本会话**未复跑**：`pnpm verify`（全量）、`pnpm test`（turbo 全量）、`pnpm e2e` / `bash scripts/e2e/run.sh`（浏览器 E2E）、全量 `lint:*` / `typecheck` / `build`、性能基准、nginx 容器故障注入、`candidate-save-deadline-race.concurrency.test.ts` 单独复跑、GitHub 账单恢复（外部账户条件，本会话无法解除）。
-- GitHub 计费故障何时恢复、能否取得 7 个 required job 全 success 的绿 CI 属外部条件，本会话无法验证，亦无法由任何代码/文档改动解决。
+- 本会话**未复跑**：`pnpm verify`（全量）、`pnpm test`（turbo 全量）、`pnpm e2e` / `bash scripts/e2e/run.sh`（浏览器 E2E）、全量 `lint:*` / `typecheck` / `build`、性能基准、nginx 容器故障注入、`candidate-save-deadline-race.concurrency.test.ts` 单独复跑。
+- GitHub 计费故障已恢复、required CI 已在 exact SHA `52a58d4d` 上取得 8 job 全 success 的绿 run（§8，本会话 `gh api` / `gh pr checks` 实查）；#930 Issue 本身仍 OPEN（卫生项）。
 - `pnpm format:check` 的 PASS 不覆盖 `.md`（见 §4），文档一致性依赖 `DOCUMENTATION_CONSISTENCY_AUDIT.md` 的 review。
 - 本会话未做负载下 instrumented `scrollLeft` 采样序列，故不对 flake 机制作独立因果裁决。
-- **未合并、未发布**：四个源 PR 与 PR #928 仍 OPEN/draft，master 仍 `5140c3dd…`，`git merge-base --is-ancestor a5df2c90 master` → exit 1。
+- **未合并、未发布**：四个源 PR 与 PR #928 仍 OPEN/draft，master 仍 `5140c3dd…`，`git merge-base --is-ancestor 52a58d4d master` → exit 1。
+
+---
+
+## 8. 绿 CI（第 3 轮裁决后，本会话实查）
+
+外部 GitHub 计费恢复后，同一 exact SHA `52a58d4da7ec51423381510d5e19bff6425965b7` 上的标准 re-run 取得全绿（非 force push、非新 SHA、非 skip/放宽；attempt 1 与此前全部 FAIL run 保留未删）：
+
+| 命令（本会话实跑） | 输出 |
+| --- | --- |
+| `gh api repos/jnhu76/exam/actions/runs/42611431690` | `{"id":42611431690,"head_sha":"52a58d4da7ec5142…","status":"completed","conclusion":"success","run_attempt":2,"run_started_at":"2026-11-09T11:59:40Z","updated_at":"2026-11-09T12:07:30Z"}` |
+| `gh api …/runs/42611431690/jobs?per_page=100` | 8 job 全 `success`：`Static checks`(1m28s) / `Build`(50s) / `API coverage`(5m25s) / `Web coverage`(4m34s) / `Package coverage`(2m11s) / `Production transport regression`(2m45s) / `E2E (shard 1/2)`(3m35s) / `E2E (shard 2/2)`(3m28s) |
+| `gh pr checks 928` | 8 项 `pass` + `CodeRabbit skipping`；`PR_CHECKS_EXIT=0` |
+| `gh pr view 928` | `state=OPEN, isDraft=true, mergeStateStatus=CLEAN, mergedAt=null, headRefOid=52a58d4d…` |
+
+意义与边界：
+
+- SPEC §6.1/§8.1.7 的「完整集成 CI」由该 run 承载：Static checks（`pnpm verify:static` + `pnpm docs:build`，见 §4 attempt 2 复核的同scope命令）、Build、3 条 coverage lane（真实 PostgreSQL）、Production transport regression、两个 E2E shard 全部真实执行并 success——attempt 1 为 3 秒计费失败签名（job 未启动），attempt 2 的 Static checks 真实执行 1m28s，计费根因事实恢复。
+- 该绿 run **不是**新的性能基准、本地全量复跑或 flake 根因证明；§3 的性能结论与 §6 的 #878 边界不变。两个 E2E shard 在绿 run 中通过（`rich-content-overflow` / `investigation-ui-acceptance` 未复发），不改变 #878 的 `HYPOTHESIS` 置信与 defer 状态。
+- 本节所在交付提交是 `52a58d4d` 之上的纯 docs 提交，其自身触发的新 CI run 结局由 GitHub run 历史承载，不在本文件预支（见 `FINAL_INTEGRATION_RECORD.md` §10.4）。

@@ -1,24 +1,25 @@
-# FINAL_PRODUCT_ADJUDICATION — 最终产品裁决（第 2 轮 · 修复后独立复审裁决）
+# FINAL_PRODUCT_ADJUDICATION — 最终产品裁决（第 3 轮 · 绿 CI 后独立裁决）
 
-> 本文件现为**第 2 轮裁决**（2026-11-09），由独立裁决员基于第 1 轮裁决（BLOCKED，2 blockers）、
-> 独立复审 [`REVIEW_RERUN_1.md`](reviews/REVIEW_RERUN_1.md)（verdict BLOCKED，blocker 1 未解 / blocker 2 已解）、
-> 修复记录 `e97e15fb`（+ 补记提交 `b6be2591`、`f32693c7`）、CI FAIL (exit 1) 与 SPEC §7/§8 独立作出。
-> **未沿用上一轮结论而不验证**：两个 blocker 的当前状态均在本会话以 `gh api` / 文件实读 / git diff 独立复核；
-> 第 1 轮正文（verdict BLOCKED、4×KEEP_AND_MERGE、307 定向测试 + 318/318 归档校验 + 浏览器级 M3/M4/M5 实跑）
-> 作为历史证据保留于 Git 历史与 `reviews/` 入库副本，其全部裁决字段与本轮一致或被本轮逐项复核。
+> 本文件现为**第 3 轮裁决**（2026-11-09），由独立裁决员基于第 2 轮裁决（BLOCKED，1 blocker）、
+> 独立复审 [`REVIEW_RERUN_2.md`](reviews/REVIEW_RERUN_2.md)（verdict NO_GO，blocker 1 未解）、
+> 修复记录（本轮零提交：分支现行 HEAD 与 draft PR #928 headRefOid 一致，均为 `52a58d4d`；
+> 全部 FAIL 记录保留）与 SPEC §7/§8 独立作出。**未沿用上一轮结论而不验证**：本会话对 HEAD/PR/CI/
+> 登记面/12 契约字段全部以 `git` / `gh api` / 文件实读独立重查。
 >
-> **verdict = BLOCKED**。唯一剩余 blocker 是 required CI：集成分支**任何 SHA 上从未取得完成的绿 CI**
-> （外部 GitHub 账户计费故障，#930 OPEN；本会话在 ask 指定 exact SHA `b6be2591` 与当前 HEAD `f32693c7`
-> 上分别独立复核，`gh pr checks 928` = FAIL exit 1）。**Blocker 2（flake/occurrence 登记面）已按合同闭合**
-> （`test-flakes.md:3368/3374/3375/3376/3377` 逐项验证，单一 ledger，来源诚实，#878 保持 OPEN/DEFER 无违规表述）。
-> 产品代码面：`0b2e2d8a`（四 PR 合并完成点）→ `f32693c7` 全部为 docs-only（本会话 `git diff` 实证零非 docs 文件），
-> 第 1 轮在逐字节相同代码上的测试证据继续有效；本会话另对 12 个契约字段的权威代码点逐点抽查命中。
-> 不执行 merge / commit / push。四个 PR disposition = KEEP_AND_MERGE（与全局 verdict 正交，不表示门禁已绿）。
+> **verdict = READY_FOR_HUMAN_MERGE**。第 2 轮唯一剩余 blocker（required CI）**已在本会话实测解除**：
+> ask 指定 exact SHA `52a58d4da7ec51423381510d5e19bff6425965b7` 上，run **42611431690 attempt 2**
+> 于 12:08:12Z 完成，conclusion = **success**，8 个 job（Static checks / Build / API coverage /
+> Web coverage / Package coverage / Production transport regression / E2E shard 1/2 / E2E shard 2/2）
+> **全部 success**，`gh pr checks 928` **exit=0**（全部命令与输出见 §2.1，本会话实跑）。
+> 这是外部 GitHub 计费恢复后的真实重跑（`run_attempt=2`，非 force push、非新 SHA、非 skip/放宽），
+> attempt 1 的失败与此前全部 FAIL run 均保留未删（§2.3）。第 2 轮写回的解除条件——
+> 「#930 计费恢复后，在最终 exact SHA 的 clean tree 重跑完整 CI（7 个 required job 全 success）；
+> 保留全部 FAIL 记录」——已逐项满足。**未执行 merge / commit / push**；merge 属人工门禁，
+> READY_FOR_HUMAN_MERGE 仅表示进入人工合并门禁（SPEC §8.2 顺序与门禁清单见 §6）。
 >
-> **并发写入说明**：本会话写入本文件时检测到一次并发恢复（文件在读取与写入之间被还原为 HEAD 版本，
-> 内容与第 1 轮 18:57 版一致后本版覆盖）；与本会话相同的先例见第 1 轮「并发写入说明」。最终以进入
-> 受控 Git 历史的一版为准；本版与第 1 轮在 4×KEEP_AND_MERGE、11 PASS + receipt UNCHANGED、CI FAIL、
-> 未合并、未发布等全部裁决字段上一致，差异仅在 blocker 2 状态（第 1 轮未闭合 → 本轮已闭合）与证据台账。
+> 产品代码面：`0b2e2d8a`（四 PR 合并完成点）→ `52a58d4d` **零非 docs 文件**（本会话 `git diff` 实证），
+> 第 1 轮在逐字节相同代码上的测试证据继续有效；12 契约字段 = 11 PASS + receipt UNCHANGED，
+> 权威代码点逐点抽查命中（§3）。blocker 2（flake/occurrence 登记面）维持闭合（§2.2 本会话实读复验）。
 
 ---
 
@@ -26,149 +27,214 @@
 
 | 项 | 值 | 证据 |
 | --- | --- | --- |
-| ask 指定 exact SHA | `b6be2591dfe28b2fe17e53d84d11b37330a81f40`（= 第 1 轮复审对象；修复提交 `e97e15fb` + 补记 `b6be2591`） | `git log --oneline -5` |
-| worktree HEAD | ask 时点为 `f32693c7c6e6…`；本会话执行期间并发进程推进为 `0c7350af10df…`（record attempt-1 exact-SHA CI FAIL）——`f32693c7` = `b6be2591` + docs 补记（3 files ±9 行），`0c7350af` 再 + docs 记录（5 files，全 docs），已推送为 PR #928 head | `git rev-parse HEAD`（会话首末各一次）；`git diff --name-only b6be2591..f32693c7` / `f32693c7..0c7350af \| grep -v '^docs/'` 均零命中 |
-| 代码同一性 | `0b2e2d8a`（四 PR 合并完成点）→ `f32693c7`：`git diff --name-only 0b2e2d8a..f32693c7 \| grep -v '^docs/'` → **零命中**（20 files 全为 docs） | 本会话实跑；全部被审 SHA 的产品代码逐字节一致 |
-| 分支 / PR #928 | `integration/production-closure-20261109`；GitHub Draft、OPEN、head=`f32693c7`、CI-only（do not merge directly） | `gh pr view 928 --json state,isDraft,headRefOid` |
-| 四个源 PR | #922 / #923 / #924 / #926 全部 OPEN + Draft + `mergedAt=null`（#922 `mergeStateStatus=CLEAN` 为本会话观察值） | `gh pr view 922/923/924/926 --json state,isDraft,mergedAt` |
+| ask 指定 exact SHA | `52a58d4da7ec51423381510d5e19bff6425965b7` | `git -C $W rev-parse HEAD` → 逐字一致 |
+| worktree HEAD | 同上；`git status --short` 空（clean） | 本会话实跑 |
+| 分支 / PR #928 | `integration/production-closure-20261109`；`headRefOid = 52a58d4d`、OPEN、Draft（绿 CI 后仍未改 draft 状态，由人工门禁处理） | `gh pr view 928 --json headRefOid,state,isDraft`（会话首末各查一次，无漂移） |
+| 绿 CI | run **42611431690 attempt 2**，`head_sha=52a58d4d`，`run_started_at=2026-11-09T11:59:40Z`，`updated_at=12:07:30Z`，conclusion=**success** | `gh api repos/jnhu76/exam/actions/runs/42611431690`（本会话轮询至完成） |
+| 历史 FAIL run | 42607587186（e97e15fb）/ 42607941019（b6be2591）/ 42608435613（f32693c7）/ 42609620433 attempt 2（0c7350af）/ 42611431690 attempt 1（52a58d4d，REVIEW_RERUN_2 直读）——**全部保留** | `gh api repos/jnhu76/exam/actions/runs/<id>` ×4 本会话实查均 `failure` |
+| 四个源 PR | #922 / #923 / #924 / #926 全部 OPEN + Draft + `mergedAt=null` | `gh pr view 922/923/924/926 --json state,isDraft,mergedAt` |
 | master | `5140c3dd`，集成树未合并 | `git -C /home/hoo/Source/exam rev-parse HEAD` |
-| 受控树状态 | 更新本文件前干净（`git status --short` 空）；本文件更新为受控跟踪文件的未提交修改，属本 ask 指定产物，未 commit | `git status --short` |
-| 模式 | 调查/评审；除本 ask 指定文档外未改任何受控文件，未 commit/push/merge | — |
+| 受控树状态 | 更新本文件前 clean；本文件更新为受控跟踪文件的未提交修改，属本 ask 指定产物，未 commit | `git status --short` |
+| 模式 | 调查/评审；除本 ask 指定文档外未改任何受控文件，未 commit/push/merge/CI 触发（CI attempt 2 为并发恢复进程在 11:59:40Z 已启动的重跑，本会话仅观察取证） | — |
 
 ---
 
 ## 1. 输入材料（ask 给定 + 本会话实读）
 
-- **ask 给定**：第 1 轮 `FINAL_PRODUCT_ADJUDICATION.md`（本文件上一版）、`REVIEW_RERUN_1.md`、修复记录 `e97e15fb604f33e5fc8e99c8c547004f9b05149d`、CI FAIL (exit 1)、`SPEC.md` §7（§7.1 独立性 / §7.2 修复—复审闭环）、§8（合并前最终条件 / 合并顺序 / 合并后验证 / 文档收口）。
-- **本会话补充实读/实查**：`docs/standards/test-flakes.md`（OBS-2026-11-03-001 节与新签名小节，`:3318–3377`）、`apps/api/src/server.ts`、`apps/api/src/plugins/requestIdHeader.ts`、`packages/contracts/src/common.ts`、`apps/web/src/pages/exam/TakeExamPage.tsx`、`deploy/nginx/web.conf`、`apps/api/src/lib/proctorMonitoringService.ts`、`apps/api/src/routes/clientEvents.ts`、`docs/contracts/observability.md`、`FINAL_INTEGRATION_RECORD.md` §1/§7/§8。
-- **gh api / gh 实查**：runs 42607941019（exact SHA）、42608435613（HEAD）及其 jobs；check-run 129128580103 及其 annotations；`gh pr checks 928`；`gh issue view 930`、`gh issue view 878`；PR 922/923/924/926/928。
+- **ask 给定**：第 2 轮 `FINAL_PRODUCT_ADJUDICATION.md`（本文件上一版）、`REVIEW_RERUN_2.md`（NO_GO）、
+  修复记录（本会话零提交、零 push；HEAD=PR head=52a58d4d，并发进程提交；全部 FAIL 记录保留；根因为 GitHub 计费）、
+  CI FAIL (exit 1)（即 REVIEW_RERUN_2 记录的 attempt 1 状态）、`SPEC.md` §7（§7.1/§7.2）、§8（§8.1–8.4）。
+- **本会话补充实查**：`docs/standards/test-flakes.md` `:3354/:3368/:3370–3378`；`apps/api/src/server.ts:117/119`、
+  `apps/api/src/plugins/requestIdHeader.ts:24–38`、`apps/api/src/lib/proctorMonitoringService.ts:211/231`、
+  `packages/contracts/src/common.ts:83`、`apps/web/src/pages/exam/TakeExamPage.tsx:893–935`、
+  `apps/api/src/routes/clientEvents.ts:118`、`deploy/nginx/web.conf:49/65`；
+  `git diff 0b2e2d8a..52a58d4d | grep -v '^docs/'`、`git diff 8061d547..52a58d4d`（receipt 三文件）、
+  `sha256sum -c SHA256SUMS`、`FINAL_INTEGRATION_RECORD.md` FULL_CI/MERGE_STATUS 实读。
+- **gh api / gh 实查**：run 42611431690（attempt 2 全程轮询 + jobs 逐 job）、runs 42607587186/42607941019/42608435613/42609620433、
+  `gh pr checks 928`（attempt 1 期间 exit=1 → attempt 2 完成后 exit=0）、PR 922/923/924/926/928、Issue #930、#878。
 
 ---
 
 ## 2. Blocker 独立复核（不沿用上一轮结论）
 
-### 2.1 Blocker 1 — required CI 全绿：**未解决（决定性，外部条件）**
+### 2.1 Blocker 1 — required CI 全绿：**本会话实测解除**
 
-本会话命令与输出：
+时序证据（全部本会话实跑）：
 
-- `gh api 'repos/jnhu76/exam/actions/runs?head_sha=b6be2591dfe28b2fe17e53d84d11b37330a81f40'` → 唯一 run **42607941019**，`status=completed, conclusion=failure`。
-- `gh api repos/jnhu76/exam/actions/runs/42607941019/jobs` → `Static checks=failure`；`Build / API coverage / Web coverage / Package coverage / E2E (shard) / Production transport regression` 全部 `skipped`（6 个 required job 零执行）。
-- `gh api repos/jnhu76/exam/check-runs/129128580103` → `{name:"Static checks", head_sha:"b6be2591dfe28b2fe17e53d84d11b37330a81f40", conclusion:"failure"}`（check-run 确属 exact SHA）；`…/annotations` → 原文：*"The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"*。
-- 当前 HEAD：`gh api '…/runs?head_sha=f32693c7c6e6…'` → 唯一 run **42608435613**，`failure`；jobs 明细同签名（Static checks failure + 6 required skipped）。
-- 会话末新 HEAD：`gh api '…/runs?head_sha=0c7350af10df…'` → run **42609620433**，`failure`（本会话实查；并发 docs 提交 push 后的又一次 FAIL，同一不变量再证）。
-- `gh pr checks 928` → `Static checks fail (1s)` + 7 项 `skipping`，**exit=1**。
-- `gh issue view 930` → **OPEN**（billing/spending limit，2026-11-09）。
+1. 会话初查：`gh api 'repos/jnhu76/exam/actions/runs?head_sha=52a58d4da7ec51423381510d5e19bff6425965b7'`
+   → `total_count=1`，run 42611431690 **attempt 2、in_progress**（11:59:40Z 启动；attempt 1 为 REVIEW_RERUN_2
+   直读的计费 failure）——外部计费已恢复，并发恢复进程在 exact SHA 上触发了重跑。
+2. 初查时 `gh pr checks 928` → `Static checks pass`、`Build pending`、其余 skipping，**exit=8**（进行中）。
+3. 逐 job 轮询（12:05–12:08）：`Static checks=success`（1m28s）、`Build=success`（50s）、
+   `API coverage=success`（5m25s）、`Web coverage=success`（4m34s）、`Package coverage=success`（2m11s）、
+   `Production transport regression=success`（2m45s）、`E2E (shard 1/2)=success`（3m35s）、
+   `E2E (shard 2/2)=success`（3m28s）。
+4. 完成取证：`gh api repos/jnhu76/exam/actions/runs/42611431690` →
+   `{head_sha:"52a58d4da7ec5142…", status:"completed", conclusion:"success", run_attempt:2, updated_at:"2026-11-09T12:07:30Z"}`。
+5. 终态 `gh pr checks 928` → **8 项 pass、仅 CodeRabbit skipping，exit=0**。
+6. 无新提交进入集成线：PR #928 headRefOid 复查仍为 `52a58d4d`；master 仍 `5140c3dd`。
 
-判定：SPEC §7.2「required CI 失败必须 BLOCKED」/ §8.1.7「最终集成树通过 required CI」在 `b6be2591`（及一切集成分支 SHA）上**从未满足**：0 success required job、0 绿 run。根因是外部 GitHub 账户计费（#930 OPEN），任何代码/文档改动不能修复。**BLOCKED 维持。**
+判定：SPEC §8.1.7「最终集成树通过 required CI」与 §7.2 的 BLOCKED 前置（required CI 失败）
+在 ask 指定 exact SHA 上**已不再成立**。该绿 run 为同一 SHA 上 attempt 1 失败后的标准 GitHub re-run：
+无新 SHA、无 force push、无 skip/only/timeout 放宽/隐藏失败——7 个 required job 全部真实执行并 success
+（时长 50s–5m25s 可复核）。第 2 轮写回的解除条件逐项满足：✅ exact SHA、✅ clean tree（worktree 与 CI 检出均 clean）、
+✅ 7 required job 全 success、✅ FAIL 记录保留（§2.3）、✅ 解除后由独立裁决（本文件）按 §7.2 增量复审。
+计费根因事实恢复：attempt 2 的 Static checks 真实执行 1m28s 并 success（attempt 1 为 3 秒计费失败签名）。
+#930 仍 OPEN（`closedAt=null`，`updatedAt` 停留在 11:16:40Z——早于恢复时刻），属 Issue 卫生项，见 §6。
 
-诚实性正面确认：`FINAL_INTEGRATION_RECORD.md` §7/§1 在 HEAD 上如实声明 `FULL_CI = FAIL`、`MERGE_STATUS = BLOCKED`、「每次新的 push 都会在同一外部条件下触发新的 FAIL run」、「不声称 CI 通过、不声称已合并、不声称已发布」（实读）；`f32693c7` 把 run 清单固化为时间无关不变量（`REQUIRED_CI_FAILURES = 4+`，含 42608435613）。**无虚假绿灯。**
+### 2.2 Blocker 2 — flake/occurrence 登记面：**维持闭合（本会话实读复验）**
 
-### 2.2 Blocker 2 — flake/occurrence 登记面：**已解决**
+第 2 轮已闭合，本会话在 `52a58d4d` 上逐项重验（第 1 轮 blocker 2、REVIEW_RERUN_2 §4 同口径）：
 
-修复载体唯一：`docs/standards/test-flakes.md`（`e97e15fb` 内 +11 行；`b6be2591`/`f32693c7` 未再触该文件）。本会话逐项实读验证：
+- `test-flakes.md:3368`：run 42483066387 登记为同签名 occurrence（`:568` raw log 三重复核）；
+- `:3370–3374`：新签名小节在场——`:555 toBeFocused`（`Received: inactive`，timeout 5000ms，与 `:568` 同根因未证明）；
+- `:3375–3376`：A3-F7 `investigation-ui-acceptance.spec.ts:341` 独立 occurrence（2×`1 failed / 9 passed`、
+  pr-865 控制实验 EXIT=0、条件敏感归属）；F-04 低优先观察（未复现，不定级）；
+- `:3354`：`CASE_ID = NONE`（不强行归并）；`:3378`：结尾声明 #878 仍 OPEN / DEFER、
+  `ROOT_CAUSE_CONFIDENCE = HYPOTHESIS`、登记不替代 #878 验收、不表述为已修复。
+- `gh issue view 878` → **OPEN**（本会话实查）。
+- 夹具残渣：`grep -rn 'req-forged-prt-0001\|req-cross-org-' apps packages` → **exit=1，零命中**。
 
-| 子项 | 落点（本会话实读行号） | 验证结果 |
-| --- | --- | --- |
-| (a) run 42483066387 登记为同签名 occurrence | `test-flakes.md:3368` | ✓ HEAD `872a244f`、`conclusion=failure`、仅 shard 2/2 失败、raw log 命中 `:568:31 toBeGreaterThan / Received: 0 / --shard=2/2`；「同族待核」已解除 |
-| (b1) 新签名 `:555 toBeFocused` | `test-flakes.md:3370,3374` | ✓ 小节「新签名 occurrence（条件敏感非确定性，均未登记、均未闭合）」；`Received: inactive`、timeout 5000ms、`3 did not run`、证据路径、与 `:568` 同族但同根因未证明，如实 |
-| (b2) 新签名 A3-F7 `investigation-ui-acceptance.spec.ts:341` | `test-flakes.md:3375` | ✓ 明确为不同 spec 文件的独立 occurrence；2 次 `1 failed / 9 passed`、pr-865 @ `9dd1d5f4` 控制实验 EXIT=0、M3/M4/M5 通过、条件敏感非确定性归属、精确触发路径未定位 |
-| (b3) `CASE_ID` 保持 NONE（不强行归并） | `:3370` 正文 | ✓ 「不并入 CASE（`CASE_ID` 仍 NONE）」 |
-| (c) F-04 web 单测一次性失败 → 低优先观察 | `:3376` | ✓ 「本轮未复现，不定级」 |
-| (d) 结尾声明：#878 OPEN/DEFER、无 fixed 表述 | `:3377` | ✓ 「#878 仍 OPEN / DEFER、…无 post-fix 完整权威绿灯…登记不替代 #878 验收，也不替代 required CI 绿灯；本条目不表述为已修复」 |
+SPEC §3.6「Flake 与合并的关系」条件现已满足：相关 flake 登记为有证据独立遗留问题（#878 / OBS-2026-11-03-001）、
+已被论证与本轮变更无关（受害文件在四 PR 分支零改动 + 控制实验），且**新的完整权威 CI 门禁最终通过**
+（§2.1）——合并门禁不受影响，继续产品合并评估。#878 的 Acceptance 收口（含 ledger 中
+「无 post-fix 完整权威绿灯」语句的过时化，见 §2.4）与 4 处固定 150ms 残留为后续工作，非合并 blocker。
 
-结构检查：新小节是既有 `OBS-2026-11-03-001`（`:3321`）节内的小节扩展，**单一登记权威未被复制**（grep `OBS-2026-11-03-001` → `:257/:1133/:3321` 既有引用，无第二套机制）。来源诚实：`:3373` 明确写「本轮交付编辑**未在本会话复跑**这两条失败，登记依据为下列给定证据材料」——不把转述冒充复现。状态一致：`gh issue view 878` → **OPEN**（本会话实查）。反向验证：第 1 轮时 `grep '555\|toBeFocused'` 为 0 命中，本会话同 grep 命中 `:3374` 等处——登记缺口确实闭合。
+### 2.3 FAIL 记录保留与诚实性
 
-结论：第 1 轮 blocker 2 的「两条新签名 + 一条补登 + F-04 观察 + 不违规表述」各子项**全部落地且来源诚实**，登记信息面按 SPEC §7.2 闭合。其最终关闭前置（#878 Acceptance 或其 defer 依赖的完整权威绿灯）与 blocker 1 耦合，不再是独立 blocker。
+- 本会话逐一查询：42607587186（head `e97e15fb`）/ 42607941019（`b6be2591`）/ 42608435613（`f32693c7`）/
+  42609620433（`0c7350af`，attempt 2）均 `conclusion=failure`，未删除；42611431690 本身即含 attempt 1
+  失败史（GitHub re-run 语义保留 attempt 记录；REVIEW_RERUN_2 §1 直读其 failure 与计费注释）。
+  **无历史 FAIL 记录被清除或改写。**
+- `FINAL_INTEGRATION_RECORD.md` 实读：`:59 FULL_CI = FAIL`、`:73 MERGE_STATUS = BLOCKED`、
+  `:145/:158/:193/:225` 重申不声称 CI 通过/未合并/未发布。这些语句书写于绿 run 之前，作为该时点事实保留；
+  其「当前状态」语义已过时（见 §2.4），不构成虚假绿灯（方向是低估而非虚报）。
+- `sha256sum -c SHA256SUMS`（`docs/research/exam-production-integration-closure/` 下实跑）→ 全部 OK，exit=0。
 
-### 2.3 回归 / 削弱 / 双轨检查
+### 2.4 回归 / 削弱 / 双轨检查与 ledger 时态说明
 
-- `git diff --name-only 0b2e2d8a..f32693c7 | grep -v '^docs/'` → 零命中：两轮修复（`e97e15fb`、`b6be2591`、`f32693c7`）**零代码改动**，生产代码、测试断言、授权边界、保存协议无从削弱；`test-flakes.md` 改动方向是新增登记（事实面收紧），未放宽任何门槛。
-- SaveAnswer receipt 契约面：`git diff 8061d547..f32693c7 -- packages/contracts/src/attempt.ts packages/exam-engine/src/answerProtocol.ts apps/api/src/routes/attempts.candidate.ts` → **空 diff**（本会话实跑），receipt 语义 UNCHANGED 维持。
-- 无重复实现/新双轨（§2.2 结构检查）；无虚假绿灯记录（§2.1 诚实性确认）。
-
-### 2.4 第 1 轮复审遗留说明（如实转记）
-
-`e97e15fb` 在 in-scope 的 `test-flakes.md` 之外携带约 2150 行 docs（ADR-025 附录、security-model、observability 契约、save-failure-evidence、7 份评审与 6 份交付记录入库）。REVIEW_RERUN_1 §4 已确认其全部 docs-only，但**未复审其技术内容**，本会话亦未逐行复审——如实记为残余，不构成背书，也不构成 blocker。其中可独立验证的两项本会话抽查通过：`observability.md:34` 路由示例已改为 `:attemptId`（第 1 轮 residual 闭合）；Save/retry/UNKNOWN 语义新增段与 `TakeExamPage.tsx` 成功判定权威一致。
+- `git diff --name-only 0b2e2d8a..52a58d4d | grep -v '^docs/'` → **exit=1，零命中**：四 PR 合并完成点以来
+  全部为 docs（含本文件与登记面），生产代码、测试断言、授权边界、保存协议零改动；第 1/2 轮全部
+  代码级证据对 `52a58d4d` 逐字节有效。
+- `0c7350af..52a58d4d` delta = 4 个 docs/证据文件（与 REVIEW_RERUN_2 §4 一致），零代码。
+- SaveAnswer receipt 契约面：`git diff --quiet 8061d547..52a58d4d -- packages/contracts/src/attempt.ts
+  packages/exam-engine/src/answerProtocol.ts apps/api/src/routes/attempts.candidate.ts` → exit=0（空 diff），
+  receipt 语义 **UNCHANGED**。
+- **ledger 时态残余**（非 blocker）：绿 CI（42611431690 attempt 2）发生后，分支内
+  `FINAL_INTEGRATION_RECORD.md` 的 `FULL_CI = FAIL`/`MERGE_STATUS = BLOCKED`（§2.3）与
+  `test-flakes.md:3378`「无 post-fix 完整权威绿灯」已相对当前事实过时。这些语句在书写时点为真、
+  方向为低估；若以新 docs 提交更新它们将产生新 SHA 并要求新 CI。处置：随 SPEC §8.4 收口（四 PR
+  按 §8.2 逐个并入 master 后的文档同步）一并改写为引用本绿 run，不为此单开新集成提交、不阻塞合并门禁。
 
 ### 2.5 本会话未运行项（SKIPPED，不冒充已跑）
 
-本会话**未**重跑第 1 轮的 307 个定向测试、`sha256sum -c SHA256SUMS`、浏览器级 E2E（M3/M4/M5）、`pnpm verify` / 全量 `pnpm test` / 全量 E2E。理由：`0b2e2d8a..f32693c7` 零非 docs 文件（§2.3），第 1 轮测试证据作用于逐字节相同的代码；CI 是本 gate 的权威信号且其状态已由 `gh api` 直接取得。契约字段的当前依据 = 本会话权威代码点抽查（§3 逐行标注）+ 第 1 轮对相同字节码的实跑记录（第 1 轮文件 §3.1，`reviews/` 与 Git 历史留档）。
+本会话**未**重跑第 1 轮的 307 个定向测试、浏览器级 M3/M4/M5、`pnpm verify` / 全量 `pnpm test` / 本地 E2E。
+理由与第 2 轮相同且更强：`0b2e2d8a..52a58d4d` 零非 docs 文件（§2.4），且 required CI——本 gate 的权威信号——
+已在 exact SHA 上完整绿（§2.1，覆盖 Static checks / Build / 3 coverage lanes / Production transport /
+2 E2E shards）。SPEC §6.1 的「完整执行真实 CI」由该 run 承载；本地重跑不构成增量证据。
 
 ---
 
 ## 3. 全局一致性裁决（12 契约字段，最终值）
 
-> 每行标注：本会话权威代码点抽查（实读行号）+ 第 1 轮在逐字节相同代码上的实跑证据（307 tests / 84 PG tests / 浏览器级 M3/M4/M5，见第 1 轮 §3.1–3.2）。代码零改动 ⇒ 字段值不变。
+> 每行标注：本会话在 `52a58d4d` 上的权威代码点抽查（实读行号）+ 第 1 轮在逐字节相同代码上的实跑证据
+> （307 定向测试 / 84 PG tests / 浏览器级 M3/M4/M5，第 1 轮文件 §3.1–3.2 留档）+ 本会话 exact SHA 绿 CI。
 
-| # | 契约字段 | 最终值 | 本会话抽查点 | 第 1 轮实跑证据 |
+| # | 契约字段 | 最终值 | 本会话抽查点（52a58d4d 实读） | 第 1 轮实跑证据 + 绿 CI |
 | --- | --- | --- | --- | --- |
-| 1 | uuidGlobalContract | **PASS** | 夹具残渣 `grep -rn 'req-forged-prt-0001\|req-cross-org-' apps packages` → **0 命中**；`SHA256SUMS` 归档 | 318/318 归档校验；跨组织夹具修复 `9dd1d5f4` 经 `proctorMonitoring.crossOrg` 实跑 |
-| 2 | uuidTestFixtures | **PASS** | 同上 grep 0 命中 | 形状门控负例 21/21（`proctorMonitoringService.test.ts`）；crossOrg 404/防枚举/零计数实跑 |
-| 3 | serverIdAuthority | **PASS** | `server.ts:117` `genReqId: () => randomUUID()`、`:119` `requestIdHeader: false`（实读） | `server.requestId.test.ts` 2/2（生产 boot：伪造双 header 被忽略、reqId 全 v4） |
-| 4 | clientClaimIsolation | **PASS** | `proctorMonitoringService.ts:211` `REQUEST_ID_UUID_SHAPE` 门控（实读）；`TakeExamPage.tsx:894–898` 仅 postWithMeta 元数据（实读） | crossOrg（合法 UUID claim 不开跨组织可见性）+ 21/21（prose/嵌入 UUID/32KB 全丢弃） |
-| 5 | requestIdCorrelation | **PASS** | `requestIdHeader.ts` root-scope 无第二 mint（实读）；`common.ts:83` `requestId` 嵌套 `error` 内（实读） | wire 7/7 + status matrix（200/204/401/403/409/500 header==envelope）+ WARN `reqId === header` |
-| 6 | saveAnswerEndToEnd | **PASS** | `TakeExamPage.tsx:898` `postWithMeta` 单一消费点、成功分支只认 `accepted`（实读） | 引擎 55/55 + PG 53/53 + `requestIdSaveRejection` + 浏览器级 M4（CONFLICTING_PAYLOAD 全链）/M5 |
-| 7 | saveAnswerConcurrency | **PASS** | `8061d547..f32693c7` 引擎/路由零改动（§2.3） | deadline 权威 vs 并发 closeAt、幂等回放零写入、回放 receipt（PG 并发套件 53/53） |
-| 8 | saveAnswerReceiptSemantics | **UNCHANGED** | `git diff 8061d547..f32693c7` 于 attempt.ts / answerProtocol.ts / attempts.candidate.ts → 空 diff（本会话实跑） | 与第 1 轮判定一致 |
-| 9 | routePrivacy | **PASS** | `clientEvents.ts:118` `route: projectClientEventRoute(event.route)`（实读） | 封闭集不变量 + fuzz 60/60 + SPA 词表 drift guard 4/4 |
-| 10 | legacyRouteReadPrivacy | **PASS** | 读侧再投影方向 fail-deny（第 1 轮 diff 证据；`normalizeRouteForStorage` 已删） | 读侧再投影测试（clientEventRoute 60/60 覆盖 ingest+read 双边界） |
-| 11 | nginxAccessPrivacy | **PASS** | `web.conf:49` `log_format exam_privacy` 固定 `$exam_route`、禁 `$request`/`$request_uri`/Referer/Cookie（实读） | `nginxWebConf.test.ts` 7/7（HTTPS 模板去注释钉住） |
-| 12 | nginxErrorDiagnostics | **PASS** | `web.conf:65` `error_log … error` + Decision A 注释（实读） | 同上 7/7；Owner Decision A 边界四处一致 |
+| 1 | uuidGlobalContract | **PASS** | 夹具残渣 grep → exit=1 零命中（§2.2）；SHA256SUMS 归档自洽 | 318/318 归档校验；绿 CI 全套通过 |
+| 2 | uuidTestFixtures | **PASS** | 同上 grep 零命中 | 形状门控负例 21/21；crossOrg 404/防枚举/零计数 |
+| 3 | serverIdAuthority | **PASS** | `server.ts:117` `genReqId: () => randomUUID()`、`:119` `requestIdHeader: false` | `server.requestId.test.ts` 2/2；绿 CI |
+| 4 | clientClaimIsolation | **PASS** | `proctorMonitoringService.ts:211/231` `REQUEST_ID_UUID_SHAPE` 门控；`TakeExamPage.tsx:893–898` 仅 postWithMeta 元数据 | crossOrg + 21/21；绿 CI |
+| 5 | requestIdCorrelation | **PASS** | `requestIdHeader.ts:24–38` 仅盖 `request.id` 章、root-scope 无第二 mint；`common.ts:83` `requestId` 嵌套 error 内 | wire 7/7 + status matrix；绿 CI |
+| 6 | saveAnswerEndToEnd | **PASS** | `TakeExamPage.tsx:898` `postWithMeta` 单一消费点、`:915/:935` 成功分支只认 `accepted` | 引擎 55/55 + PG 53/53 + 浏览器级 M4/M5；绿 CI |
+| 7 | saveAnswerConcurrency | **PASS** | `8061d547..52a58d4d` 引擎/路由零改动（§2.4） | deadline 权威、幂等回放零写入、PG 并发 53/53；绿 CI |
+| 8 | saveAnswerReceiptSemantics | **UNCHANGED** | receipt 三文件 `git diff --quiet` → exit=0 空 diff（§2.4） | 与第 1/2 轮判定一致 |
+| 9 | routePrivacy | **PASS** | `clientEvents.ts:118` `route: projectClientEventRoute(event.route)` | 封闭集 + fuzz 60/60 + drift guard 4/4；绿 CI |
+| 10 | legacyRouteReadPrivacy | **PASS** | 读侧再投影方向 fail-deny（`normalizeRouteForStorage` 已删，第 1 轮 diff 证据） | 读侧再投影测试 60/60 双边界；绿 CI |
+| 11 | nginxAccessPrivacy | **PASS** | `web.conf:49` `log_format exam_privacy` 固定 `$exam_route`、无 `$request`/`$request_uri`/Referer/Cookie | `nginxWebConf.test.ts` 7/7；绿 CI |
+| 12 | nginxErrorDiagnostics | **PASS** | `web.conf:65` `error_log … error` + `:33` Decision A 注释 | 同上 7/7；绿 CI |
 
-无 N/A 项；12 字段与第 1 轮完全一致（11 PASS + receipt UNCHANGED）。
+无 N/A 项；12 字段与第 1/2 轮完全一致（11 PASS + receipt UNCHANGED），本会话全部抽查命中、零漂移。
 
 ---
 
 ## 4. 逐 PR disposition（SPEC §4.2）
 
-> 口径同第 1 轮：disposition 是逐 PR 内容判断，与全局 verdict（BLOCKED，外部门禁驱动）正交。两轮修复零代码改动，四 PR 内容与第 1 轮被审内容逐字节一致，第 1 轮内容级结论全部维持。
+> 口径同第 1/2 轮：disposition 是逐 PR 内容判断。四 PR 内容自 `0b2e2d8a` 起冻结于集成树（零代码 delta），
+> 且其组合产物已在 exact SHA 上通过完整 required CI。
 
-- **#922 — KEEP_AND_MERGE**：审计证据入库（318/318 归档校验第 1 轮实跑复算）；纯 docs + `.prettierignore`，零运行时代码；归档 sanitization 边界为已接受 residual。
-- **#923 — KEEP_AND_MERGE**：route 封闭词表投影（ingest+read 双边界单一 `projectClientEventRoute`、fail-closed、历史免迁移）+ requestId 形状 gate；跨组织夹具修复向真实协议收敛，残渣 grep 本会话 0 命中（§3 字段 1/2）。其历史 CI 红属 flake/计费外因。
-- **#924 — KEEP_AND_MERGE**：200 `accepted:false` 业务拒绝的客户端可见关联载体 + fp-wrap CORS 修复；`postWithMeta` 单一消费点本会话实读（§3 字段 6）。`getWithMeta` 零生产调用方为 low residual。
-- **#926 — KEEP_AND_MERGE**：Pino 请求行去 raw URL（`routeTemplateOf` 单一权威）+ nginx `exam_privacy` access 格式 + error 级诊断按 Decision A 恢复；`web.conf` 与 `observability.md` 本会话实读一致（§3 字段 11/12）。nginx live 故障注入未重放为已接受 residual。
+- **#922 — KEEP_AND_MERGE**：审计证据入库（318/318 归档校验；本会话 `sha256sum -c` 复算 OK）；纯 docs + `.prettierignore`。
+- **#923 — KEEP_AND_MERGE**：route 封闭词表投影（ingest+read 双边界单一 `projectClientEventRoute`、fail-closed、
+  历史免迁移）+ requestId 形状 gate；跨组织夹具修复向真实协议收敛，残渣 grep 零命中（§2.2）。
+- **#924 — KEEP_AND_MERGE**：200 `accepted:false` 的客户端可见关联载体 + fp-wrap CORS 修复；
+  `postWithMeta` 单一消费点本会话实读（§3 字段 6）。`getWithMeta` 零生产调用方为 low residual。
+- **#926 — KEEP_AND_MERGE**：Pino 请求行去 raw URL（`routeTemplateOf` 单一权威）+ nginx `exam_privacy` access 格式
+  + error 级诊断按 Decision A 恢复；`web.conf:49/:65` 本会话实读（§3 字段 11/12）。
+  nginx live 故障注入未重放为已接受 residual。
 
 ---
 
 ## 5. verdict 与 blockers
 
-**verdict = BLOCKED**。唯一驱动因素：**required CI 在集成分支任何 SHA 上从未完成**（SPEC §7.2 / §8.1.7 明文；本会话在 `b6be2591` 与 `f32693c7` 上分别以 `gh api` 独立复核，`gh pr checks 928` = FAIL exit 1，#930 OPEN）。第 1 轮 blocker 2 已闭合（§2.2）；产品代码面 12 契约字段 11 PASS + receipt UNCHANGED（§3）。
+**verdict = READY_FOR_HUMAN_MERGE**。第 1 轮两项 blocker：blocker 2 已闭合并维持（§2.2）；
+blocker 1（required CI）已于本会话在 ask 指定 exact SHA `52a58d4d` 上实测解除——
+run 42611431690 attempt 2 全绿（§2.1），FAIL 记录全保留（§2.3），零代码改动（§2.4），
+12 契约字段 11 PASS + receipt UNCHANGED（§3）。**无剩余 blocker。**
 
-### blockers（仍存在，写回）
+### blockers（写回：空——无确认的合并前必改项）
 
-1. **owner=ci — required CI 在 exact SHA 上从未完成（外部 GitHub 账户计费，#930 OPEN）**
-   - summary：ask 指定 exact SHA `b6be2591` 上唯一 run 42607941019 为 failure（Static checks 因 billing 未启动、6 个 required job 全部 skipped，check-run 129128580103 注释原文已核）；其上已推送 HEAD `f32693c7` 的 run 42608435613 同签名 failure；`gh pr checks 928` exit=1；0 绿 run。
-   - evidence：§2.1 全部命令与输出（本会话实跑）；`FINAL_INTEGRATION_RECORD.md` §7 如实声明 FAIL/BLOCKED；Issue #930 OPEN（updatedAt 2026-11-09T11:16Z）。
-   - fix：#930 计费恢复后，在最终 exact SHA 的 clean tree 重跑完整 CI（Static checks + Build + 3 coverage lanes + Production transport + 2 E2E shards 全部 success）；保留全部 FAIL 记录；取得绿 CI 后按 SPEC §7.2 做增量独立复审（期间若有新提交进入集成线则产生新 SHA）。本地 `pnpm verify`/`pnpm e2e` 绿灯不替代 required CI。
+（无）
 
-> 不列为 blocker 的已确认项：#878 处理（登记面已闭合，剩余 Acceptance/defer 与 blocker 1 耦合，非独立 blocker）；`e97e15fb` 约 2150 行 out-of-scope docs 内容未逐行复审（docs-only 已证实，REVIEW_RERUN_1 §4 同口径，残余见 §6）；本文件本次更新未提交（本 ask 指定产物，须随 closeout 提交进入受控历史，并入合并条件而非本轮 blocker）。
+### 人工合并门禁（非 blocker；AGENTS.md §7 / SPEC §8.2）
+
+1. 四 PR 逐个转为 ready for review 并按 `#922 → #923 → #924 → #926` 顺序 individual merge（每次合并后刷新 master、
+   验证依赖测试；分支保护按仓库规则执行）；
+2. #928 为 CI-only 集成验证分支，**不直接合并**；
+3. 合并后按 SPEC §8.3 跑 master smoke（SaveAnswer、correlation、cross-org、route projection、Pino、nginx、
+   retention、production build，覆盖四 PR 交互）；
+4. 按 SPEC §8.4 收口：本文件与 `FINAL_INTEGRATION_RECORD.md` / `test-flakes.md` 的时态语句（§2.4）随 closeout
+   提交进入受控历史，引用绿 run 42611431690 attempt 2；CHANGELOG / implementation-status 按 DEFER trace 落地；
+5. #930 在计费稳定确认后关闭/更新（卫生项）。
 
 ---
 
 ## 6. residualRisks（接受 / 延期）
 
-**已闭合（相对第 1 轮）**：`observability.md:34` 路由示例参数名——`e97e15fb` 已改为 `:attemptId`（本会话实读）；两条新签名 occurrence 登记缺口——已闭合（§2.2）。
+**已闭合（相对第 2 轮）**：required CI 在 exact SHA 上从未完成 → 已解除（§2.1）。
 
 **接受（有 Owner 决策或边界声明）**
-- nginx error log 携带 raw request line：Owner Decision A 显式接受，web.conf 注释 / observability.md / operations / 测试四处一致；`INFRA_LOG_ACCESS` = NOT_VERIFIED。
-- #878 几何 flake：Owner defer；`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS` 不冒充 CAUSALLY_PROVEN；`:555`/`:341` 同根因未证明、A3-F7 精确触发路径未定位（登记在案，条件画像留待下轮）。
-- 429 状态路径 NOT_TESTED；header 在传输边界不可携带——文档声明边界，未做故障注入。
+- nginx error log 携带 raw request line：Owner Decision A 显式接受，web.conf 注释 / observability.md /
+  operations / 测试四处一致；`INFRA_LOG_ACCESS` = NOT_VERIFIED。
+- #878 几何 flake：Owner defer；`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS` 不冒充 CAUSALLY_PROVEN；
+  `:555` 与 `:568` 同根因未证明、A3-F7 精确触发路径未定位。绿 CI 中 2 个 E2E shard 全过（本轮未复发），
+  条件敏感非确定性风险在合并后继续由 #878 跟踪；SPEC §3.6 允许此形态继续产品合并评估。
 - #922 归档含已接受的主机标识类别与合成凭据；发布/共享前需 sanitization。
-- 性能：未重放基准；结构性核查（requestIdHeader 仅写响应头、成功路径无新增写）无新增每请求成本的信号。
+- 429 状态路径 NOT_TESTED；header 在传输边界不可携带——文档声明边界，未做故障注入。
+- 性能：未重放基准；结构性核查（requestIdHeader 仅写响应头、成功路径无新增写）无新增每请求成本信号。
 
 **延期（非产品缺陷、低危清理或留痕 DEFER）**
-- OpenAPI 401/403 顶层 `requestId`（203 处）：master 预存制品漂移，运行时正确，follow-up 修 `swagger.ts` fallback 并重新生成 `openapi.json`。
+- ledger 时态语句过时（`FULL_CI = FAIL` 等 + `test-flakes.md:3378`「无权威绿灯」）：随 §8.4 closeout 改写
+  （§2.4），不为此新开集成提交。
+- OpenAPI 401/403 顶层 `requestId`（203 处）：master 预存制品漂移，运行时正确，follow-up 修 `swagger.ts`
+  fallback 并重新生成 `openapi.json`。
 - `getWithMeta` 零生产调用方：最终 master 收口时删除或取得 Owner 显式授权。
-- P1 web 单测 `req-*` 模拟夹具残渣：按 UUID_FIXTURE_RECONCILIATION §3 下次触碰文件时统一（client 不校验形状，不导致集成红）。
-- `e97e15fb` 约 2150 行 out-of-scope 交付 docs：docs-only 已证实（REVIEW_RERUN_1 §3 + 本会话 `grep -v '^docs/'` 零命中），技术内容未逐行复审，不构成背书。
-- 合并路径：四 PR 按序 individual merge（`#922 → #923 → #924 → #926`，SPEC §8.2）；#928 CI-only 不直接合并；本文件更新须随 closeout 提交进入受控历史；合并后按 §8.3 跑 master smoke；CHANGELOG / implementation-status 按 DEFER trace 在最终 master merge 落地（§8.4）。
-- 本轮未运行清单：见 §2.5（307 定向测试 / sha256sum / 浏览器级 E2E / verify / 全量 lint 等均以代码逐字节同一 + 第 1 轮记录为依据，SKIPPED 如实）。
+- P1 web 单测 `req-*` 模拟夹具残渣：按 UUID_FIXTURE_RECONCILIATION §3 下次触碰文件时统一。
+- `e97e15fb` 约 2150 行 out-of-scope 交付 docs 技术内容未逐行复审（docs-only 已证实，第 1/2/3 轮同口径），不构成背书。
+- #878 Acceptance 收口（4 条未勾选、4 处固定 150ms 残留）与 #930 关闭：合并后跟进。
+- 本轮未运行清单：见 §2.5。
 - 人工门禁：merge 属 AGENTS.md §7 人工门禁；READY_FOR_HUMAN_MERGE 仅表示进入人工合并门禁；本轮不执行任何 merge/push/commit。
 
 ---
 
 ## 7. 结论
 
-第 1 轮的两项 blocker 中，**blocker 2（flake/occurrence 登记面）已按合同闭合**且无回归、无虚假绿灯、无双轨；**blocker 1（required CI）未解决**，且为本轮唯一剩余阻塞——其先决条件（#930 billing 恢复）是外部账户条件，代码与文档侧已无未闭合工作。产品代码自 `0b2e2d8a` 起逐字节未变，12 契约字段维持 11 PASS + `SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`。billing 恢复 → 最终 exact SHA clean tree 完整绿 CI → 按 §7.2 增量复审 → 台账前置（#878 defer 所依赖的权威绿灯）随之成立后，四个 KEEP_AND_MERGE 进入人工合并门禁（按 `#922 → #923 → #924 → #926` 顺序，SPEC §8.2/§8.3 复验）。
+第 2 轮唯一剩余 blocker（required CI 在集成分支任何 SHA 上从未完成）已在本会话实测解除：外部 GitHub 计费恢复后，
+exact SHA `52a58d4d` 上的标准重跑（run 42611431690 attempt 2）取得 7 个 required job 全 success 的完整绿 CI，
+历史 FAIL 记录全部保留，无任何门禁放宽。产品代码自 `0b2e2d8a` 起逐字节未变，12 契约字段维持
+11 PASS + `SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`；flake/occurrence 登记面闭合且 #878 诚实保持 OPEN/DEFER。
+四个 PR 均为 KEEP_AND_MERGE，无剩余 blocker，进入人工合并门禁：按 `#922 → #923 → #924 → #926` 顺序
+individual merge，#928 不直接合并，合并后按 §8.3 复验 master、按 §8.4 完成文档收口。
 
-— 裁决员（第 2 轮），2026-11-09，exact SHA `b6be2591`（会话期间 HEAD 由 `f32693c7` 推进至 `0c7350af`，两次推进均 docs-only 已实证；代码面结论对其逐字节成立）
+— 裁决员（第 3 轮），2026-11-09，exact SHA `52a58d4da7ec51423381510d5e19bff6425965b7`
+（绿 CI run 42611431690 attempt 2 于本会话 12:08:12Z 完成，本会话全程只读观察 + 本文件写回，未 commit）

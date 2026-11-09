@@ -1,10 +1,10 @@
 # PRODUCT_BEHAVIOR_MATRIX — 四 PR 集成后的全局产品行为矩阵
 
 - 状态：**最终交付文档**（SPEC §4.1 / §9 交付物 5）。只读记录当前集成树的 as-built 行为，不修改产品代码。
-- 任务给定的 exact 集成 SHA：`a5df2c90ace6366e69c951e6660dc268327b6e8a`（本会话 `git rev-parse HEAD` 实查一致；tree `736a38f6e37f8434a87a27594701c95096152f53`，父提交 `0b2e2d8a1653ebba59326517ec2fdc6b4c7cf4bc` = 四 PR 合并完成点）。两 SHA 的产品代码逐字节一致（唯一差异为 2 个 `.md` 文档提交）。
-- 分支 / PR：`integration/production-closure-20261109` → Draft PR #928（CI-only，do not merge directly）；本会话 `gh pr view 928` 实查 `state=OPEN, isDraft=true, mergedAt=null, headRefOid=a5df2c90…`。
-- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（本会话观察到 18:46「第 3 轮」与 18:57「基于四份 §7 独立评审」两版并发写入，**全部裁决字段一致**）：**verdict = BLOCKED**（required CI FAIL，外部 GitHub 计费），四个 PR 均 **KEEP_AND_MERGE**（内容判断，与全局门禁正交），产品运行时契约 **全部 PASS + `SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`**。
-- 本会话实查：`gh pr checks 928` → `PR_CHECKS_EXIT=1`；head_sha 唯一 run `42593850473` `conclusion=failure`；success-run 计数 `0`；四个源 PR #922/#923/#924/#926 全 `OPEN / isDraft=true / mergedAt=null`；master `5140c3dd…`；`git merge-base --is-ancestor a5df2c90 master` → exit 1（未合并）。**未合并、未发布。**
+- 任务给定的 exact 集成 SHA：`52a58d4da7ec51423381510d5e19bff6425965b7`（本轮收口时点 = worktree HEAD = PR #928 headRefOid；本会话 `git rev-parse HEAD` 实查一致）。自四 PR 合并完成点 `0b2e2d8a1653ebba59326517ec2fdc6b4c7cf4bc` 起的全部演进（含早期收口时点 `a5df2c90…`）均为纯 docs 提交，产品代码逐字节一致；本矩阵全部代码锚点对该代码树有效。
+- 分支 / PR：`integration/production-closure-20261109` → Draft PR #928（CI-only，do not merge directly）；本会话 `gh pr view 928` 实查 `state=OPEN, isDraft=true, mergedAt=null, mergeStateStatus=CLEAN, headRefOid=52a58d4d…`。
+- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（**第 3 轮**，2026-11-09）：**verdict = READY_FOR_HUMAN_MERGE** —— required CI 门禁已由 exact SHA `52a58d4d` 上 run 42611431690 **attempt 2** 全绿解除（8 job 全 success，`gh pr checks 928` exit=0，本会话实查；历史 FAIL run 全部保留）；四个 PR 均 **KEEP_AND_MERGE**，产品运行时契约 **11 PASS + `SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`**。merge 属人工门禁，未执行；**未合并、未发布**。
+- 本会话实查：`gh api repos/jnhu76/exam/actions/runs/42611431690` → `conclusion=success, run_attempt=2`；`gh pr checks 928` → `PR_CHECKS_EXIT=0`；四个源 PR #922/#923/#924/#926 全 `OPEN / draft=true / mergedAt=null`；#878 / #930 均 OPEN；master `5140c3dd…`；`git merge-base --is-ancestor 52a58d4d master` → exit 1（未合并）。
 - 证据纪律：代码锚点为本会话 `grep` / `nl` 实读；测试数字来自给定材料（四份评审、`FINAL_PRODUCT_ADJUDICATION.md`、`pr-body.md`、`.tmp/production-closure/logs/`），本会话**未复跑**全量测试套件，不把给定材料报为本会话实跑。
 
 ---
@@ -26,7 +26,7 @@
 | 数据保留 | `client_events` 30 天策略不变 | `apps/api/src/plugins/clientEventRetention.ts:36` daily sweep、`:61-62` `receivedAt < cutoff`、startup convergence；INV-CE-004 | **PASS / UNCHANGED** |
 | 跨租户权限 | 不因关联功能新增访问能力 | `apps/api/src/routes/proctorMonitoring.crossOrg.test.ts`（跨组织 404、防枚举、合法 UUID claim 不开可见性）；`authz` / `attempts` 生产路径无 client-claimed `requestId` 读者 | **PASS** |
 
-矩阵结论：SPEC §4.1 列出的 12 个系统面在集成树全部适用且验证通过；`SAVEANSWER_RECEIPT_SEMANTICS` 保持 **UNCHANGED**。裁决的 **BLOCKED** 由 required CI 门禁失败（外部账户计费）驱动，与任一产品契约面的 PASS 不矛盾。
+矩阵结论：SPEC §4.1 列出的 12 个系统面在集成树全部适用且验证通过；`SAVEANSWER_RECEIPT_SEMANTICS` 保持 **UNCHANGED**。第 1/2 轮的 **BLOCKED** 由 required CI 门禁失败（外部账户计费）驱动，与任一产品契约面的 PASS 正交；该门禁已在 exact SHA `52a58d4d` 上由 run 42611431690 attempt 2 全绿解除（第 3 轮裁决 READY_FOR_HUMAN_MERGE），merge 待人工门禁。
 
 ---
 
@@ -65,12 +65,12 @@
 | #924 | KEEP_AND_MERGE | 补齐 2xx 侧第四载体 `x-request-id`；CORS `exposedHeaders` 真实缺陷修复；200 `accepted:false` 考生可见「请求编号」+ Pino WARN 按 reqId 关联 | `getWithMeta` 零生产调用方、429 路径 NOT_TESTED、web 单测 `req-*` 残差 |
 | #926 | KEEP_AND_MERGE | Pino 请求行与应用侧日志不再落原始 URL（`routeTemplateOf` 单一权威）；nginx `exam_privacy` access log；`error` 级诊断按 Owner Decision A 恢复并显式接受残余 | nginx error log raw request line 残余（已接受有界）、第三方 log collector `NOT_VERIFIED`、`/healthz` 探针语义 |
 
-四个 PR 同为 KEEP_AND_MERGE **不表示**全局门禁已绿，也**不授权**任何合并：verdict 仍 BLOCKED，四个源 PR 仍 OPEN/draft，未合并到 master，未发布。
+四个 PR 同为 KEEP_AND_MERGE 也**不授权**任何合并：merge 属 AGENTS.md §7 人工门禁，按裁决 §5 以 `#922 → #923 → #924 → #926` 顺序逐个 ready + merge（#928 不直接合并）。当前四个源 PR 仍 OPEN/draft，未合并到 master，未发布；全局门禁已绿（exact SHA `52a58d4d` run 42611431690 attempt 2）。
 
 ---
 
 ## 5. 验证边界（诚实声明）
 
-- 本会话实跑：`gh pr checks 928`（exit 1）、head_sha run / green-run 计数、PR/ Issue 状态、`git` 差异/祖先/状态、代码锚点 `grep`、**`pnpm format:check` 与 `pnpm docs:build`**（见 `DOCUMENTATION_CONSISTENCY_AUDIT.md` / `PERFORMANCE_AND_CI.md` 的命令与退出码）。
-- 本会话**未复跑**：`pnpm verify` 全量、`pnpm test` 全量、`bash scripts/e2e/run.sh` 全量、浏览器级 E2E、nginx 容器故障注入、性能基准。矩阵中的测试数字来自给定材料（四份评审、`FINAL_PRODUCT_ADJUDICATION.md` 的 307 / 342 定向测试、`pr-body.md` 的本地 gates 表、`logs/`），不作为本会话实跑。
-- 外部 GitHub 计费故障（#930 OPEN）使 required CI 在 exact SHA 上从未完成；本地绿灯不替代 required CI。本矩阵不声称 CI 通过、不声称已合并、不声称已发布。
+- 本会话实跑：`gh api …/runs/42611431690`（绿 run 取证）、`gh pr checks 928`（exit 0）、PR / Issue 状态、`git` 差异/祖先/状态、代码锚点 `grep`、**`pnpm format:check` 与 `pnpm docs:build`**（见 `DOCUMENTATION_CONSISTENCY_AUDIT.md` §8 / `PERFORMANCE_AND_CI.md` §8 的命令与退出码）。
+- 本会话**未复跑**：`pnpm verify` 全量、`pnpm test` 全量、`bash scripts/e2e/run.sh` 全量、浏览器级 E2E、nginx 容器故障注入、性能基准。矩阵中的测试数字来自给定材料（四份评审、历版裁决的 307 / 342 定向测试、`pr-body.md` 的本地 gates 表、`logs/`）与绿 CI run 42611431690 attempt 2（exact SHA 上 8 job 全 success，含两个 E2E shard），不作为本会话本地复跑。
+- required CI 已在 exact SHA `52a58d4d` 上全绿（run 42611431690 attempt 2；历史 FAIL run 为外部计费、保留未删）。本矩阵不声称已合并、不声称已发布；交付提交自身触发的新 run 结局由 GitHub run 历史承载（`FINAL_INTEGRATION_RECORD.md` §10.4）。

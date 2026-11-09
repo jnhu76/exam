@@ -1,167 +1,120 @@
-# 独立复审（第 2 轮）— REVIEW_RERUN_2
+# 独立复审·第 2 轮（exact SHA 52a58d4d）— REVIEW_RERUN_2
 
-- 复审对象：exact 集成 SHA `a5df2c90ace6366e69c951e6660dc268327b6e8a`
+- 复审对象：exact 集成 SHA `52a58d4da7ec51423381510d5e19bff6425965b7`
 - 受审工作树：`/home/hoo/Source/exam-gap-worktrees/integration-closure-20261109`，branch `integration/production-closure-20261109`
-- 模式：**只读复审**。未修改受审工作树任何文件；未 commit / push / merge / force-push / reset；未触发 CI 重跑。唯一写入是本文（主工作区 `.tmp/...` 下的复审产物）。
-- 本轮修复记录（ask 原文给定）：`NO_COMMIT (HEAD a5df2c90) / none (no tracked file changed; no commit)`；`git -C ... status --short` → 仅 `?? docs/research/exam-production-integration-closure/FINAL_PRODUCT_ADJUDICATION.md`（既有 adjudicator 产物，读取但未修改，按 owner 指令保护）；`git diff --stat` → 空；HEAD 未变。
-- 原 blockers（ask 原文给定）：blocker 1（ci，决定性）= clean-tree exact-SHA required CI FAIL（run 42593850473 failure，Static checks 因 GitHub 计费故障未启动、6 个 required job 全 skipped，`gh pr checks 928` = EXIT=1，0 success job / 0 green run）；blocker 2（ci）= flake 修复→复审闭环未闭合 / #878 仍 OPEN / 无 post-fix 完整权威绿灯。
-- **裁决：NO_GO**。两个原 blockers 均未解决；命名检查 `gh pr checks 928` 实跑仍为 FAIL（exit 1）。本轮零改动 ⇒ 未引入任何回归，但零改动不构成 closure；外部计费故障属代码/文档轮次之外，复审只能确认其当前 FAIL 状态，不能产出绿灯。
+- 模式：**只读复审**。本轮未修改受审工作树任何文件，未 commit / push，未触发任何 CI 重跑。唯一写入是本文（主工作区 `.tmp/...` 下 ask 指定的复审产物路径）。
+- 本轮修复记录（ask 原文给定）：本会话零提交、零 push；分支现行 HEAD 与 draft PR #928 headRefOid 一致，均为 52a58d4da7…（由并发进程提交并 push，非本会话所为）；全部 FAIL 记录保留；blocker 根因是 GitHub 账户计费故障，不属仓库文件可修复范畴。
+- **裁决：NO_GO**。原 blocker 1（required CI 在集成分支任何 SHA 上从未完成）**未解决**：exact SHA 52a58d4d 上唯一 run 42611431690 为 failure，Static checks 失败注释与原 blocker 引用的计费签名**逐字相同**，6 个 required job 全部 skipped，`gh pr checks 928` 实跑 FAIL（exit 1），#930 仍 OPEN，该 SHA 上 0 绿 run。本轮零文件 delta ⇒ 未引入任何回归，但零改动不构成 closure。
 
-> 证据纪律：以下每条结论都附本轮实跑命令与输出；`W` = `/home/hoo/Source/exam-gap-worktrees/integration-closure-20261109`。未执行的检查明确标注「未运行」。
+> 证据纪律：以下每条结论均附本轮实跑命令与输出；`W` = `/home/hoo/Source/exam-gap-worktrees/integration-closure-20261109`。未执行的检查明确标注「未运行」。
+> 路径说明：本文件覆盖了上一轮（复审对象 a5df2c90）的同名 `.tmp` 复审产物；覆盖前已确认其与提交树 `52a58d4d:docs/research/exam-production-integration-closure/reviews/REVIEW_RERUN_2.md`（e97e15fb 引入）逐字节一致（`diff` exit=0，sha256 `f2147bd6…`），历史证据在受控 Git 历史中无损保留。
 
 ---
 
-## 0. 先确认 HEAD 等于指定 SHA（通过）
+## 0. 确认 HEAD 等于指定 SHA（通过）
 
 ```
 $ git -C "$W" rev-parse HEAD
-a5df2c90ace6366e69c951e6660dc268327b6e8a          EXIT=0
-$ git -C "$W" rev-parse 'HEAD^{tree}'
-736a38f6e37f8434a87a27594701c95096152f53
+52a58d4da7ec51423381510d5e19bff6425965b7
 $ git -C "$W" branch --show-current
 integration/production-closure-20261109
-$ git -C "$W" log -1 --format='%H%n%P%n%ci%n%s'
-a5df2c90ace6366e69c951e6660dc268327b6e8a
-0b2e2d8a1653ebba59326517ec2fdc6b4c7cf4bc
-2026-11-09 17:28:49 +0800
-docs(closure): align ADR-025 touchpoints and OBS registry with delivered code
 $ git -C "$W" status --short
-?? docs/research/exam-production-integration-closure/FINAL_PRODUCT_ADJUDICATION.md
-$ git -C "$W" status --porcelain=v1
-?? docs/research/exam-production-integration-closure/FINAL_PRODUCT_ADJUDICATION.md
-$ git -C "$W" diff --stat                → 空（diff_exit=0）
-$ git -C "$W" diff --cached --stat       → 空
-$ gh pr view 928 --repo jnhu76/exam --json number,state,headRefOid,headRefName,baseRefName
-{"baseRefName":"master","headRefName":"integration/production-closure-20261109","headRefOid":"a5df2c90ace6366e69c951e6660dc268327b6e8a","number":928,"state":"OPEN"}
+（空输出 —— 工作树 clean，无未提交修改）
+$ gh pr view 928 --repo jnhu76/exam --json headRefOid,state,baseRefName,title
+{"baseRefName":"master","headRefOid":"52a58d4da7ec51423381510d5e19bff6425965b7","state":"OPEN","title":"Integration verification: production closure"}
 ```
 
-判定：HEAD 与指定 SHA **完全一致**；PR #928 的 headRefOid 亦为该 SHA。工作树除 1 个未跟踪文档外 clean，无 tracked 改动、无 staged 改动、无新 commit、**无新 exact SHA**（log 顶部仍是 a5df2c90，父提交为 0b2e2d8a）。tree hash `736a38f6…` 即 a5df2c90 的树，与第 1 轮复审所据 SHA 为同一提交 ⇒ 本轮不存在任何树级 delta。
+判定：HEAD 与 ask 指定 SHA **完全一致**；PR #928 headRefOid 与之相同（与修复记录声明一致）；工作树 clean，无未提交改动。
 
----
-
-## 1. 命名检查：CI 是否在新 SHA 上通过 → **FAIL (exit 1)**（实跑）
+## 1. exact SHA 上的 CI（未通过 —— 决定性 blocker 仍在）
 
 ```
-$ gh pr checks 928 --repo jnhu76/exam ; echo "PR_CHECKS_EXIT=$?"
-Static checks	fail	2s	https://github.com/jnhu76/exam/actions/runs/42593850473/job/129095858743
-API coverage	skipping	0	https://github.com/jnhu76/exam/actions/runs/42593850473/job/129095878711
-Build	skipping	0	https://github.com/jnhu76/exam/actions/runs/42593850473/job/129095878610
-CodeRabbit	skipping	0	https://coderabbit.ai?utm_source=cr_app&utm_medium=github
-E2E (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})	skipping	0	.../job/129095879681
-Package coverage	skipping	0	.../job/129095879088
-Production transport regression	skipping	0	.../job/129095879355
-Web coverage	skipping	0	.../job/129095878701
-PR_CHECKS_EXIT=1
+$ gh api 'repos/jnhu76/exam/actions/runs?head_sha=52a58d4da7ec51423381510d5e19bff6425965b7' --jq '.total_count, ...'
+total_count = 1
+→ {id:42611431690, name:"CI", status:"completed", conclusion:"failure", run_attempt:1,
+   created_at:"2026-11-09T11:44:41Z", head_branch:"integration/production-closure-20261109"}
+
+$ gh api 'repos/jnhu76/exam/actions/runs/42611431690/jobs?per_page=100' --jq '.jobs[] | {name, status, conclusion, started_at}'
+Static checks                       → failure（started 11:44:41，约 3 秒即失败）
+Build                               → skipped
+Production transport regression     → skipped
+Web coverage                        → skipped
+E2E (shard …)                       → skipped
+API coverage                        → skipped
+Package coverage                    → skipped
+
+$ gh api repos/jnhu76/exam/check-runs/129140558158 --jq '{head_sha, conclusion}'
+{head_sha:"52a58d4da7ec51423381510d5e19bff6425965b7", conclusion:"failure"}
+annotations（failure 级）原文：
+"The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+（另有一条 ubuntu-latest 迁移 notice，与本裁决无关）
+
+$ gh pr checks 928 --repo jnhu76/exam; echo "exit=$?"
+Static checks                     fail      3s
+API coverage / Build / CodeRabbit / E2E (shard …) / Package coverage /
+Production transport regression / Web coverage   skipping  0
+exit=1
 ```
 
-即：1 个 `fail`（Static checks）+ 7 个 `skipping`（其中 6 个是 GitHub required job，另 1 个是外部 CodeRabbit）；`PR_CHECKS_EXIT=1` ⇒ **FAIL**。
+判定：exact SHA 上**恰好 1 个 run 且为 failure**；失败签名与原 blocker 引用的签名完全一致（Static checks 未启动 + 6 个 required job 全 skipped + 计费注释逐字相同）。`gh pr checks 928` = **FAIL（exit 1）**。该 SHA 上 0 个绿 run、7 个 required job 中 0 个 success。
+
+## 2. 计费根因与 #930（未解决）
 
 ```
-$ gh api "repos/jnhu76/exam/actions/runs?head_sha=a5df2c90ace6366e69c951e6660dc268327b6e8a&per_page=100" \
-    --jq '{total_count, runs:[.workflow_runs[]|{id,conclusion,status,event,head_sha}]}'
-{"runs":[{"conclusion":"failure","event":"pull_request","head_sha":"a5df2c90ace6366e69c951e6660dc268327b6e8a","id":42593850473,"status":"completed"}],"total_count":1}
-
-$ gh api "repos/jnhu76/exam/actions/runs?head_sha=a5df2c90ace6366e69c951e6660dc268327b6e8a&per_page=100" \
-    --jq '[.workflow_runs[]|select(.conclusion=="success")]|length'
-0
-
-$ gh api "repos/jnhu76/exam/actions/runs/42593850473/jobs?per_page=100" --jq '[.jobs[]|{name,conclusion}]'
-[{"conclusion":"failure","name":"Static checks"},
- {"conclusion":"skipped","name":"Build"},
- {"conclusion":"skipped","name":"Web coverage"},
- {"conclusion":"skipped","name":"API coverage"},
- {"conclusion":"skipped","name":"Package coverage"},
- {"conclusion":"skipped","name":"Production transport regression"},
- {"conclusion":"skipped","name":"E2E (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})"}]
-
-$ gh api "repos/jnhu76/exam/actions/runs/42593850473/jobs?per_page=100" \
-    --jq '[.jobs[]|select(.conclusion=="success")]|length'
-0
-
-$ gh run view 42593850473 --repo jnhu76/exam       # ANNOTATIONS 段
-X The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
-Static checks: .github#1
-
-$ gh api "repos/jnhu76/exam/actions/runs?branch=integration/production-closure-20261109&per_page=20" \
-    --jq '{total_count, runs:[.workflow_runs[]|{id,head_sha,conclusion,status,event,created_at}]}'
-{"runs":[{"conclusion":"failure","created_at":"2026-11-09T09:29:45Z","event":"pull_request","head_sha":"a5df2c90ace6366e69c951e6660dc268327b6e8a","id":42593850473,"status":"completed"},
-         {"conclusion":"failure","created_at":"2026-11-09T06:20:59Z","event":"pull_request","head_sha":"0b2e2d8a1653ebba59326517ec2fdc6b4c7cf4bc","id":42572487639,"status":"completed"}],"total_count":2}
+$ gh issue view 930 --repo jnhu76/exam --json state,title,closedAt
+{"closedAt":null,"state":"OPEN","title":"[CI][Infra] GitHub Actions jobs fail pre-start — account billing/spending limit (2026-11-09)"}
 ```
 
-判定：head_sha 唯一 run 42593850473 = `failure`；success-run 计数 **0**、success-job 计数 **0**、head_sha green-run 计数 **0**；分支仅 2 个 run（42572487639 / 42593850473）均 failure，无第三个（新 SHA）run，无绿灯。**不存在「新 exact SHA」**（§0），blocker 1 fix 条件「账单恢复后在 clean tree 的新 exact SHA（或同 SHA 权威 gate run）上重跑完整 CI、7 个 required job 全部 success」未执行也未满足。
+判定：计费故障 Issue #930 仍 **OPEN**；新 SHA 上 Static checks 的失败注释即计费签名 ⇒ 根因（外部账户计费）在复审时刻**仍未恢复**。修复记录声明的达成条件——「#930 计费恢复后，在最终 exact SHA 的 clean tree 重跑完整 CI（7 个 required job 全 success）」——**未达成**。
 
-补充一致性：ask 原 blockers 记录的 FAIL run、6× skipped、0 green、计费注解，本轮逐条实跑复现，未发现状态被抹除或改写（42572487639 / 42593850473 两条 FAIL 记录仍在）。
-
----
-
-## 2. #878 / flake 闭环状态（blocker 2，实跑）
+## 3. FAIL 记录保留（通过）
 
 ```
-$ gh issue view 878 --repo jnhu76/exam --json number,state,title
-{"number":878,"state":"OPEN","title":"[CI][Flake] rich-content-overflow geometry: fixed 150ms wait races Chrome arrow-key scroll (scrollLeft 0 under 2-shard load)"}
-
-$ gh issue view 878 --repo jnhu76/exam --json body --jq '.body' | grep -cE '^\s*- \[ \]'
-4
-
-$ gh api "repos/jnhu76/exam/issues/878/comments?per_page=100" --jq '.[-1]|{created_at,user:.user.login,body}'
-{"created_at":"2026-11-09T06:29:28Z","user":"jnhu76","body":"... 'Why this is not closure' ... 'this issue stays OPEN' ... 'no post-fix authoritative CI run has completed because the account is currently blocked by GitHub billing (external, non-code)' ... 'Further flaky-E2E work is deferred for this round' ..."}
+$ gh api repos/jnhu76/exam/actions/runs/<id> --jq '{id, head_sha, status, conclusion, run_attempt, created_at}'
+42607587186 → head_sha=e97e15fb604f…，conclusion=failure，attempt 1，2026-11-09T11:15:38Z
+42607941019 → head_sha=b6be2591dfe2…，conclusion=failure，attempt 1，2026-11-09T11:18:12Z
+42608435613 → head_sha=f32693c7c6e6…，conclusion=failure，attempt 1，2026-11-09T11:21:47Z
+42609620433 → head_sha=0c7350af10df…，conclusion=failure，attempt 2，2026-11-09T11:30:45Z
+42611431690 → head_sha=52a58d4da7ec…，conclusion=failure，attempt 1，2026-11-09T11:44:41Z
 ```
 
-登记册（受审树 `docs/standards/test-flakes.md`）实读：
+判定：修复记录列出的全部 run（含 42609620433 attempt 2 与 52a58d4d 的 42611431690）**均未删除**，conclusion 均保持 failure。无历史 FAIL 记录被清除或改写。
 
-- `:3356` `ISSUE_STATE = OPEN（#878，4 条 Acceptance 未勾选）`
-- `:3357` `OWNER_DECISION = 2026-11-09 明确 defer：本轮不再扩展 flaky-E2E 工作；禁止 retry / 提高 timeout / 减少 shard / 跳过断言`
-- `:3369` 标题 `### 已交付的部分修复（不是 closure，#878 仍 OPEN）`
-- `:3374` `未删除/放宽断言，未加 retry、全局 timeout 或 skip。`
-- `:3379-3381` `同一族其余 4 处固定 150ms（修复后 :934/:1011/:1092/:1133）未纳入；FIRST_CAUSAL_DIVERGENCE 仍未执行；修复后无 2-shard 负载下 instrumented 采样证据，也无 post-fix 权威 CI 绿灯（GitHub 账户计费故障，外部非代码）。本地 pnpm e2e 通过不构成 flake-rate 证明。`
-- `:3392-3395` `本条目保持 OPEN / DEFER，不表述为「已修复」或「完整 CI 通过」。`
+## 4. 本轮 delta 回归审查（无回归）
 
-`git -C "$W" diff 0b2e2d8a..HEAD -- docs/standards/test-flakes.md` 实读：a5df2c90 对登记册的改动正是新增上述 OPEN / defer / 5 个 occurrence / 1f29b614 部分修复 / NEXT_DIAGNOSTIC_ACTION 措辞，未把 CASE_ID 从 NONE 改掉、未标 CASE_STATE、未写「已修复/完整 CI 通过」。即 F-01 登记册同步保持准确，**无过度声称**。
+此前复审所据 HEAD 为 0c7350af10df34ed4506f2769b7c33526c7d10d5；当前 HEAD 52a58d4d 由并发进程把 4 个未提交 docs 修改提交而成。对二者做 diff：
 
-判定：blocker 2 的两条路径都未闭合 —— (a) 按 #878 Acceptance 闭合：4 条 acceptance 全未勾选、CASE_ID = NONE、无 instrumented 采样序列、无 5 处统一、无 ≥5 次连续通过；(b) 维持 defer：defer 自身成立，但其前置条件「修复后新 exact SHA 的完整权威绿灯 + 独立复审」中绿灯未取得（§1，0 green run）。两个 blockers 相互耦合，决定性 blocker 1 未解 ⇒ blocker 2 亦未解。
+```
+$ git -C "$W" diff --stat 0c7350af10df34ed4506f2769b7c33526c7d10d5..52a58d4da7ec51423381510d5e19bff6425965b7
+ docs/research/exam-production-integration-closure/DOCUMENTATION_CONSISTENCY_AUDIT.md |   6 +-
+ docs/research/exam-production-integration-closure/FINAL_INTEGRATION_RECORD.md        |  43 ++-
+ docs/research/exam-production-integration-closure/FINAL_PRODUCT_ADJUDICATION.md      | 291 ++++++++-------------
+ docs/research/exam-production-integration-closure/SHA256SUMS                         |   6 +-
+ 4 files changed, 152 insertions(+), 194 deletions(-)
+```
 
----
+- **测试/授权/保存语义**：delta 仅含 4 个 docs/证据文件（含其哈希清单），未触任何生产代码、测试、契约或授权路径 ⇒ 无削弱、无绕过。
+- **重复实现/新双轨**：delta 为纯文档，未引入任何第二条实现路径或兼容壳。
+- **证据自洽性**（本轮实跑）：
+  - `git grep -E 'FULL_CI|MERGE_STATUS' 52a58d4d -- …/FINAL_INTEGRATION_RECORD.md`：line 59 `FULL_CI = FAIL`、line 73 `MERGE_STATUS = BLOCKED`，line 145/158/193/225 重申 verdict BLOCKED、未合并、未发布，**无虚假绿灯**。
+  - `sha256sum -c SHA256SUMS`（在 `docs/research/exam-production-integration-closure/` 下实跑）：18 项全部 `OK`，exit=0，提交的证据包自洽。
+- 附带发现：提交树内 `reviews/REVIEW_RERUN_2.md` 是**上一轮**（复审对象 a5df2c90）的历史复审文档（由 e97e15fb 提交），非伪造、非本轮同名预写；与本文件的关系见文首「路径说明」。
 
-## 3. 逐项确认（ask 要求四点）
+## 5. 逐项确认结论
 
-### 3.1 最小修复是否真正解决根因 → **否**
+| 复审项 | 结论 |
+| --- | --- |
+| 最小修复是否真正解决根因 | **否**。根因为 GitHub 账户计费故障，本轮零提交属合理（无仓库文件可修），但计费未恢复、exact SHA 上仍是 0 绿 run，达成条件未满足 |
+| 是否削弱测试/授权/保存语义 | 否。delta 为 4 个 docs/证据文件，未触代码、测试或契约 |
+| 是否引入重复实现或新双轨 | 否。同上，纯文档 delta |
+| CI 是否在新 SHA 上通过 | **未通过**。唯一 run 42611431690 failure，6 个 required job skipped；`gh pr checks 928` = FAIL（exit 1） |
 
-本轮修复记录为 `NO_COMMIT / none`：§0 已证零 tracked 改动、零 staged 改动、零 commit、HEAD 与 tree 均未变，`git show --stat HEAD` 显示 a5df2c90 自身只改 2 个文档（`docs/architecture/.../ADR-025-...md` 46 行、`docs/standards/test-flakes.md` 42 行）。因此**不存在可被评估的「最小修复」**；根因未被任何修复动作触及：
+## 6. 未运行项
 
-- blocker 1 根因 = 外部 GitHub 账户计费故障（§1 注解实读），其 fix 要求「账单恢复后重跑完整 CI 取得 7 个 required job 全 success 的真实记录」；零改动 + 当前 FAIL 表明该条件未满足。ask 原记录亦自认「External blocker NOT fixed by this commit (no code change can fix it)」。
-- blocker 2 根因 = #878 未闭合 / 无 post-fix 完整权威绿灯（§2）；同样未满足。
-- Owner (A) 指令「无 root-cause code fix 存在」与零改动一致；但按 AGENTS.md 第 7/11 节，零改动只能如实报告为「未闭合」，不能表述为 closure。
+- 本轮未运行本地 `pnpm verify` / `pnpm e2e`：ask 未要求，且原 blocker 明确「本地绿灯不替代 required CI」；裁决仅依赖 required CI 事实。
+- 未验证查询时刻之后是否会有新的自动触发 run：截至查询时刻 `head_sha=52a58d4d` 恰好 1 个 run；若后续在该 SHA 上出现新 run，不在本轮证据内。
+- 计费恢复的确切时间/原因未查：属 GitHub 账户侧信息，仓库与 gh 侧不可见（仅能确认 #930 OPEN 与失败注释签名）。
 
-### 3.2 是否削弱测试 / 授权 / 保存语义 → **否（本轮未引入任何削弱）**
+## 7. 裁决
 
-- `git diff --stat` 与 `git diff --cached --stat` 均为空；HEAD tree `736a38f6…` 与第 1 轮所据 SHA 为同一提交 ⇒ 无树级 delta，授权/保存/答题状态机/版本化答案等语义文件零改动。
-- 测试语义实读：`grep -c 'waitForTimeout(150)' "$W/apps/e2e/e2e/rich-content-overflow.spec.ts"` → **4**（`grep_exit=0`），行号 `:934 / :1011 / :1092 / :1133`；`grep -nE 'test\.skip|describe\.skip|retries|setTimeout\(|test\.setTimeout|expect\.poll|waitForTimeout\(150\)'` 另见 `:436 test.setTimeout(180_000)`。
-- 溯源 `git blame`：`:436`、`:934`、`:1092`、`:1133` 来自 `d3405acfd`（2026-11-02 04:45:54），`:1011` 来自 `ffa9e745c`（2026-11-02 05:11:50），**全部早于** `1f29b614` 与本轮，非本轮引入；`test.setTimeout(180_000)` 是既有的 per-test 超时，不是本轮新增的全局 timeout。
-- 登记册 `docs/standards/test-flakes.md:3374` 明载 1f29b614「未删除/放宽断言，未加 retry、全局 timeout 或 skip」，`:3386-3388`「无掩盖性缓解…禁止用调大 timeout / 加 retry / 减少 shard 掩盖」。未发现 skip / retry / 降低断言 / 替换真实依赖的迹象。
-
-### 3.3 是否引入重复实现或新双轨 → **否**
-
-零改动 ⇒ 无新代码路径、无兼容壳、无第二条实现。`git show --stat HEAD` 仅收敛既有两份长期文档的措辞（ADR-025 touchpoints、OBS 登记册），未新增文件、未新增 helper、未保留新旧双轨。唯一未跟踪文件 `FINAL_PRODUCT_ADJUDICATION.md` 是 adjudicator 产物、未纳入交付树；本复审仅 `stat` 读取（`size=40120 mtime=2026-11-09 17:54:32.597717073 +0800`），**未修改**。
-
-### 3.4 CI 是否在新 SHA 上通过 → **FAIL (exit 1)**
-
-见 §1：`gh pr checks 928` → `PR_CHECKS_EXIT=1`；head_sha 唯一 run 42593850473 = failure，0 success job / 0 green run，计费注解「recent account payments have failed」。且「新 SHA」本身不存在（§0），因此 blocker 1 fix 要求的「新 exact SHA 上重跑完整 CI」没有任何执行记录。本地 `pnpm verify` / `pnpm e2e` **本轮未运行**（见 §4），按 blocker 1 定义与 AGENTS.md 第 7 节，本地绿灯不能替代 required CI 权威绿灯；ask 原记录中「Local pnpm verify / pnpm e2e are green but do not replace CI」的声称本轮未复核、也不作为通过依据。
-
----
-
-## 4. 未运行 / 无法核验（如实列出）
-
-1. **本地 `pnpm verify` / `pnpm e2e`：未运行**。ask 命名的检查是权威 CI gate（`gh pr checks 928` + head_sha run 查询），本人按「Run the check the ask names」实跑；本地套件不是该检查，运行它并当作 CI 结果属于以更快替代品冒充命名检查，故不运行、不引用。修复记录中「local green」的声称本复审未复核。
-2. **未触发 `gh run rerun` / 未产生新权威 run**：计费故障属外部账户条件，重跑不会生成 required job 全 success 的记录；且触发 CI 属写操作，超出只读复审范围。
-3. **外部账单状态与恢复时间**：不可查、超出复审范围；只能确认 §1 的 FAIL 与计费注解。
-4. **未跟踪文件 `FINAL_PRODUCT_ADJUDICATION.md` 是否在修复轮被改动**：无基线哈希（主工作树 `/home/hoo/Source/exam/docs/research/exam-production-integration-closure/` 下无同名文件可比对），因此**无法证明**它「读取但未修改」；可确认的是它未纳入交付树、本复审未修改、按 owner 指令保持保护。
-5. **未对全仓授权/保存语义做全量静态审计**：本轮零改动，按 SHA 同一性（tree `736a38f6…`）判定无新增语义变更；未做全量代码审计，也不把「未逐文件审计」表述为已审计。
-6. **未阅读前一轮裁决结论以外的材料**：未打开 `.tmp/production-closure/reviews/` 下其它 REVIEW_*.md；本复审只依据 ask 给定的 blockers 原文与对 exact SHA 的实跑/实读。
-
----
-
-## 5. 结论
-
-- **NO_GO**。两个原 blockers 均未解决：决定性 blocker 1 的权威 CI 仍是 FAIL（exit 1），0 success job / 0 green run / 无新 SHA；blocker 2 的 #878 仍 OPEN、4 条 acceptance 未勾选、无 post-fix 完整权威绿灯。
-- **未引入回归**：本轮零 tracked 改动、零 commit，tree 与第 1 轮所据 SHA 相同；测试/授权/保存语义无削弱，无重复实现或新双轨，登记册与「已交付部分修复 + defer + OPEN」一致、无「已修复/完整 CI 通过」的过度声称。但「无回归」不等于「阻塞项已解决」。
-- 外部计费故障是任何代码/文档轮次都无法替代的条件；按 blocker 1 的 fix，必须等账单恢复后在新 clean-tree exact SHA（或同 SHA 权威 gate run）上取得 7 个 required job 全 success 的真实记录，保留 42572487639 / 42593850473 两条 FAIL 不抹除，再按 SPEC §7.2 产生新 SHA 并重新独立复审。当前状态不满足该条件。
+**NO_GO**。blocker 1（required CI）在 exact SHA 52a58d4d 上仍为 FAIL，根因（外部计费）未恢复，达成条件（7 个 required job 全 success 的绿 CI）未满足；FINAL_INTEGRATION_RECORD 自身亦如实维持 `FULL_CI = FAIL` / `MERGE_STATUS = BLOCKED`。本轮零 delta ⇒ 无回归。解除条件不变：#930 计费恢复后，在最终 exact SHA 的 clean tree 取得完整 required CI 绿灯（Static checks + Build + 3 coverage lanes + Production transport + 2 E2E shards 全 success），保留全部 FAIL 记录，并按 SPEC §7.2 做增量独立复审。

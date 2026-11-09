@@ -1,8 +1,8 @@
 # SAVEANSWER_END_TO_END — SaveAnswer 端到端协议与调查证据
 
 - 状态：**最终交付文档**（SPEC §5.2 / §9 交付物 6）。记录 as-built 协议与运维调查链，不修改产品代码。
-- 集成 SHA：`a5df2c90ace6366e69c951e6660dc268327b6e8a`（任务给定 exact 集成 SHA；本会话 `git rev-parse HEAD` 一致）。父提交 `0b2e2d8a…` 为四 PR 合并完成点，二者产品代码逐字节一致。
-- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（verdict **BLOCKED**，由 required CI FAIL 驱动；产品契约面全 PASS、`SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`）。未合并、未发布。
+- 集成 SHA：`52a58d4da7ec51423381510d5e19bff6425965b7`（本轮收口任务给定 exact 集成 SHA；= worktree HEAD = PR #928 headRefOid）。自四 PR 合并完成点 `0b2e2d8a…` 起全部为纯 docs 提交（含早期收口时点 `a5df2c90…`），产品代码逐字节一致，本文档代码锚点对该代码树有效。
+- 裁决权威：`FINAL_PRODUCT_ADJUDICATION.md`（**第 3 轮**，verdict **READY_FOR_HUMAN_MERGE**；required CI 已由 exact SHA `52a58d4d` 上 run 42611431690 attempt 2 全绿解除；产品契约面 11 PASS、`SAVEANSWER_RECEIPT_SEMANTICS = UNCHANGED`）。merge 待人工门禁，未合并、未发布。
 - 证据纪律：代码锚点本会话 `grep` 实读；测试数字来自给定材料（REVIEW_PROTOCOL / REVIEW_SECURITY / FINAL_PRODUCT_ADJUDICATION / `pr-body.md` / `logs/`），本会话未复跑定向或全量测试套件。
 
 ---
@@ -79,5 +79,5 @@ Candidate receives 200 accepted:false → X-Request-Id → Pino WARN → Receipt
 
 - 给定材料中的实跑证据：REVIEW_PROTOCOL §4 定向 306 用例全通过（引擎 59 / web 69 / api 含真实 PostgreSQL 76 / contracts 60 / clientEvents 46），并含 `candidate-save-deadline-race.concurrency`、`saveAnswerReplayReceipts`、`requestIdSaveRejection`（真实 STALE_VERSION 200 拒绝、`entry.reqId === header`、body 无 requestId）；`FINAL_PRODUCT_ADJUDICATION.md` 两版分别记录 307 / 342 定向测试全通过；浏览器级 M3/M4/M5（真实 `CONFLICTING_PAYLOAD` 全链、abort 后零 id 表面）在裁决员会话实跑通过（A3-F7 `:341` 为非确定性 E2E 失败，非产品契约回归）。
 - `git diff 5140c3dd..a5df2c90` 对 `packages/contracts/src/attempt.ts`、`packages/exam-engine/src/answerProtocol.ts`、`apps/api/src/routes/attempts.candidate.ts` 零改动 ⇒ **receipt 语义 UNCHANGED**（给定材料 + 本会话 `git diff` 复核）。
-- 本会话**未复跑**：上述定向套件、全量 `pnpm verify` / `pnpm test` / `pnpm e2e`、浏览器级 E2E、nginx 故障注入。本会话实跑的是 `pnpm format:check`、`pnpm docs:build` 与 `gh`/`git` 查询（见 `PERFORMANCE_AND_CI.md`）。
-- required CI 在 exact SHA 上 FAIL (exit 1)（外部 GitHub 计费，#930 OPEN）；本地绿灯不替代 required CI。本文档不声称 CI 通过、不声称已合并、不声称已发布。
+- 本会话**未复跑**：上述定向套件、全量 `pnpm verify` / `pnpm test` / `pnpm e2e`、浏览器级 E2E、nginx 故障注入。本会话实跑的是 `pnpm format:check`、`pnpm docs:build` 与 `gh`/`git` 查询（见 `PERFORMANCE_AND_CI.md` §8）；required CI 由 exact SHA `52a58d4d` 上的绿 run 42611431690 attempt 2 承载（8 job 全 success，含两个 E2E shard 与 API/coverage lanes）。
+- required CI 已在 exact SHA 上全绿（attempt 1 及此前全部 FAIL run 为外部 GitHub 计费签名，记录保留未删；#930 OPEN 待卫生关闭）。本文档不声称已合并、不声称已发布；requestId 不参与保存成功判定（§3），绿 CI 亦不改变该语义。
