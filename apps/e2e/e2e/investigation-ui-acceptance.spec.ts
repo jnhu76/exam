@@ -760,9 +760,14 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     ).toBeTruthy();
 
     // Inject a real-shaped server-fault envelope with a FORGED requestId.
-    // The page's own save path, banner logic, and telemetry recorder run for
-    // real against it; only the network answer is the injected fault.
-    const forgedRequestId = "req-forged-prt-0001";
+    // The value is a syntactically valid RFC 4122 UUIDv4 (version 4 /
+    // RFC variant bits set) so it survives the timeline's UUID shape gate;
+    // shape legality is form only, not verification — it stays a forged,
+    // unverified client claim and must never be promoted to server
+    // authority. The page's own save path, banner logic, and telemetry
+    // recorder run for real against it; only the network answer is the
+    // injected fault.
+    const forgedRequestId = "00000000-0000-4000-8000-000000000bad";
     await page.route("**/api/attempts/*/answers/*", async (route) => {
       if (route.request().method() === "POST") {
         await route.fulfill({
