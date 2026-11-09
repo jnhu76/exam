@@ -132,6 +132,36 @@ telemetry claims unverified, historical values immutable) apply unchanged.
   reclassify historical values by shape would require its own superseding
   decision under the authority precedence; that question is left open here.
 
+## Addendum — 2026-11-09, delivery documentation closure (informational)
+
+> **Status: RECORDED (informational).** This note points to the as-built
+> evidence index for the decisions above. It amends nothing, supersedes
+> nothing, and introduces no new product behavior. No decision 1–6 is
+> changed and no new authority is created.
+
+- **Evidence index, not a second authority.** The current-state evidence for
+  this ADR is collected in `docs/research/exam-production-integration-closure/`
+  (`REQUEST_ID_GLOBAL_CONTRACT.md`, `PRODUCT_BEHAVIOR_MATRIX.md`,
+  `SAVEANSWER_END_TO_END.md`, `SECURITY_AND_PRIVACY_VERIFICATION.md`,
+  `FINAL_INTEGRATION_RECORD.md`). Those files are a non-normative record of
+  what the integration tree implements; the "Normative touchpoints" section
+  below remains the authoritative list, and this ADR remains the authority
+  for requestId wording per the authority precedence.
+- **Current as-built shape of decisions 1–6.** One server-minted UUIDv4
+  (`decision 1`), client headers ignored (`decision 2`), four carriers within
+  a request — header, pino `reqId`, error envelope, HTTP audit metadata where
+  an audit row exists (`decision 3`, extended by the #865 addendum) — a
+  requestId that is not a business identity or credential (`decision 4`),
+  client telemetry `metadata.requestId` that stays an unverified claim
+  (`decision 5`, with the #923 shape gate narrowing only the live
+  projection), and immutable historical `req-*` values read as opaque
+  strings (`decision 6`). None of these is restated as a new decision here.
+- **Boundary preserved.** A request id is a correlation key; it is never
+  proof of authorization, message origin, or that an answer save succeeded.
+  Save success remains a server business verdict (`accepted: true`, receipt,
+  attempt domain state). This is an application of decisions 4–5, not an
+  amendment.
+
 ## Costs
 
 - Log and audit id volume grows (UUID string vs a short counter) — accepted

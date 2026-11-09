@@ -3365,6 +3365,17 @@ success，复跑通过 ≠ 根因消除。
 - run 42389069178 / job 128453229700，2026-11-07，HEAD `d26a6f5d`（PR #918 仅 release metadata、零源码改动；紧邻同树 `fd82a7c1` 双 shard green）。
 - run 42518523050 / job 128847373789，2026-11-08T20:10Z，HEAD `d3580f3e`（PR #923）。
 - run 42564029701 / job 128987131154、run 42563996915 / job 128987063313（PR #924 shard 2），2026-11-09（均为 `1f29b614` 修复前的权威失败）。
+- run 42483066387，2026-11-08T13:02:54Z，HEAD `872a244f`（PR #924 中间头）。REVIEW_CI_FLAKE §1.3 实读 raw log 为同一 `:568` 签名、shard 2/2；本轮交付编辑独立复核 `gh api repos/jnhu76/exam/actions/runs/42483066387` → `conclusion=failure`，`…/jobs` → 仅 `E2E (shard 2/2)` = failure、其余 job success；阻塞修复第 1 轮再以 `gh api repos/jnhu76/exam/actions/jobs/128739753640/logs` 取得 raw log 正文复核，命中同一签名（`rich-content-overflow.spec.ts:568:31` `toBeGreaterThan(expected)` / `Received: 0`，`1 failed`，`--shard=2/2`），「同族待核」解除，确认为同签名 occurrence。
+
+### 新签名 occurrence（条件敏感非确定性，均未登记、均未闭合）
+
+以下两条是 REVIEW_CI_FLAKE 与最终裁决（本轮）发现的**新签名**，与 `:568` 同族（同一 2-shard 负载拓扑 / 相关 E2E 套件）但站点或文件不同。按 SPEC §7.2 登记为独立 occurrence，不并入 CASE（`CASE_ID` 仍 NONE），不表述为「已修复」或「完整 CI 通过」。本轮交付编辑**未在本会话复跑**这两条失败，登记依据为下列给定证据材料，如实标注来源。
+
+- `:555 toBeFocused` 超时（`Received: inactive`，timeout 5000ms，`3 did not run`）：REVIEW_CI_FLAKE §1.7 以 `E2E_WORKERS=2 E2E_WORKER_BASE_PORT=21000 bash scripts/e2e/run.sh rich-content-overflow` 实跑 1 FAIL / 2 PASS；失败点 `apps/e2e/e2e/rich-content-overflow.spec.ts:555` 是 `1f29b614` 修复未触及的原有断言（修复新增代码在 `:560-581`），证据 `/tmp/review-ciflake/verify-run1-FAIL-555.log`。签名与 `:568 scrollLeft=0` 不同，发生在 `:528 stable geometry` 同一测试、同一负载拓扑；是否与 `:568` 同根因未证明（无 instrumented 序列）。
+- A3-F7 `:341` 下拉时序（`恢复事件` menuitem 点击：`element is not stable` → `detached from the DOM`）：最终裁决 §2.3 在集成树 `a5df2c90` 以 `E2E_WORKERS=2 E2E_WORKER_BASE_PORT=21000 bash scripts/e2e/run.sh investigation-ui-acceptance` 实跑 2 次均 `1 failed / 9 passed`（同一唯一失败点），同时刻同命令的 pr-865 @ `9dd1d5f4` 控制实验 EXIT=0，M3/M4/M5 两次均通过。归属：同一代码 14:13 全量 2-shard E2E 曾 `E2E_EXIT=0`（`logs/e2e.log` / `pr-body.md`）、`git diff 5140c3dd..0b2e2d8a -- apps/web/src/pages/admin apps/web/src/components/shared` 为空 ⇒ 条件敏感非确定性，不构成可归属于四 PR 的产品正确性缺陷；精确触发路径未定位。
+- F-04（REVIEW_ARCHITECTURE_DOCS web 单测一次性并行失败，3 files / 3 tests，随后两次重跑含同组合全部复绿）作为低优先观察项一并裁定；本轮未复现，不定级。
+
+补登只闭合 blocker 2 的**登记信息面**：#878 仍 OPEN / DEFER、4 条 Acceptance 未勾选、`ROOT_CAUSE_CONFIDENCE = HYPOTHESIS`、4 处固定 150ms 残留、无 post-fix 完整权威绿灯（GitHub 账户计费，外部非代码）、`CASE_ID` 仍 NONE。登记不替代 #878 验收，也不替代 required CI 绿灯；本条目不表述为已修复。
 
 ### 已交付的部分修复（不是 closure，#878 仍 OPEN）
 
