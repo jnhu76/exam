@@ -53,6 +53,7 @@ import {
   maxActionLabelWidth,
 } from "@/table/actionLabelFixture";
 import i18n, { SUPPORTED_LOCALES } from "@/i18n";
+import { IncidentEventType, IncidentStatus, IncidentType } from "@exam/domain";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, "..");
@@ -386,5 +387,31 @@ describe("table contract v2 structural guards", () => {
     // `type` value stays exactly as #590 froze it (7.25rem), so this role can
     // never tax the other 15 conforming type columns.
     expect(TYPE_COLUMN_TOKEN).toBe("7.25rem");
+  });
+
+  it("resolves every recovery wire vocabulary to localized copy per locale", () => {
+    // Recovery pages render `admin.recoveryQueue.status.${s}`,
+    // `admin.recoveryIncident.type.${t}` and
+    // `admin.recoveryIncident.eventType.${e}` straight from the wire with
+    // `as never` bypassing typed-t, and their tests pin command-button copy
+    // that would satisfy a found-text assertion even when the label renders
+    // as a raw key. The key universe therefore derives from the @exam/domain
+    // enums — the single authority — and a missing or renamed catalog entry
+    // fails loudly here instead of surfacing a raw i18n key to the operator.
+    const families: Array<[string, readonly string[]]> = [
+      ["admin.recoveryQueue.status", Object.values(IncidentStatus)],
+      ["admin.recoveryIncident.type", Object.values(IncidentType)],
+      ["admin.recoveryIncident.eventType", Object.values(IncidentEventType)],
+    ];
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const [namespace, values] of families) {
+        for (const value of values) {
+          const key = `${namespace}.${value}`;
+          const copy: string = i18n.t(key as never, { lng: locale });
+          expect(copy, `copy for ${key}@${locale}`).not.toBe(key);
+          expect(copy, `copy for ${key}@${locale}`).not.toBe("");
+        }
+      }
+    }
   });
 });

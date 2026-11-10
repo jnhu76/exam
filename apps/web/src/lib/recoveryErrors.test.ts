@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import i18n from "@/i18n";
 import { ApiError } from "./api";
 import {
   classifyRecoveryError,
@@ -65,6 +66,12 @@ describe("recoveryErrorMessageKey", () => {
   ];
   it.each(cases)("kind %s → %s", (kind, expected) => {
     expect(recoveryErrorMessageKey(kind, ns)).toBe(expected);
+    // Resolving through the real catalog proves the pinned key is live i18n:
+    // a renamed or deleted entry would render the raw key path to the
+    // operator while this file stayed green.
+    const copy: string = i18n.t(expected as never);
+    expect(copy).not.toBe(expected);
+    expect(copy.length).toBeGreaterThan(0);
   });
 
   it("uses the provided namespace", () => {
