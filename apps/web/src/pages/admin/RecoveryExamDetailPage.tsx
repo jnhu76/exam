@@ -15,7 +15,6 @@ import { useRecoveryProjection } from "@/hooks/useRecoveryProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DefinitionList } from "@/components/shared/DefinitionList";
@@ -236,7 +235,7 @@ export function RecoveryExamDetailPage() {
   const canManageProctors =
     actor !== null && can(actor, Permission.ExamProctorAssignmentManage);
 
-  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+  const { data, error, isRefreshing, isStale, refresh } =
     useRecoveryProjection<RecoveryExamContextResponse>({
       load: ({ signal }) =>
         api.get<RecoveryExamContextResponse>(
@@ -248,23 +247,19 @@ export function RecoveryExamDetailPage() {
       deps: [examId],
     });
 
-  if (isInitialLoading) return <LoadingState />;
-  if (error && !data) {
-    return (
-      <ErrorState
-        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
-        onRetry={refresh}
-      />
-    );
-  }
+  // Projection-hook contract: with data === null the page is either the
+  // classified Error (first load failed) or Loading (error === null means
+  // the initial load is still in flight) — there is no third state.
   if (!data) {
-    return (
-      <EmptyState
-        icon={<AppIcon icon={ListFilter} size="state" />}
-        title={t("admin.recoveryExam.notFound")}
-        description={t("admin.recoveryExam.notFoundDescription")}
-      />
-    );
+    if (error) {
+      return (
+        <ErrorState
+          message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+          onRetry={refresh}
+        />
+      );
+    }
+    return <LoadingState />;
   }
 
   const queueForExam = `${routes.admin.recovery}?examId=${data.examSummary.id}`;

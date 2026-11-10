@@ -2723,7 +2723,6 @@ const zhCN = {
       snapshotAt: "快照时间：{{time}}",
       snapshotStale: "快照较旧，数据可能已变化",
       notFound: "未找到该事件",
-      notFoundDescription: "事件不存在或已被删除。",
       sections: {
         overview: "事件概览",
         exam: "考试",
@@ -2826,7 +2825,6 @@ const zhCN = {
       back: "返回恢复审查",
       attemptNo: "第 {{count}} 次答题",
       notFound: "未找到该答题",
-      notFoundDescription: "答题不存在或已被删除。",
       sections: {
         overview: "答题概览",
         exam: "考试",
@@ -2899,7 +2897,6 @@ const zhCN = {
       back: "返回恢复审查",
       viewInQueue: "在队列中查看",
       notFound: "未找到该考试",
-      notFoundDescription: "考试不存在或已被删除。",
       sections: {
         exam: "考试",
         incidents: "事件统计",
@@ -3080,7 +3077,6 @@ const zhCN = {
       refreshing: "刷新中…",
       back: "返回监考处置",
       notFound: "事件未找到",
-      notFoundDescription: "该事件不存在或您没有权限查看。",
       snapshotStale: "数据已过时",
       attemptIdLabel: "关联答题 ID",
       attemptIdRequired: "请输入关联答题 ID",

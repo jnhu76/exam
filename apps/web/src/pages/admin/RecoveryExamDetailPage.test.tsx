@@ -243,6 +243,15 @@ describe("RecoveryExamDetailPage", () => {
     expect(await screen.findByText(/网络异常/)).toBeInTheDocument();
   });
 
+  it("shows the localized permission-denied state when the load is rejected with 403", async () => {
+    getMock.mockRejectedValueOnce(new ApiError(403, "Forbidden"));
+    renderPage();
+    // 403 → permission-denied kind → the page namespace's permissionDenied copy.
+    expect(
+      await screen.findByText("您没有查看考试恢复详情的权限。"),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the loaded page on screen with an inline warning when a background refresh fails", async () => {
     renderPage();
     await screen.findAllByText("网络恢复考试");

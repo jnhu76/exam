@@ -15,7 +15,6 @@ import { useRecoveryProjection } from "@/hooks/useRecoveryProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DefinitionList } from "@/components/shared/DefinitionList";
@@ -88,7 +87,7 @@ export function RecoveryAttemptDetailPage() {
   const { user } = useAuthContext();
   const { attemptId } = useParams<{ attemptId: string }>();
 
-  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+  const { data, error, isRefreshing, isStale, refresh } =
     useRecoveryProjection<RecoveryAttemptOperationsResponse>({
       load: ({ signal }) =>
         api.get<RecoveryAttemptOperationsResponse>(
@@ -558,23 +557,19 @@ export function RecoveryAttemptDetailPage() {
     setMisconductCleanupFailed(false);
   }, [user, misconduct, t]);
 
-  if (isInitialLoading) return <LoadingState />;
-  if (error && !data) {
-    return (
-      <ErrorState
-        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
-        onRetry={refresh}
-      />
-    );
-  }
+  // Projection-hook contract: with data === null the page is either the
+  // classified Error (first load failed) or Loading (error === null means
+  // the initial load is still in flight) — there is no third state.
   if (!data) {
-    return (
-      <EmptyState
-        icon={<AppIcon icon={Flag} size="state" />}
-        title={t("admin.recoveryAttempt.notFound")}
-        description={t("admin.recoveryAttempt.notFoundDescription")}
-      />
-    );
+    if (error) {
+      return (
+        <ErrorState
+          message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+          onRetry={refresh}
+        />
+      );
+    }
+    return <LoadingState />;
   }
 
   const { attempt } = data;
