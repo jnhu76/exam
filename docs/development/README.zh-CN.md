@@ -51,11 +51,11 @@ pnpm db:migrate
 # 4. 写入测试用户（admin / candidate / candidate2）
 pnpm db:seed
 
-# 5. 启动开发服务器
+# 5. 启动受管开发循环（先构建 workspace 依赖闭包）
 pnpm dev
 ```
 
-启动后：
+`pnpm dev` 会先构建开发服务器消费的全部 workspace package，然后启动：
 
 - **Web**（Vite）：`http://localhost:5173`
 - **API**（Fastify）：`http://localhost:3000`
@@ -105,11 +105,44 @@ Seed 在 production mode 下会拒绝执行。
 
 ## 运行应用
 
+`pnpm dev` 是 canonical 受管开发入口（`turbo watch dev`）：
+
 ```bash
-pnpm dev                # API + Web，热更新
-pnpm --filter web dev   # 仅 Web
-pnpm --filter api dev   # 仅 API
+pnpm dev                # 受管开发循环（见下方契约）
+pnpm --filter web dev   # 仅 Web（非受管）
+pnpm --filter api dev   # 仅 API（非受管）
 ```
+
+**受管入口契约。** 首次 `pnpm dev` 会先构建完整 workspace 依赖闭包
+（`dev` 依赖 `^build`），之后才启动任何受管 API/Web 进程——开发服务器
+因此不可能静默消费缺失或过期的 `dist`。此后，上游源码变化会重建受影响
+的闭包，由 Turbo 重启受管的 `dev` 任务。各任务的重启相互独立：存在一个
+瞬态窗口，API 与 Web 应用可能运行不同代际。不存在跨进程的原子代际
+切换——失败的构建不输出本次的新产物，旧产物留在磁盘上，进程继续执行旧
+版本，直到一次成功的重建将其重启。失败的构建永远不等于成功发布。
+
+**一次性入口。** `pnpm dev:once`（`turbo dev`）在构建依赖闭包后一次性
+启动开发服务器。它不启用 Turbo 的跨包增量构建与受管重启：运行期间，
+workspace package 源码（`packages/*/src`）的变化不会触发闭包重建。但这
+不是"没有热更新"——Vite 与 tsx 保留各自的文件监听，应用内源码变化仍会
+正常热更新/重启。适用于脚本化或一次性起栈场景。
+
+**纯产物监听。** `pnpm watch:dist`（`turbo watch build`）只重建构建
+产物，从不重启任何进程。它是直接执行构建产物的非受管轨道的显式补充：
+
+| 非受管入口 | 执行内容 |
+| --- | --- |
+| `pnpm --filter @exam/api start`（及生产镜像） | `apps/api/dist` 经 `node dist/server.js` |
+| `pnpm --filter @exam/api worker:email` | `apps/api/dist` 经 `node dist/workers/emailDeliveryWorker.js` |
+| seed / admin / rollback CLI（`db:seed`、`bootstrap:admin` 等） | `apps/api/src` 经 tsx（一次性） |
+
+`worker:email:dev` 经 tsx 从源码运行同一 worker；它是否纳入受管 dev
+轨道属于独立评估（#938 跟踪）。
+
+**并发构建 watcher。** `pnpm dev` 与 `pnpm watch:dist` 都是 `dist`
+构建的所有者。Turbo 没有 workspace 级构建锁：不要在同一 worktree 内
+随意并行运行两个构建 watcher。若需要同时运行受管开发循环与非受管
+`pnpm start`/worker 的产物重建，请使用不同 worktree，或先停掉其中一个。
 
 | 服务 | 开发端口 | 控制变量 |
 | --- | --- | --- |
@@ -123,7 +156,9 @@ pnpm --filter api dev   # 仅 API
 
 | 命令 | 说明 |
 | --- | --- |
-| `pnpm dev` | 启动全部开发服务 |
+| `pnpm dev` | Canonical 受管开发循环：先构建闭包，再监听并重启受管任务 |
+| `pnpm dev:once` | 构建闭包后一次性启动开发服务器（无 Turbo 跨包监听） |
+| `pnpm watch:dist` | 只重建产物——不重启任何消费者（供 start/worker/CLI） |
 | `pnpm build` | 构建所有 package |
 | `pnpm test` | 运行全部测试 |
 | `pnpm coverage` | 运行带 coverage 的测试 |

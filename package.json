@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "turbo watch dev",
+    "dev:once": "turbo dev",
+    "watch:dist": "turbo watch build",
     "build": "turbo build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
