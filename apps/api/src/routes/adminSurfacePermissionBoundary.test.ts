@@ -2,7 +2,11 @@
  * Permission boundary test: organization/system administrative surfaces.
  *
  * Proves:
- *   - every organization/system route × every non-Admin role: 403 denial
+ *   - every organization/system route × Teacher / Proctor / Grader /
+ *     Candidate (the four business roles): 403 denial — the Maintainer
+ *     boundary on these surfaces is owned separately by
+ *     apps/api/src/authz/operationalBoundary.test.ts (ADR-017), which this
+ *     matrix deliberately does not exercise
  *   - every such route unauthenticated: 401
  *   - route-specific owner suites prove Admin capability-stage passage
  *   - every mutating route: real non-vacuous zero-write evidence
