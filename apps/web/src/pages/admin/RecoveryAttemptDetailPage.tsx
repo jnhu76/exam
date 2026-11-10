@@ -87,7 +87,7 @@ export function RecoveryAttemptDetailPage() {
   const { user } = useAuthContext();
   const { attemptId } = useParams<{ attemptId: string }>();
 
-  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+  const { data, error, isRefreshing, isStale, refresh } =
     useRecoveryProjection<RecoveryAttemptOperationsResponse>({
       load: ({ signal }) =>
         api.get<RecoveryAttemptOperationsResponse>(
@@ -557,12 +557,10 @@ export function RecoveryAttemptDetailPage() {
     setMisconductCleanupFailed(false);
   }, [user, misconduct, t]);
 
-  // Projection-hook invariant: isInitialLoading iff (data === null &&
-  // error === null) — without data the page is Loading or the classified
-  // Error. The trailing return exhausts a statically impossible state
-  // without an assertion.
+  // Projection-hook contract: with data === null the page is either the
+  // classified Error (first load failed) or Loading (error === null means
+  // the initial load is still in flight) — there is no third state.
   if (!data) {
-    if (isInitialLoading) return <LoadingState />;
     if (error) {
       return (
         <ErrorState
@@ -571,7 +569,7 @@ export function RecoveryAttemptDetailPage() {
         />
       );
     }
-    return null;
+    return <LoadingState />;
   }
 
   const { attempt } = data;

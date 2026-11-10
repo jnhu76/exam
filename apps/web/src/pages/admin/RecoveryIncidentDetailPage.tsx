@@ -54,7 +54,7 @@ export function RecoveryIncidentDetailPage() {
   const { formatTime } = useProductDateTime();
   const { incidentId } = useParams<{ incidentId: string }>();
 
-  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+  const { data, error, isRefreshing, isStale, refresh } =
     useRecoveryProjection<RecoveryIncidentAggregateResponse>({
       load: ({ signal }) =>
         api.get<RecoveryIncidentAggregateResponse>(
@@ -66,12 +66,10 @@ export function RecoveryIncidentDetailPage() {
       deps: [incidentId],
     });
 
-  // Projection-hook invariant: isInitialLoading iff (data === null &&
-  // error === null) — without data the page is Loading or the classified
-  // Error. The trailing return exhausts a statically impossible state
-  // without an assertion.
+  // Projection-hook contract: with data === null the page is either the
+  // classified Error (first load failed) or Loading (error === null means
+  // the initial load is still in flight) — there is no third state.
   if (!data) {
-    if (isInitialLoading) return <LoadingState />;
     if (error) {
       return (
         <ErrorState
@@ -80,7 +78,7 @@ export function RecoveryIncidentDetailPage() {
         />
       );
     }
-    return null;
+    return <LoadingState />;
   }
 
   const snapshotStale = isStale;

@@ -235,7 +235,7 @@ export function RecoveryExamDetailPage() {
   const canManageProctors =
     actor !== null && can(actor, Permission.ExamProctorAssignmentManage);
 
-  const { data, error, isInitialLoading, isRefreshing, isStale, refresh } =
+  const { data, error, isRefreshing, isStale, refresh } =
     useRecoveryProjection<RecoveryExamContextResponse>({
       load: ({ signal }) =>
         api.get<RecoveryExamContextResponse>(
@@ -247,12 +247,10 @@ export function RecoveryExamDetailPage() {
       deps: [examId],
     });
 
-  // Projection-hook invariant: isInitialLoading iff (data === null &&
-  // error === null) — without data the page is Loading or the classified
-  // Error. The trailing return exhausts a statically impossible state
-  // without an assertion.
+  // Projection-hook contract: with data === null the page is either the
+  // classified Error (first load failed) or Loading (error === null means
+  // the initial load is still in flight) — there is no third state.
   if (!data) {
-    if (isInitialLoading) return <LoadingState />;
     if (error) {
       return (
         <ErrorState
@@ -261,7 +259,7 @@ export function RecoveryExamDetailPage() {
         />
       );
     }
-    return null;
+    return <LoadingState />;
   }
 
   const queueForExam = `${routes.admin.recovery}?examId=${data.examSummary.id}`;
