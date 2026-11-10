@@ -7,24 +7,23 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
-import type { CandidateTakeSnapshot, ClientEvent } from "@exam/contracts";
-import { permissionsForRole } from "@exam/authz";
+import type { CandidateTakeSnapshot } from "@exam/contracts";
 import { ApiError } from "@/lib/api";
 import { toast } from "sonner";
-import { ClientEventBuffer } from "@/lib/clientEventBuffer";
 import { getBuffer, setBuffer } from "@/lib/logger";
 import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
+import {
+  NOW,
+  buildTakeSnapshot,
+  fillBlankQuestion,
+  installRecordingBuffer,
+  singleChoiceQuestion,
+  takeExamProviders,
+  telemetryEvents,
+} from "./TakeExamPage.testHarness";
 
 /**
  * P3-FSM-0 integration tests — authoritative CandidateTakeSnapshot read path.
@@ -42,48 +41,14 @@ import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
  * take endpoint; mocks here intercept the take endpoint only).
  */
 
-const NOW = "2026-07-04T10:00:00.000Z";
-const DEADLINE = "2026-07-04T11:00:00.000Z";
-
 function buildSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
 ): CandidateTakeSnapshot {
-  return {
-    attemptId: "att-1",
-    examId: "exam-1",
-    attemptStatus: "in_progress",
+  return buildTakeSnapshot({
     timingMode: "timed_window",
-    gradingStatus: "auto_graded",
-    isEditable: true,
-    canStart: false,
-    canResume: false,
-    canSave: true,
-    canSubmit: true,
-    resultVisibility: "hidden",
-    answerVisibility: "hidden",
-    submittedAt: null,
-    serverNow: NOW,
-    effectiveDeadline: DEADLINE,
-    serverRevision: NOW,
-    questions: [
-      {
-        id: "q1",
-        type: "single_choice",
-        prompt: "选择一项",
-        promptDocument: null,
-        answerMode: "plain" as const,
-        options: [
-          { id: "opt-a", content: "A", contentDocument: null },
-          { id: "opt-b", content: "B", contentDocument: null },
-        ],
-        inputMode: "choice",
-        maxScore: 10,
-        answerValue: null,
-        answerSource: "none",
-      },
-    ],
+    questions: [singleChoiceQuestion("q1", { prompt: "选择一项" })],
     ...overrides,
-  };
+  });
 }
 
 const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
@@ -96,46 +61,18 @@ const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
   postMeta: { requestId: null as string | null },
 }));
 
-vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {
-    readonly status: number;
-    readonly message: string;
-    readonly code?: string;
-    readonly details?: unknown;
-    readonly requestId?: string;
-    readonly serverMessage?: string;
-    constructor(
-      status: number,
-      message: string,
-      code?: string,
-      details?: unknown,
-      requestId?: string,
-      serverMessage?: string,
-    ) {
-      super(message);
-      this.name = "ApiError";
-      this.status = status;
-      this.message = message;
-      this.code = code;
-      this.details = details;
-      this.requestId = requestId;
-      this.serverMessage = serverMessage ?? message;
-    }
-  },
-  api: {
-    get: (...args: unknown[]) => apiGet(...args),
-    post: (...args: unknown[]) => apiPost(...args),
-    // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock so url/body assertions stay single-sourced. The header id comes
-    // from the shared postMeta holder so rejection-correlation tests can
-    // forge one; every other test sees the absent-header null.
-    postWithMeta: async (...args: unknown[]) => ({
-      data: await apiPost(...args),
-      meta: { requestId: postMeta.requestId },
-    }),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async () => {
+  const { createTakeApiModuleMock, makeApiErrorStub } =
+    await import("./TakeExamPage.apiMockHarness");
+  return {
+    ApiError: makeApiErrorStub(),
+    // #924: the save path calls postWithMeta; it delegates to the same
+    // apiPost mock so url/body assertions stay single-sourced. The header id
+    // comes from the shared postMeta holder so rejection-correlation tests
+    // can forge one; every other test sees the absent-header null.
+    ...createTakeApiModuleMock({ apiGet, apiPost, postMeta }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -171,18 +108,10 @@ function AttemptSwitcher() {
 
 function renderPage(options: { withAttemptSwitcher?: boolean } = {}) {
   return render(
-    <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
-      <AuthProvider
-        initialUser={{
-          id: "c1",
-          username: "candidate",
-          name: "Candidate",
-          role: "Candidate",
-          organizationId: "org1",
-          capabilities: [...permissionsForRole("Candidate")],
-        }}
-      >
-        <BrandProvider>
+    takeExamProviders({
+      initialPath: "/exam/exam-1/take/att-1",
+      children: (
+        <>
           <LocationProbe />
           <Routes>
             <Route
@@ -204,9 +133,9 @@ function renderPage(options: { withAttemptSwitcher?: boolean } = {}) {
             />
             <Route path="/exam/list" element={<span>list</span>} />
           </Routes>
-        </BrandProvider>
-      </AuthProvider>
-    </MemoryRouter>,
+        </>
+      ),
+    }),
   );
 }
 
@@ -506,21 +435,6 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
   });
 });
 describe("submit dialog fact weighting (S3.4)", () => {
-  function fillBlank(id: string) {
-    return {
-      id,
-      type: "fill_blank" as const,
-      prompt: `填空 ${id}`,
-      promptDocument: null,
-      answerMode: "plain" as const,
-      options: [],
-      inputMode: "single_line" as const,
-      maxScore: 10,
-      answerValue: null,
-      answerSource: "none" as const,
-    };
-  }
-
   function factRow(testId: string) {
     return screen.getByTestId(testId);
   }
@@ -538,7 +452,7 @@ describe("submit dialog fact weighting (S3.4)", () => {
   }
 
   it("weakens all three facts when every count is zero and keeps confirm enabled", async () => {
-    installTakeRoute(buildSnapshot({ questions: [fillBlank("q1")] }));
+    installTakeRoute(buildSnapshot({ questions: [fillBlankQuestion("q1")] }));
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/answers/")) {
         return { accepted: true, serverVersion: 1, savedAt: NOW };
@@ -588,7 +502,9 @@ describe("submit dialog fact weighting (S3.4)", () => {
 
   it("marks a non-zero unanswered count with the info tone and an icon while zeros stay quiet", async () => {
     installTakeRoute(
-      buildSnapshot({ questions: [fillBlank("q1"), fillBlank("q2")] }),
+      buildSnapshot({
+        questions: [fillBlankQuestion("q1"), fillBlankQuestion("q2")],
+      }),
     );
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/answers/")) {
@@ -631,7 +547,7 @@ describe("submit dialog fact weighting (S3.4)", () => {
   });
 
   it("marks the save-failed count with the destructive tone and keeps the override gate intact", async () => {
-    installTakeRoute(buildSnapshot({ questions: [fillBlank("q1")] }));
+    installTakeRoute(buildSnapshot({ questions: [fillBlankQuestion("q1")] }));
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/answers/")) {
         throw new Error("offline");
@@ -750,38 +666,8 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
   const T0_ISO = T0.toISOString();
   const nearDeadline = new Date(T0.getTime() + 3_000).toISOString();
 
-  /** Recording telemetry buffer (same persistence seam as the saveFault suite). */
-  function installRecordingBuffer() {
-    const send = vi.fn(async (events: ClientEvent[]) => ({
-      acknowledgedCount: events.length,
-      rejected: [],
-    }));
-    setBuffer(
-      new ClientEventBuffer({
-        send,
-        batchSize: 100,
-        flushIntervalMs: 0,
-      }),
-    );
-    return send;
-  }
-
   async function flushAll(): Promise<void> {
     await getBuffer().flush();
-  }
-
-  /** All buffered exam_telemetry records with the given event name. */
-  function telemetryEvents(
-    send: ReturnType<typeof vi.fn>,
-    name: string,
-  ): Array<Record<string, unknown>> {
-    const out: Array<Record<string, unknown>> = [];
-    for (const call of send.mock.calls) {
-      for (const ev of call[0] as Array<Record<string, unknown>>) {
-        if (ev.kind === "exam_telemetry" && ev.name === name) out.push(ev);
-      }
-    }
-    return out;
   }
 
   /** A /submit POST that stays in flight until the test settles it. */

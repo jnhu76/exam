@@ -1,16 +1,21 @@
 import { StrictMode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
-import type { CandidateTakeSnapshot, ClientEvent } from "@exam/contracts";
-import { permissionsForRole } from "@exam/authz";
-import { ClientEventBuffer } from "@/lib/clientEventBuffer";
+import type { CandidateTakeSnapshot } from "@exam/contracts";
 import { setBuffer, getBuffer } from "@/lib/logger";
 import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
+import {
+  NOW,
+  SnapshotQuestion,
+  buildTakeSnapshot,
+  fillBlankQuestion,
+  installRecordingBuffer,
+  takeExamProviders,
+  telemetryEvents,
+} from "./TakeExamPage.testHarness";
 
 /**
  * Save-fault classification and cross-layer error correlation (#800 PR-B):
@@ -36,50 +41,11 @@ import { __resetExamTelemetryForTest } from "@/lib/examTelemetry";
  * codes only — never the ApiError message text or a stack.
  */
 
-const NOW = "2026-07-04T10:00:00.000Z";
-const DEADLINE = "2026-07-04T11:00:00.000Z";
-
-type SnapshotQuestion = CandidateTakeSnapshot["questions"][number];
-
-function fillBlankQuestion(id: string): SnapshotQuestion {
-  return {
-    id,
-    type: "fill_blank",
-    prompt: `填空 ${id}`,
-    promptDocument: null,
-    answerMode: "plain" as const,
-    options: [],
-    inputMode: "single_line",
-    maxScore: 10,
-    answerValue: null,
-    answerSource: "none",
-  };
-}
-
 function buildSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
   questions: SnapshotQuestion[] = [fillBlankQuestion("q1")],
 ): CandidateTakeSnapshot {
-  return {
-    attemptId: "att-1",
-    examId: "exam-1",
-    attemptStatus: "in_progress",
-    timingMode: "untimed",
-    gradingStatus: "auto_graded",
-    isEditable: true,
-    canStart: false,
-    canResume: false,
-    canSave: true,
-    canSubmit: true,
-    resultVisibility: "hidden",
-    answerVisibility: "hidden",
-    submittedAt: null,
-    serverNow: NOW,
-    effectiveDeadline: DEADLINE,
-    serverRevision: NOW,
-    questions,
-    ...overrides,
-  };
+  return buildTakeSnapshot({ timingMode: "untimed", questions, ...overrides });
 }
 
 const { apiGet, apiPost, postMeta } = vi.hoisted(() => ({
@@ -88,109 +54,40 @@ const { apiGet, apiPost, postMeta } = vi.hoisted(() => ({
   postMeta: { requestId: null as string | null },
 }));
 
-vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {
-    readonly status: number;
-    readonly message: string;
-    readonly code?: string;
-    readonly details?: unknown;
-    readonly requestId?: string;
-    readonly serverMessage?: string;
-    constructor(
-      status: number,
-      message: string,
-      code?: string,
-      details?: unknown,
-      requestId?: string,
-      serverMessage?: string,
-    ) {
-      super(message);
-      this.name = "ApiError";
-      this.status = status;
-      this.message = message;
-      this.code = code;
-      this.details = details;
-      this.requestId = requestId;
-      this.serverMessage = serverMessage ?? message;
-    }
-  },
-  api: {
-    get: (...args: unknown[]) => apiGet(...args),
-    post: (...args: unknown[]) => apiPost(...args),
-    // #924: the save path calls postWithMeta; delegating to the same apiPost
-    // mock keeps url/body/throw assertions single-sourced (header id via
-    // postMeta when a test needs one — this file's saves never succeed on
-    // the rejection surfaces under test, so null is the honest default).
-    postWithMeta: async (...args: unknown[]) => ({
-      data: await apiPost(...args),
-      meta: { requestId: postMeta.requestId },
-    }),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async () => {
+  const { createTakeApiModuleMock, makeApiErrorStub } =
+    await import("./TakeExamPage.apiMockHarness");
+  return {
+    ApiError: makeApiErrorStub(),
+    // #924: the save path calls postWithMeta; it delegates to the same
+    // apiPost mock so url/body/throw assertions stay single-sourced (header
+    // id via postMeta when a test needs one — this file's saves never
+    // succeed on the rejection surfaces under test, so null is the honest
+    // default).
+    ...createTakeApiModuleMock({ apiGet, apiPost, postMeta }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-/** Recording buffer: captures every event the page pushes for persistence. */
-function installRecordingBuffer() {
-  const send = vi.fn(async (events: ClientEvent[]) => ({
-    acknowledgedCount: events.length,
-    rejected: [],
-  }));
-  setBuffer(
-    new ClientEventBuffer({
-      send,
-      batchSize: 100,
-      flushIntervalMs: 0,
-    }),
-  );
-  return send;
-}
-
 async function flushAll(): Promise<void> {
   await getBuffer().flush();
 }
 
-/** All persisted exam_telemetry records with the given event name. */
-function telemetryEvents(
-  send: ReturnType<typeof vi.fn>,
-  name: string,
-): Array<Record<string, unknown>> {
-  const out: Array<Record<string, unknown>> = [];
-  for (const call of send.mock.calls) {
-    for (const ev of call[0] as Array<Record<string, unknown>>) {
-      if (ev.kind === "exam_telemetry" && ev.name === name) out.push(ev);
-    }
-  }
-  return out;
-}
-
 function renderPage(strict = false) {
-  const page = (
-    <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
-      <AuthProvider
-        initialUser={{
-          id: "c1",
-          username: "candidate",
-          name: "Candidate",
-          role: "Candidate",
-          organizationId: "org1",
-          capabilities: [...permissionsForRole("Candidate")],
-        }}
-      >
-        <BrandProvider>
-          <Routes>
-            <Route
-              path="/exam/:examId/take/:attemptId"
-              element={<TakeExamPage />}
-            />
-          </Routes>
-        </BrandProvider>
-      </AuthProvider>
-    </MemoryRouter>
-  );
+  const page = takeExamProviders({
+    initialPath: "/exam/exam-1/take/att-1",
+    children: (
+      <Routes>
+        <Route
+          path="/exam/:examId/take/:attemptId"
+          element={<TakeExamPage />}
+        />
+      </Routes>
+    ),
+  });
   return render(strict ? <StrictMode>{page}</StrictMode> : page);
 }
 

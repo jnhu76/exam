@@ -7,21 +7,19 @@ import {
   fireEvent,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { Route, Routes, useLocation } from "react-router";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
 import { ApiError } from "@/lib/api";
-import { permissionsForRole } from "@exam/authz";
 import type { CandidateTakeSnapshot } from "@exam/contracts";
+import {
+  NOW,
+  NavigateProbe,
+  buildTakeSnapshot,
+  singleChoiceQuestion,
+  takeExamProviders,
+} from "./TakeExamPage.testHarness";
 
 /**
  * REC-I3 — Disrupted-attempt direct restore UX.
@@ -39,48 +37,14 @@ import type { CandidateTakeSnapshot } from "@exam/contracts";
  * so no arbitrary sleeps are required.
  */
 
-const NOW = "2026-07-04T10:00:00.000Z";
-const DEADLINE = "2026-07-04T11:00:00.000Z";
-
 function buildSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
 ): CandidateTakeSnapshot {
-  return {
-    attemptId: "att-1",
-    examId: "exam-1",
-    attemptStatus: "in_progress",
-    gradingStatus: "auto_graded",
+  return buildTakeSnapshot({
     timingMode: "timed_window",
-    isEditable: true,
-    canStart: false,
-    canResume: false,
-    canSave: true,
-    canSubmit: true,
-    resultVisibility: "hidden",
-    answerVisibility: "hidden",
-    submittedAt: null,
-    serverNow: NOW,
-    effectiveDeadline: DEADLINE,
-    serverRevision: NOW,
-    questions: [
-      {
-        id: "q1",
-        type: "single_choice",
-        prompt: "选择一项",
-        promptDocument: null,
-        answerMode: "plain" as const,
-        options: [
-          { id: "opt-a", content: "A", contentDocument: null },
-          { id: "opt-b", content: "B", contentDocument: null },
-        ],
-        inputMode: "choice",
-        maxScore: 10,
-        answerValue: null,
-        answerSource: "none",
-      },
-    ],
+    questions: [singleChoiceQuestion("q1", { prompt: "选择一项" })],
     ...overrides,
-  };
+  });
 }
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
@@ -88,40 +52,18 @@ const { apiGet, apiPost } = vi.hoisted(() => ({
   apiPost: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({
-  api: {
-    get: (...args: unknown[]) => apiGet(...args),
-    post: (...args: unknown[]) => apiPost(...args),
-    // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock so url/body assertions stay single-sourced. This harness asserts
-    // no rejection-id behavior, so the header id is a constant null.
-    postWithMeta: async (...args: unknown[]) => ({
-      data: await apiPost(...args),
-      meta: { requestId: null },
-    }),
-  },
-  ApiError: class ApiError extends Error {
-    readonly status: number;
-    readonly code?: string;
-    readonly details?: unknown;
-    readonly requestId?: string;
-    constructor(
-      status: number,
-      message: string,
-      code?: string,
-      details?: unknown,
-      requestId?: string,
-    ) {
-      super(message);
-      this.status = status;
-      this.code = code;
-      this.details = details;
-      this.requestId = requestId;
-      this.name = "ApiError";
-    }
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async () => {
+  const { createTakeApiModuleMock, makeApiErrorStub } =
+    await import("./TakeExamPage.apiMockHarness");
+  return {
+    ApiError: makeApiErrorStub(),
+    // #924: the save path calls postWithMeta; it delegates to the same
+    // apiPost mock so url/body assertions stay single-sourced. This harness
+    // asserts no rejection-id behavior, so the header id is a constant null
+    // (postMeta: null).
+    ...createTakeApiModuleMock({ apiGet, apiPost, postMeta: null }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -137,47 +79,28 @@ function LocationProbe() {
  * returned object. Used by the route-change test to perform a REAL in-router
  * navigation (not a mock flip), exercising the page's attemptId-change path.
  */
-function NavigateProbe({
-  register,
-}: {
-  register: (nav: (to: string) => void) => void;
-}) {
-  register(useNavigate());
-  return null;
-}
-
 function renderPage(attemptId = "att-1", opts: { strictMode?: boolean } = {}) {
   const navigateRef: { current: ((to: string) => void) | null } = {
     current: null,
   };
-  const tree = (
-    <MemoryRouter initialEntries={[`/exam/exam-1/take/${attemptId}`]}>
-      <AuthProvider
-        initialUser={{
-          id: "c1",
-          username: "candidate",
-          name: "Candidate",
-          role: "Candidate",
-          organizationId: "org1",
-          capabilities: [...permissionsForRole("Candidate")],
-        }}
-      >
-        <BrandProvider>
-          {/* Probe is a sibling of Routes so it is always mounted inside the
-              router and can hand navigate() back to the test. */}
-          <NavigateProbe register={(n) => (navigateRef.current = n)} />
-          <Routes>
-            <Route
-              path="/exam/:examId/take/:attemptId"
-              element={<TakeExamPage />}
-            />
-            <Route path="/exam/list" element={<LocationProbe />} />
-            <Route path="/exam/:attemptId/result" element={<LocationProbe />} />
-          </Routes>
-        </BrandProvider>
-      </AuthProvider>
-    </MemoryRouter>
-  );
+  const tree = takeExamProviders({
+    initialPath: `/exam/exam-1/take/${attemptId}`,
+    children: (
+      <>
+        {/* Probe is a sibling of Routes so it is always mounted inside the
+            router and can hand navigate() back to the test. */}
+        <NavigateProbe register={(n) => (navigateRef.current = n)} />
+        <Routes>
+          <Route
+            path="/exam/:examId/take/:attemptId"
+            element={<TakeExamPage />}
+          />
+          <Route path="/exam/list" element={<LocationProbe />} />
+          <Route path="/exam/:attemptId/result" element={<LocationProbe />} />
+        </Routes>
+      </>
+    ),
+  });
   const utils = opts.strictMode
     ? render(<StrictMode>{tree}</StrictMode>)
     : render(tree);
