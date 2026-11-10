@@ -50,6 +50,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..", "..", "..");
 const POLICY_PATH = join(REPO_ROOT, "config", "architecture-policy.mjs");
+const BUILD_GRAPH_POLICY_PATH = join(
+  REPO_ROOT,
+  "config",
+  "build-graph-policy.mjs",
+);
 const CHECKER_PATH = join(REPO_ROOT, "scripts", "check-architecture.mjs");
 
 const SEAM_RULE = "EXSEM014_LIFECYCLE_STATE_SEAM";
@@ -314,6 +319,12 @@ describe("real lint:arch entry rejects the witnesses (disposable worktree)", () 
     await copyFile(
       POLICY_PATH,
       join(worktree, "config", "architecture-policy.mjs"),
+    );
+    // The checker also imports config/build-graph-policy.mjs (#938); the
+    // copy list must track every module the real entry resolves.
+    await copyFile(
+      BUILD_GRAPH_POLICY_PATH,
+      join(worktree, "config", "build-graph-policy.mjs"),
     );
   }, 30_000);
 
