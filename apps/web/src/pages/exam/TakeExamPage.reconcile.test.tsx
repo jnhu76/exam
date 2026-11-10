@@ -1,12 +1,17 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
+import { Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
 import { ApiError } from "@/lib/api";
 import type { CandidateTakeSnapshot } from "@exam/contracts";
-import { permissionsForRole } from "@exam/authz";
+import {
+  NOW,
+  NavigateProbe,
+  buildTakeSnapshot,
+  singleChoiceQuestion,
+  submittedFrozenSnapshot,
+  takeExamProviders,
+} from "./TakeExamPage.testHarness";
 
 /**
  * EXAM-519 — terminal-signal reconciliation tests.
@@ -22,80 +27,21 @@ import { permissionsForRole } from "@exam/authz";
  * 1500ms save debounce are crossed deterministically.
  */
 
-const NOW = "2026-07-04T10:00:00.000Z";
-const DEADLINE = "2026-07-04T11:00:00.000Z";
-
 function buildSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
 ): CandidateTakeSnapshot {
-  return {
-    attemptId: "att-1",
-    examId: "exam-1",
-    attemptStatus: "in_progress",
+  return buildTakeSnapshot({
     timingMode: "untimed",
-    gradingStatus: "auto_graded",
-    isEditable: true,
-    canStart: false,
-    canResume: false,
-    canSave: true,
-    canSubmit: true,
-    resultVisibility: "hidden",
-    answerVisibility: "hidden",
-    submittedAt: null,
-    serverNow: NOW,
-    effectiveDeadline: DEADLINE,
-    serverRevision: NOW,
-    questions: [
-      {
-        id: "q1",
-        type: "single_choice",
-        prompt: "选择一项",
-        promptDocument: null,
-        answerMode: "plain" as const,
-        options: [
-          { id: "opt-a", content: "A", contentDocument: null },
-          { id: "opt-b", content: "B", contentDocument: null },
-        ],
-        inputMode: "choice",
-        maxScore: 10,
-        answerValue: null,
-        answerSource: "none",
-      },
-    ],
+    questions: [singleChoiceQuestion("q1", { prompt: "选择一项" })],
     ...overrides,
-  };
+  });
 }
 
 /** The frozen post-terminal snapshot the authoritative GET returns. */
 function lockedSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
 ): CandidateTakeSnapshot {
-  return buildSnapshot({
-    attemptStatus: "submitted",
-    isEditable: false,
-    canSave: false,
-    canSubmit: false,
-    lockReason: "submitted",
-    submittedAt: NOW,
-    questions: [
-      {
-        id: "q1",
-        type: "single_choice",
-        prompt: "选择一项",
-        promptDocument: null,
-        answerMode: "plain" as const,
-        options: [
-          { id: "opt-a", content: "A", contentDocument: null },
-          { id: "opt-b", content: "B", contentDocument: null },
-        ],
-        inputMode: "choice",
-        maxScore: 10,
-        answerValue: "opt-a",
-        answerSource: "submitted",
-      },
-    ],
-    ...overrides,
-  });
+  return submittedFrozenSnapshot({ timingMode: "untimed", ...overrides });
 }
 
 const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
@@ -104,88 +50,41 @@ const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
   takeHandler: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {
-    readonly status: number;
-    readonly message: string;
-    readonly code?: string;
-    readonly details?: unknown;
-    readonly requestId?: string;
-    readonly serverMessage?: string;
-    constructor(
-      status: number,
-      message: string,
-      code?: string,
-      details?: unknown,
-      requestId?: string,
-      serverMessage?: string,
-    ) {
-      super(message);
-      this.name = "ApiError";
-      this.status = status;
-      this.message = message;
-      this.code = code;
-      this.details = details;
-      this.requestId = requestId;
-      this.serverMessage = serverMessage ?? message;
-    }
-  },
-  api: {
-    get: (...args: unknown[]) => apiGet(...args),
-    post: (...args: unknown[]) => apiPost(...args),
-    // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock so url/body assertions stay single-sourced. This harness asserts
-    // no rejection-id behavior, so the header id is a constant null.
-    postWithMeta: async (...args: unknown[]) => ({
-      data: await apiPost(...args),
-      meta: { requestId: null },
-    }),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async () => {
+  const { createTakeApiModuleMock, makeApiErrorStub } =
+    await import("./TakeExamPage.apiMockHarness");
+  return {
+    ApiError: makeApiErrorStub(),
+    // #924: the save path calls postWithMeta; it delegates to the same
+    // apiPost mock so url/body assertions stay single-sourced. This harness
+    // asserts no rejection-id behavior, so the header id is a constant null
+    // (postMeta: null).
+    ...createTakeApiModuleMock({ apiGet, apiPost, postMeta: null }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-/** Hands the router's navigate() to the test (route-change scenario). */
-function NavigateProbe({
-  register,
-}: {
-  register: (nav: (to: string) => void) => void;
-}) {
-  register(useNavigate());
-  return null;
-}
-
 function renderPage() {
   const navigateRef: { current: ((to: string) => void) | null } = {
     current: null,
   };
-  const tree = (
-    <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
-      <AuthProvider
-        initialUser={{
-          id: "c1",
-          username: "candidate",
-          name: "Candidate",
-          role: "Candidate",
-          organizationId: "org1",
-          capabilities: [...permissionsForRole("Candidate")],
-        }}
-      >
-        <BrandProvider>
-          <NavigateProbe register={(n) => (navigateRef.current = n)} />
-          <Routes>
-            <Route
-              path="/exam/:examId/take/:attemptId"
-              element={<TakeExamPage />}
-            />
-          </Routes>
-        </BrandProvider>
-      </AuthProvider>
-    </MemoryRouter>
-  );
+  const tree = takeExamProviders({
+    initialPath: "/exam/exam-1/take/att-1",
+    children: (
+      <>
+        <NavigateProbe register={(n) => (navigateRef.current = n)} />
+        <Routes>
+          <Route
+            path="/exam/:examId/take/:attemptId"
+            element={<TakeExamPage />}
+          />
+        </Routes>
+      </>
+    ),
+  });
   const utils = render(tree);
   return {
     ...utils,

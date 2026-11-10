@@ -1,12 +1,15 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
 import type { CandidateTakeSnapshot } from "@exam/contracts";
-import { permissionsForRole } from "@exam/authz";
+import {
+  NOW,
+  buildTakeSnapshot,
+  singleChoiceQuestion,
+  takeExamProviders,
+} from "./TakeExamPage.testHarness";
 
 /**
  * #674 — locked-state presentation matrix. The overlay branches on the
@@ -16,49 +19,17 @@ import { permissionsForRole } from "@exam/authz";
  * next action.
  */
 
-const NOW = "2026-07-04T10:00:00.000Z";
-const DEADLINE = "2026-07-04T11:00:00.000Z";
-
 function buildSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
 ): CandidateTakeSnapshot {
-  return {
-    attemptId: "att-1",
-    examId: "exam-1",
-    attemptStatus: "in_progress",
+  return buildTakeSnapshot({
     timingMode: "timed_window",
-    gradingStatus: "auto_graded",
-    isEditable: true,
-    canStart: false,
-    canResume: false,
-    canSave: true,
-    canSubmit: true,
+    questions: [singleChoiceQuestion("q1", { prompt: "选择一项" })],
+    // Fixture contract: the unlocked base carries an explicit
+    // `lockReason: undefined` key, not an absent one.
     lockReason: undefined,
-    resultVisibility: "hidden",
-    answerVisibility: "hidden",
-    submittedAt: null,
-    serverNow: NOW,
-    effectiveDeadline: DEADLINE,
-    serverRevision: NOW,
-    questions: [
-      {
-        id: "q1",
-        type: "single_choice",
-        prompt: "选择一项",
-        promptDocument: null,
-        answerMode: "plain" as const,
-        options: [
-          { id: "opt-a", content: "A", contentDocument: null },
-          { id: "opt-b", content: "B", contentDocument: null },
-        ],
-        inputMode: "choice",
-        maxScore: 10,
-        answerValue: null,
-        answerSource: "none",
-      },
-    ],
     ...overrides,
-  };
+  });
 }
 
 const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
@@ -67,38 +38,18 @@ const { apiGet, apiPost, takeHandler } = vi.hoisted(() => ({
   takeHandler: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {
-    readonly status: number;
-    readonly code?: string;
-    readonly details?: unknown;
-    constructor(
-      status: number,
-      message: string,
-      code?: string,
-      details?: unknown,
-    ) {
-      super(message);
-      this.name = "ApiError";
-      this.status = status;
-      this.message = message;
-      this.code = code;
-      this.details = details;
-    }
-  },
-  api: {
-    get: (...args: unknown[]) => apiGet(...args),
-    post: (...args: unknown[]) => apiPost(...args),
-    // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock so url/body assertions stay single-sourced. This harness asserts
-    // no rejection-id behavior, so the header id is a constant null.
-    postWithMeta: async (...args: unknown[]) => ({
-      data: await apiPost(...args),
-      meta: { requestId: null },
-    }),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async () => {
+  const { createTakeApiModuleMock, makeApiErrorStub } =
+    await import("./TakeExamPage.apiMockHarness");
+  return {
+    ApiError: makeApiErrorStub(),
+    // #924: the save path calls postWithMeta; it delegates to the same
+    // apiPost mock so url/body assertions stay single-sourced. This harness
+    // asserts no rejection-id behavior, so the header id is a constant null
+    // (postMeta: null).
+    ...createTakeApiModuleMock({ apiGet, apiPost, postMeta: null }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -106,29 +57,19 @@ vi.mock("sonner", () => ({
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
-      <AuthProvider
-        initialUser={{
-          id: "c1",
-          username: "candidate",
-          name: "Candidate",
-          role: "Candidate",
-          organizationId: "org1",
-          capabilities: [...permissionsForRole("Candidate")],
-        }}
-      >
-        <BrandProvider>
-          <Routes>
-            <Route
-              path="/exam/:examId/take/:attemptId"
-              element={<TakeExamPage />}
-            />
-            <Route path="/exam/list" element={<div>考试列表页</div>} />
-            <Route path="/exam/:attemptId/result" element={<div>结果页</div>} />
-          </Routes>
-        </BrandProvider>
-      </AuthProvider>
-    </MemoryRouter>,
+    takeExamProviders({
+      initialPath: "/exam/exam-1/take/att-1",
+      children: (
+        <Routes>
+          <Route
+            path="/exam/:examId/take/:attemptId"
+            element={<TakeExamPage />}
+          />
+          <Route path="/exam/list" element={<div>考试列表页</div>} />
+          <Route path="/exam/:attemptId/result" element={<div>结果页</div>} />
+        </Routes>
+      ),
+    }),
   );
 }
 

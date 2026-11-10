@@ -6,13 +6,20 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
+import { Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
 import type { CandidateTakeSnapshot } from "@exam/contracts";
-import { permissionsForRole } from "@exam/authz";
+import {
+  NOW,
+  NavigateProbe,
+  SnapshotQuestion,
+  buildTakeSnapshot,
+  fillBlankQuestion,
+  singleChoiceQuestion,
+  submittedFrozenSnapshot,
+  takeExamProviders,
+} from "./TakeExamPage.testHarness";
 
 /**
  * Save-state chip (SaveIndicator) mapping over every setSaveState write path
@@ -29,89 +36,11 @@ import { permissionsForRole } from "@exam/authz";
  * holds: an edit that was never acknowledged must never render 已保存.
  */
 
-const NOW = "2026-07-04T10:00:00.000Z";
-const DEADLINE = "2026-07-04T11:00:00.000Z";
-
-type SnapshotQuestion = CandidateTakeSnapshot["questions"][number];
-
-function choiceQuestion(id: string): SnapshotQuestion {
-  return {
-    id,
-    type: "single_choice",
-    prompt: `选择一项 ${id}`,
-    promptDocument: null,
-    answerMode: "plain" as const,
-    options: [
-      { id: "opt-a", content: "A", contentDocument: null },
-      { id: "opt-b", content: "B", contentDocument: null },
-    ],
-    inputMode: "choice",
-    maxScore: 10,
-    answerValue: null,
-    answerSource: "none",
-  };
-}
-
-function fillBlankQuestion(id: string): SnapshotQuestion {
-  return {
-    id,
-    type: "fill_blank",
-    prompt: `填空 ${id}`,
-    promptDocument: null,
-    answerMode: "plain" as const,
-    options: [],
-    inputMode: "single_line",
-    maxScore: 10,
-    answerValue: null,
-    answerSource: "none",
-  };
-}
-
 function buildSnapshot(
   overrides: Partial<CandidateTakeSnapshot> = {},
   questions: SnapshotQuestion[] = [fillBlankQuestion("q1")],
 ): CandidateTakeSnapshot {
-  return {
-    attemptId: "att-1",
-    examId: "exam-1",
-    attemptStatus: "in_progress",
-    timingMode: "untimed",
-    gradingStatus: "auto_graded",
-    isEditable: true,
-    canStart: false,
-    canResume: false,
-    canSave: true,
-    canSubmit: true,
-    resultVisibility: "hidden",
-    answerVisibility: "hidden",
-    submittedAt: null,
-    serverNow: NOW,
-    effectiveDeadline: DEADLINE,
-    serverRevision: NOW,
-    questions,
-    ...overrides,
-  };
-}
-
-/** The frozen post-terminal snapshot an authoritative re-read returns. */
-function lockedSnapshot(): CandidateTakeSnapshot {
-  return buildSnapshot(
-    {
-      attemptStatus: "submitted",
-      isEditable: false,
-      canSave: false,
-      canSubmit: false,
-      lockReason: "submitted",
-      submittedAt: NOW,
-    },
-    [
-      {
-        ...choiceQuestion("q1"),
-        answerValue: "opt-a",
-        answerSource: "submitted" as const,
-      },
-    ],
-  );
+  return buildTakeSnapshot({ timingMode: "untimed", questions, ...overrides });
 }
 
 const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
@@ -121,77 +50,31 @@ const { apiGet, apiPost, takeHandler, postMeta } = vi.hoisted(() => ({
   postMeta: { requestId: null as string | null },
 }));
 
-vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {
-    readonly status: number;
-    readonly message: string;
-    readonly code?: string;
-    readonly details?: unknown;
-    readonly requestId?: string;
-    readonly serverMessage?: string;
-    constructor(
-      status: number,
-      message: string,
-      code?: string,
-      details?: unknown,
-      requestId?: string,
-      serverMessage?: string,
-    ) {
-      super(message);
-      this.name = "ApiError";
-      this.status = status;
-      this.message = message;
-      this.code = code;
-      this.details = details;
-      this.requestId = requestId;
-      this.serverMessage = serverMessage ?? message;
-    }
-  },
-  api: {
-    get: (...args: unknown[]) => apiGet(...args),
-    post: (...args: unknown[]) => apiPost(...args),
-    // #924: the save path calls postWithMeta; delegate to the same apiPost
-    // mock (url/body assertions stay single-sourced) and thread the per-test
-    // response-header id through postMeta.requestId.
-    postWithMeta: async (...args: unknown[]) => ({
-      data: await apiPost(...args),
-      meta: { requestId: postMeta.requestId },
-    }),
-  },
-  setNavigate: () => {},
-}));
+vi.mock("@/lib/api", async () => {
+  const { createTakeApiModuleMock, makeApiErrorStub } =
+    await import("./TakeExamPage.apiMockHarness");
+  return {
+    ApiError: makeApiErrorStub(),
+    // #924: the save path calls postWithMeta; it delegates to the same
+    // apiPost mock (url/body assertions stay single-sourced) and threads the
+    // per-test response-header id through postMeta.requestId.
+    ...createTakeApiModuleMock({ apiGet, apiPost, postMeta }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
-
-/** Hands the router's navigate() to the test (route-change scenario). */
-function NavigateProbe({
-  register,
-}: {
-  register: (nav: (to: string) => void) => void;
-}) {
-  register(useNavigate());
-  return null;
-}
 
 function renderPage() {
   const navigateRef: { current: ((to: string) => void) | null } = {
     current: null,
   };
   const utils = render(
-    <MemoryRouter initialEntries={["/exam/exam-1/take/att-1"]}>
-      <AuthProvider
-        initialUser={{
-          id: "c1",
-          username: "candidate",
-          name: "Candidate",
-          role: "Candidate",
-          organizationId: "org1",
-          capabilities: [...permissionsForRole("Candidate")],
-        }}
-      >
-        <BrandProvider>
+    takeExamProviders({
+      initialPath: "/exam/exam-1/take/att-1",
+      children: (
+        <>
           <NavigateProbe register={(n) => (navigateRef.current = n)} />
           <Routes>
             <Route
@@ -199,9 +82,9 @@ function renderPage() {
               element={<TakeExamPage />}
             />
           </Routes>
-        </BrandProvider>
-      </AuthProvider>
-    </MemoryRouter>,
+        </>
+      ),
+    }),
   );
   return {
     ...utils,
@@ -279,7 +162,11 @@ describe("save-state chip mapping (real timers)", () => {
   });
 
   it("maps a network failure to error and auto-recovers to saved on the browser online event (P8 → P5)", async () => {
-    installTakeRoute([buildSnapshot({}, [choiceQuestion("q1")])]);
+    installTakeRoute([
+      buildSnapshot({}, [
+        singleChoiceQuestion("q1", { prompt: "选择一项 q1" }),
+      ]),
+    ]);
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/answers/")) {
         throw new Error("offline");
@@ -534,9 +421,11 @@ describe("save-state chip mapping (real timers)", () => {
 describe("save-state chip mapping (fake timers — skip path)", () => {
   it("a pending edit whose attempt turns non-saveable before the debounce fires is skipped: no POST, chip reads 保存失败, never 已保存 (P4)", async () => {
     const getTakeCalls = installTakeRoute([
-      buildSnapshot({}, [choiceQuestion("q1")]),
+      buildSnapshot({}, [
+        singleChoiceQuestion("q1", { prompt: "选择一项 q1" }),
+      ]),
       // The authoritative re-read returns the frozen submitted snapshot.
-      lockedSnapshot(),
+      submittedFrozenSnapshot({ timingMode: "untimed" }),
     ]);
 
     vi.useFakeTimers();
