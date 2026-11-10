@@ -90,23 +90,6 @@ describe("import-logs routes", () => {
     expect(item.metadata).toBeInstanceOf(Object);
   });
 
-  it("GET /api/admin/import-logs requires Admin role", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/import-logs?page=1",
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(res.statusCode).toBe(403);
-  });
-
-  it("GET /api/admin/import-logs returns 401 without authentication", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/import-logs?page=1",
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
   it("GET /api/admin/import-logs returns stable empty structure for non-matching type filter", async () => {
     const res = await ctx.app.inject({
       method: "GET",

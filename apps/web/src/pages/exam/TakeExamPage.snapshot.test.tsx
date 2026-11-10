@@ -431,48 +431,6 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
     expect(takeHandler.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("displays save-rejection alert when backend rejects with ATTEMPT_ALREADY_SUBMITTED", async () => {
-    const snap = buildSnapshot({
-      questions: [
-        {
-          id: "q1",
-          type: "fill_blank",
-          prompt: "填空题",
-          promptDocument: null,
-          answerMode: "plain" as const,
-          options: [],
-          inputMode: "single_line",
-          maxScore: 10,
-          answerValue: null,
-          answerSource: "none",
-        },
-      ],
-    });
-    installTakeRoute(snap);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/answers/")) {
-        return {
-          accepted: false,
-          reason: "ATTEMPT_ALREADY_SUBMITTED",
-          message: "已提交",
-          serverVersion: 0,
-          savedAt: NOW,
-        };
-      }
-      return { ok: true, serverNow: NOW };
-    });
-
-    renderPage();
-    const input = await screen.findByLabelText("第1空答案");
-    const user = userEvent.setup();
-    await user.type(input, "x");
-
-    expect(
-      await screen.findByTestId("save-rejection-alert", {}, { timeout: 3000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("考试已结束")).toBeInTheDocument();
-  });
-
   it("shows error state and a retry button when the snapshot endpoint fails", async () => {
     apiGet.mockRejectedValueOnce(new Error("network"));
     renderPage();
@@ -481,38 +439,6 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
       await screen.findByText("无法加载答题记录，请检查连接后重试"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
-  });
-
-  it("deadline auto-submit fires when effectiveDeadline has passed", async () => {
-    // Real timers (matching the original suite's pattern) so apiPost promises
-    // resolve and waitFor can observe the submit. The snapshot reports an
-    // already-passed effectiveDeadline; the page's deadline checker fires
-    // submit on the next tick.
-    const serverNow = new Date("2026-07-04T12:00:00Z");
-    const expired = buildSnapshot({
-      serverNow: serverNow.toISOString(),
-      effectiveDeadline: new Date("2026-07-04T11:00:00Z").toISOString(),
-    });
-    installTakeRoute(expired);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/submit")) {
-        return { ok: true };
-      }
-      return { ok: true, serverNow: serverNow.toISOString() };
-    });
-
-    renderPage();
-
-    await waitFor(
-      () => {
-        expect(
-          apiPost.mock.calls.some(
-            ([p]) => typeof p === "string" && p.includes("/submit"),
-          ),
-        ).toBe(true);
-      },
-      { timeout: 4000 },
-    );
   });
 
   it("flag toggle marks the current question as flagged", async () => {

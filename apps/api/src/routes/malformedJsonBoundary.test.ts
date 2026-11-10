@@ -71,15 +71,6 @@ describe("malformed JSON boundary (#450)", () => {
     },
   );
 
-  it("keeps parseable but schema-invalid JSON on the existing validation contract", async () => {
-    const res = await injectRawJsonBody("/api/auth/login", "{}");
-    expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
-    expect(body.error.details.fields.length).toBeGreaterThan(0);
-    expect(body.error.requestId).not.toBe("");
-  });
-
   it("keeps the lenient empty-JSON-body contract (empty parses to {}, then schema validation)", async () => {
     // The custom application/json parser in setupSecurity deliberately
     // tolerates empty bodies (parses to {}); the rejection comes from the

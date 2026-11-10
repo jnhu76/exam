@@ -5,12 +5,12 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
-import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
-import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
+import {
+  buildExamPayload,
+  createIsolatedAttemptOrg,
+  type IsolatedAttemptOrg,
+} from "./__tests__/attempts.testHelpers.js";
 
 const STATUS_TEST_PREFIX = "status-test-";
 
@@ -29,181 +29,8 @@ describe("attempt routes", () => {
   });
 
   describe("GET /api/admin/exams/:examId/candidates/status", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${STATUS_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const adminId = crypto.randomUUID();
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: adminId,
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "Status Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: adminId,
-        role: "Admin",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const candidateId = crypto.randomUUID();
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: candidateId,
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "Status Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: candidateId,
-        role: "Candidate",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `Status Course ${slug}`,
-            code: `ST-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
     async function createPublishedExam(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       title: string,
     ): Promise<string> {
       const exam = await ctx.app.inject({
@@ -225,7 +52,7 @@ describe("attempt routes", () => {
       return examId;
     }
 
-    async function enrollCandidate(t: IsolatedTestOrg, examId: string) {
+    async function enrollCandidate(t: IsolatedAttemptOrg, examId: string) {
       await ctx.app.inject({
         method: "POST",
         url: `/api/exams/${examId}/enrollments`,
@@ -235,7 +62,7 @@ describe("attempt routes", () => {
     }
 
     async function startAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examId: string,
     ): Promise<string> {
       const res = await ctx.app.inject({
@@ -269,7 +96,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 200 with candidate status list for a valid exam with enrollments", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: STATUS_TEST_PREFIX,
+        label: "Status",
+      });
       const examId = await createPublishedExam(t, "Status Test Exam");
       await enrollCandidate(t, examId);
 
@@ -290,7 +120,10 @@ describe("attempt routes", () => {
     });
 
     it("returns in_progress status when candidate has started the exam", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: STATUS_TEST_PREFIX,
+        label: "Status",
+      });
       const examId = await createPublishedExam(t, "Status InProgress Exam");
       await enrollCandidate(t, examId);
       await startAttempt(t, examId);
@@ -310,7 +143,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 404 for a non-existent exam", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: STATUS_TEST_PREFIX,
+        label: "Status",
+      });
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/exams/${crypto.randomUUID()}/candidates/status`,
@@ -320,7 +156,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 403 for a non-admin (candidate) token", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: STATUS_TEST_PREFIX,
+        label: "Status",
+      });
       const examId = await createPublishedExam(t, "Status Forbidden Exam");
       await enrollCandidate(t, examId);
 

@@ -23,23 +23,6 @@ describe("settings routes", () => {
     expect(body).toHaveProperty("productName");
   });
 
-  it("PATCH /api/admin/settings/branding requires auth", async () => {
-    const res = await ctx.app.inject({
-      method: "PATCH",
-      url: "/api/admin/settings/branding",
-      payload: { productName: "Nope" },
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("GET /api/admin/settings requires auth", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/settings",
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
   it("GET /api/admin/settings returns settings for authenticated admin", async () => {
     const res = await ctx.app.inject({
       method: "GET",

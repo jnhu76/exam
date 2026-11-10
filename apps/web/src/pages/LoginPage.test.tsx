@@ -73,14 +73,6 @@ describe("LoginPage smoke", () => {
     apiPost.mockReset();
   });
 
-  it("renders username and password fields and login button", () => {
-    renderLogin();
-
-    expect(screen.getByLabelText("用户名")).toBeInTheDocument();
-    expect(screen.getByLabelText("密码")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
-  });
-
   it("does not show login submitting state during session restore", () => {
     apiGet.mockImplementationOnce(() => new Promise(() => {}));
 

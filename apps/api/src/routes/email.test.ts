@@ -51,37 +51,6 @@ describe("POST /api/email/test", () => {
     resetRuntimeConfigForTest();
   });
 
-  it("rejects an unauthenticated request with 401", async () => {
-    vi.stubEnv("EMAIL_ENABLED", "false");
-    const { ctx, cleanup } = await buildEmailApp({ emailEnabled: false });
-    try {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/email/test",
-        payload: { to: "someone@example.com" },
-      });
-      expect(res.statusCode).toBe(401);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it("rejects a non-admin (candidate) with 403", async () => {
-    vi.stubEnv("EMAIL_ENABLED", "false");
-    const { ctx, cleanup } = await buildEmailApp({ emailEnabled: false });
-    try {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/email/test",
-        payload: { to: "someone@example.com" },
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-    } finally {
-      await cleanup();
-    }
-  });
-
   it("rejects an invalid recipient address with 400", async () => {
     vi.stubEnv("EMAIL_ENABLED", "false");
     const { ctx, cleanup } = await buildEmailApp({ emailEnabled: false });

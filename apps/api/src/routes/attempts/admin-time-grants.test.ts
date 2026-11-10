@@ -5,14 +5,14 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
-import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
 import {
   buildExamPayload,
+  createIsolatedAttemptOrg,
+  createOrgRoleUser,
   disruptAttempt,
+  type IsolatedAttemptOrg,
 } from "./__tests__/attempts.testHelpers.js";
 
 const GRANT_TEST_PREFIX = "time-grant-test-";
@@ -32,217 +32,21 @@ describe("attempt routes", () => {
   });
 
   describe("POST /api/admin/attempts/:attemptId/time-grants", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      adminUserId: string;
+    interface IsolatedTimeGrantOrg extends IsolatedAttemptOrg {
       proctorToken: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
     }
 
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${GRANT_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const adminId = crypto.randomUUID();
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: adminId,
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "TG Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: adminId,
-        role: "Admin",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
+    async function createTimeGrantTestOrg(): Promise<IsolatedTimeGrantOrg> {
+      const base = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: GRANT_TEST_PREFIX,
+        label: "TG",
       });
-
-      const proctorId = crypto.randomUUID();
-      await ctx.db.insert(schema.users).values({
-        id: proctorId,
-        organizationId: org.id,
-        username: `proctor-${slug}`,
-        passwordHash,
-        name: "TG Proctor",
-        role: "Proctor",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: proctorId,
-        role: "Proctor",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const candidateId = crypto.randomUUID();
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: candidateId,
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "TG Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: candidateId,
-        role: "Candidate",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `TG Course ${slug}`,
-            code: `TG-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const proctorToken = signJWT(
-        {
-          actorId: proctorId,
-          role: "Proctor" as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        adminUserId: admin.id,
-        proctorToken,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
+      const proctor = await createOrgRoleUser(ctx, base.orgId, "Proctor", "TG");
+      return { ...base, proctorToken: proctor.token };
     }
 
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedTimeGrantOrg,
       examTitle: string,
       policy:
         | "strict"
@@ -288,7 +92,7 @@ describe("attempt routes", () => {
       return { attemptId, examId: localExamId };
     }
 
-    function makeAdminCtx(t: IsolatedTestOrg) {
+    function makeAdminCtx(t: IsolatedTimeGrantOrg) {
       return {
         actorId: t.adminUserId,
         organizationId: t.orgId,
@@ -356,7 +160,7 @@ describe("attempt routes", () => {
     });
 
     it("grants operator time, writes the adjustment ledger row, audits, and returns the operation fact (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant InProgress");
       const before = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
@@ -426,7 +230,7 @@ describe("attempt routes", () => {
     });
 
     it("rolls back the ledger and deadline when the atomic time-grant audit insert fails", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
         "Grant Audit Rollback",
@@ -482,7 +286,7 @@ describe("attempt routes", () => {
     });
 
     it("replays idempotently for the same operationId + payload (200 idempotent_replay, no duplicate ledger/audit)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant Idempotent");
       const operationId = crypto.randomUUID();
       const payload = {
@@ -529,7 +333,7 @@ describe("attempt routes", () => {
     });
 
     it("rejects an operationId reused with a differing payload (409 IDEMPOTENCY_CONFLICT)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant Conflict");
       const operationId = crypto.randomUUID();
 
@@ -563,7 +367,7 @@ describe("attempt routes", () => {
     });
 
     it("returns terminal (200) and grants nothing when the attempt is expired on entry", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant Terminal");
       // Expire the attempt: deadline in the past, status still in_progress.
       await ctx.db
@@ -596,7 +400,7 @@ describe("attempt routes", () => {
     });
 
     it("rejects a non-operator_incident attempt (409 INVALID_STATE_TRANSITION)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       // Default policy is strict; the grant command requires operator_incident.
       const { attemptId } = await createStartedAttempt(
         t,
@@ -621,7 +425,7 @@ describe("attempt routes", () => {
     });
 
     it("rejects a grant beyond exam.closeAt (409 DEADLINE_EXCEEDS_EXAM_CLOSE, deadline unchanged)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId, examId } = await createStartedAttempt(
         t,
         "Grant BeyondClose",
@@ -666,7 +470,7 @@ describe("attempt routes", () => {
     });
 
     it("grants operator time on a disrupted attempt (200 granted)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant Disrupted");
       const before = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
@@ -699,7 +503,7 @@ describe("attempt routes", () => {
     });
 
     it("denies a Proctor (403) — operator time grant is Admin-only", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant ProctorDeny");
 
       const res = await ctx.app.inject({
@@ -718,7 +522,7 @@ describe("attempt routes", () => {
     });
 
     it("canonicalizes reasonCode/reasonText so the ledger and audit agree (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(t, "Grant Trim");
       const operationId = crypto.randomUUID();
 
@@ -765,7 +569,7 @@ describe("attempt routes", () => {
     });
 
     it("returns 404 RESOURCE_NOT_FOUND for a non-existent attempt (scoped resolver fail-closed)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createTimeGrantTestOrg();
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/admin/attempts/${crypto.randomUUID()}/time-grants`,
@@ -784,12 +588,12 @@ describe("attempt routes", () => {
     it("returns 404 for a cross-org attempt (anti-enumeration, scoped resolver)", async () => {
       // Org B admin owns the target attempt; Org A admin (a different org)
       // must not learn the attempt exists → 404, not 403.
-      const orgB = await createIsolatedTestOrg();
+      const orgB = await createTimeGrantTestOrg();
       const { attemptId } = await createStartedAttempt(
         orgB,
         "Grant CrossOrg Target",
       );
-      const orgA = await createIsolatedTestOrg();
+      const orgA = await createTimeGrantTestOrg();
 
       const res = await ctx.app.inject({
         method: "POST",
@@ -826,7 +630,7 @@ describe("attempt routes", () => {
     // admin-time-grants.concurrency.test.ts.
     describe("cross-Attempt operationId race (different exams)", () => {
       it("the loser returns 409 IDEMPOTENCY_CONFLICT and writes exactly one ledger row", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createTimeGrantTestOrg();
         // Two distinct operator_incident exams → two attempts whose EA + Exam
         // locks do not intersect. Only the operation unique index can arbitrate.
         const a = await createStartedAttempt(t, "Race Attempt A");

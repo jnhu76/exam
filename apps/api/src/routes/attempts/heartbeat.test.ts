@@ -1,21 +1,20 @@
 import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
 import { eq, like } from "drizzle-orm";
-import { buildTestApp, uniquePrefix } from "../testHelpers.js";
+import { buildTestApp } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
-import { signJWT } from "@exam/auth/session";
 import { scanDatabaseForDisruptedAttempts } from "../../plugins/heartbeat.js";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
 import {
   buildExamPayload,
   enrollCandidateForExam,
   buildSharedAttemptFixture,
+  candidateRequestContext,
+  createIsolatedAttemptOrg,
   disruptAttempt,
+  type IsolatedAttemptOrg,
 } from "./__tests__/attempts.testHelpers.js";
 
 const HEARTBEAT_SCANNER_TEST_PREFIX = "heartbeat-scanner-test-";
@@ -118,198 +117,8 @@ describe("attempt routes", () => {
   });
 
   describe("heartbeat scanner — scanDatabaseForDisruptedAttempts", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      candidateToken: string;
-      candidateUserId: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${HEARTBEAT_SCANNER_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "HB Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "HB Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      // Authenticate resolves authority from ACTIVE
-      // user_role_assignments. Seed one active primary assignment per test user
-      // so the admin/candidate tokens authenticate with their role's preset.
-      await ctx.db.insert(schema.userRoleAssignments).values([
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: admin.id,
-          role: "Admin" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: candidate.id,
-          role: "Candidate" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ]);
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `HB Course ${slug}`,
-            code: `HB-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        candidateToken,
-        candidateUserId: candidate.id,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
-    function makeCandidateCtx(t: IsolatedTestOrg) {
-      return {
-        actorId: t.candidateUserId,
-        organizationId: t.orgId,
-        role: "Candidate" as const,
-        permissions: [] as import("@exam/domain").Permission[],
-        sessionId: "test",
-        targetOrganizationId: t.orgId,
-      };
-    }
-
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string }> {
       const exam = await ctx.app.inject({
@@ -381,7 +190,10 @@ describe("attempt routes", () => {
     });
 
     it("does NOT write a phantom attempt.disrupted audit when the row is already disrupted at lock time (already-disrupted no-op)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: HEARTBEAT_SCANNER_TEST_PREFIX,
+        label: "HB",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Heartbeat Disrupted Race Exam",
@@ -401,7 +213,7 @@ describe("attempt routes", () => {
       expect(disruptedRows).toHaveLength(0);
 
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("disrupted");
@@ -413,7 +225,10 @@ describe("attempt routes", () => {
       // catches it. (Directly injecting a transient markDisrupted failure would
       // require monkeypatching internals; the observable contract is that the
       // attempt remains retryable until a scan actually disrupts it.)
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: HEARTBEAT_SCANNER_TEST_PREFIX,
+        label: "HB",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Heartbeat Disrupted Retry Exam",
@@ -430,7 +245,7 @@ describe("attempt routes", () => {
       expect(first.markedCount).toBe(0);
 
       let attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("in_progress");
@@ -444,7 +259,7 @@ describe("attempt routes", () => {
       expect(second.markedCount).toBeGreaterThanOrEqual(1);
 
       attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("disrupted");

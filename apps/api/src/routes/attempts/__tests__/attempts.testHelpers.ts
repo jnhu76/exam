@@ -6,6 +6,10 @@ import { buildTestApp, uniquePrefix } from "../../testHelpers.js";
 import examRoutes from "../../exam.js";
 import attemptRoutes from "../../attempts.js";
 import { schema } from "@exam/db/schema/pg";
+import { signJWT } from "@exam/auth/session";
+import { hashPassword } from "@exam/auth/password";
+import { getRuntimeConfig } from "../../../config/runtimeConfig.js";
+import type { Role } from "@exam/domain";
 
 /**
  * Default exam control flags used by the shared attempt-route fixture and any
@@ -343,4 +347,296 @@ export async function disruptAttempt(
       }),
     })
     .where(eq(schema.examAttempts.id, attemptId));
+}
+
+/**
+ * Isolated per-suite organization for the attempt-command admin suites: an
+ * org, an Admin user and a Candidate user (each with an ACTIVE primary role
+ * assignment — authentication resolves authority from
+ * user_role_assignments), a candidate profile, a course, one question, and
+ * signed tokens. `slugPrefix` is load-bearing: several suites prove
+ * absence-of-side-effects via `organizations.slug LIKE '<prefix>%'` filters,
+ * so every suite keeps its distinct prefix.
+ */
+export interface IsolatedAttemptOrg {
+  orgId: string;
+  adminToken: string;
+  adminUserId: string;
+  candidateToken: string;
+  candidateUserId: string;
+  candidateProfileId: string;
+  courseId: string;
+  questionId: string;
+}
+
+export async function createIsolatedAttemptOrg(
+  ctx: TestContext,
+  opts: {
+    slugPrefix: string;
+    label: string;
+    questionType?: "single_choice" | "text_response";
+  },
+): Promise<IsolatedAttemptOrg> {
+  const slug = `${opts.slugPrefix}${uniquePrefix()}`;
+  const now = new Date();
+
+  const org = (
+    await ctx.db
+      .insert(schema.organizations)
+      .values({
+        id: randomUUID(),
+        name: slug,
+        displayName: slug,
+        slug,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0]!;
+
+  const passwordHash = await hashPassword("password123");
+
+  const admin = (
+    await ctx.db
+      .insert(schema.users)
+      .values({
+        id: randomUUID(),
+        organizationId: org.id,
+        username: `admin-${slug}`,
+        passwordHash,
+        name: `${opts.label} Admin`,
+        role: "Admin",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0]!;
+
+  const candidate = (
+    await ctx.db
+      .insert(schema.users)
+      .values({
+        id: randomUUID(),
+        organizationId: org.id,
+        username: `candidate-${slug}`,
+        passwordHash,
+        name: `${opts.label} Candidate`,
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0]!;
+
+  // Authentication resolves authority from ACTIVE user_role_assignments.
+  // Seed one active primary assignment per user so the tokens authenticate
+  // with their role's preset.
+  const assignments: Array<typeof schema.userRoleAssignments.$inferInsert> = [
+    {
+      id: randomUUID(),
+      organizationId: org.id,
+      userId: admin.id,
+      role: "Admin",
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: randomUUID(),
+      organizationId: org.id,
+      userId: candidate.id,
+      role: "Candidate",
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  await ctx.db.insert(schema.userRoleAssignments).values(assignments);
+
+  const profile = (
+    await ctx.db
+      .insert(schema.candidateProfiles)
+      .values({
+        id: randomUUID(),
+        organizationId: org.id,
+        userId: candidate.id,
+        fields: {},
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0]!;
+
+  const course = (
+    await ctx.db
+      .insert(schema.courses)
+      .values({
+        id: randomUUID(),
+        organizationId: org.id,
+        name: `${opts.label} Course ${slug}`,
+        code: `${opts.label}-${slug}`,
+        description: "",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+  )[0]!;
+
+  const question =
+    opts.questionType === "text_response"
+      ? (
+          await ctx.db
+            .insert(schema.questions)
+            .values({
+              id: randomUUID(),
+              organizationId: org.id,
+              courseId: course.id,
+              type: "text_response",
+              content: "Explain the meaning of life.",
+              options: [],
+              standardAnswer: null,
+              // text_response requires a non-empty rubric at publish time
+              // (standardAnswer is optional for it).
+              rubric: "Score 0–100 by clarity and depth.",
+              attachments: [],
+              score: 100,
+              difficulty: 1,
+              tags: [],
+              gradingRule: {
+                multiSelectScoring: "all_correct_full",
+                fillBlankMatchMode: "exact",
+              },
+              createdAt: now,
+              updatedAt: now,
+            })
+            .returning()
+        )[0]!
+      : (
+          await ctx.db
+            .insert(schema.questions)
+            .values({
+              id: randomUUID(),
+              organizationId: org.id,
+              courseId: course.id,
+              type: "single_choice",
+              content: "What is 1+1?",
+              options: [
+                { id: "a", content: "1" },
+                { id: "b", content: "2" },
+                { id: "c", content: "3" },
+              ],
+              standardAnswer: "b",
+              attachments: [],
+              score: 100,
+              difficulty: 1,
+              tags: [],
+              gradingRule: {
+                multiSelectScoring: "all_correct_full",
+                fillBlankMatchMode: "exact",
+              },
+              createdAt: now,
+              updatedAt: now,
+            })
+            .returning()
+        )[0]!;
+
+  const { jwtSecret } = getRuntimeConfig().authSecret;
+  const adminToken = signJWT(
+    {
+      actorId: admin.id,
+      role: "Admin" as Role,
+      organizationId: org.id,
+      authEpoch: 0,
+    },
+    jwtSecret,
+  );
+  const candidateToken = signJWT(
+    {
+      actorId: candidate.id,
+      role: "Candidate" as Role,
+      organizationId: org.id,
+      authEpoch: 0,
+    },
+    jwtSecret,
+  );
+
+  return {
+    orgId: org.id,
+    adminToken,
+    adminUserId: admin.id,
+    candidateToken,
+    candidateUserId: candidate.id,
+    candidateProfileId: profile.id,
+    courseId: course.id,
+    questionId: question.id,
+  };
+}
+
+/**
+ * Adds one more role user (e.g. a Proctor) to an org created by
+ * {@link createIsolatedAttemptOrg}, with an ACTIVE primary role assignment
+ * and a signed token. Compose after the factory rather than growing its
+ * option set per suite.
+ */
+export async function createOrgRoleUser(
+  ctx: TestContext,
+  orgId: string,
+  // System is a pseudo-role, not an assignable user_role_assignments row.
+  role: Exclude<Role, "Candidate" | "System">,
+  label: string,
+): Promise<{ userId: string; token: string }> {
+  const slug = `${label.toLowerCase().replace(/\s+/g, "-")}-${uniquePrefix()}`;
+  const now = new Date();
+  const userId = randomUUID();
+  await ctx.db.insert(schema.users).values({
+    id: userId,
+    organizationId: orgId,
+    username: `${role.toLowerCase()}-${slug}`,
+    passwordHash: await hashPassword("password123"),
+    name: `${label} ${role}`,
+    role,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await ctx.db.insert(schema.userRoleAssignments).values({
+    id: randomUUID(),
+    organizationId: orgId,
+    userId,
+    role,
+    isPrimary: true,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const { jwtSecret } = getRuntimeConfig().authSecret;
+  const token = signJWT(
+    {
+      actorId: userId,
+      role: role as Role,
+      organizationId: orgId,
+      authEpoch: 0,
+    },
+    jwtSecret,
+  );
+  return { userId, token };
+}
+
+/**
+ * Request-context for an {@link IsolatedAttemptOrg}'s candidate user (repo
+ * calls under the candidate's own authority).
+ */
+export function candidateRequestContext(t: IsolatedAttemptOrg) {
+  return {
+    actorId: t.candidateUserId,
+    organizationId: t.orgId,
+    role: "Candidate" as const,
+    permissions: [] as import("@exam/domain").Permission[],
+    sessionId: "test",
+    targetOrganizationId: t.orgId,
+  };
 }
