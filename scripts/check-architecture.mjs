@@ -8,6 +8,15 @@ import {
   forbiddenRuntimeDependencies,
   lifecycleStateWriteViolations,
 } from "../config/architecture-policy.mjs";
+import {
+  deriveBuildablePackages,
+  dockerfileClosureFindings,
+  expandWorkspaceGlobs,
+  helperCoverageFindings,
+  parseBuildScriptHelpers,
+  parseDockerfileBuilds,
+  parseWorkspacePackageGlobs,
+} from "../config/build-graph-policy.mjs";
 
 const violations = [];
 
@@ -459,6 +468,144 @@ async function listPackageDirs() {
     if (entry.isDirectory()) dirs.push(join("packages", entry.name));
   }
   return dirs;
+}
+
+// ---------------------------------------------------------------------------
+// #938 (PR3) — build-graph guards. The production image's builder sequence
+// (Dockerfile) and the workspace build graph (manifests + turbo.json) are
+// two descriptions of one artifact chain; the policy authority is
+// config/build-graph-policy.mjs, imported here (not re-implemented). Scan
+// targets are CWD-relative like every other root in this checker, so the
+// counterfactual harness can inject a repo root by running from a
+// disposable worktree. Any unreadable input is a violation, never a
+// vacuous pass — the closure must stay checkable (fail closed).
+
+async function readRepoTextOrNull(path, rule) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (err) {
+    violations.push(
+      `${path}: ${rule} — cannot read (${err instanceof Error ? err.message : String(err)}); the build graph must stay checkable`,
+    );
+    return null;
+  }
+}
+
+{
+  const workspaceYaml = await readRepoTextOrNull(
+    "pnpm-workspace.yaml",
+    "BUILD_GRAPH_WORKSPACE_UNREADABLE",
+  );
+  const dockerfileText = await readRepoTextOrNull(
+    "Dockerfile",
+    "BUILD_GRAPH_DOCKERFILE_UNREADABLE",
+  );
+  const turboText = await readRepoTextOrNull(
+    "turbo.json",
+    "BUILD_GRAPH_TURBO_UNREADABLE",
+  );
+  if (workspaceYaml !== null && dockerfileText !== null) {
+    let buildable = null;
+    try {
+      const bases = expandWorkspaceGlobs(
+        parseWorkspacePackageGlobs(workspaceYaml),
+      );
+      const members = [];
+      for (const base of bases) {
+        let entries;
+        try {
+          entries = await readdir(base, { withFileTypes: true });
+        } catch (err) {
+          violations.push(
+            `${base}: BUILD_GRAPH_WORKSPACE_UNREADABLE — cannot enumerate workspace members (${
+              err instanceof Error ? err.message : String(err)
+            })`,
+          );
+          continue;
+        }
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const dir = join(base, entry.name);
+          const manifestPath = join(dir, "package.json");
+          if (!existsSync(manifestPath)) continue;
+          let manifest;
+          try {
+            manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+          } catch (err) {
+            violations.push(
+              `${manifestPath}: BUILD_GRAPH_MANIFEST_UNREADABLE — cannot parse (${
+                err instanceof Error ? err.message : String(err)
+              })`,
+            );
+            continue;
+          }
+          if (typeof manifest.name !== "string") {
+            violations.push(
+              `${manifestPath}: BUILD_GRAPH_MANIFEST_UNNAMED — a workspace member without a name cannot be attributed in the build graph`,
+            );
+            continue;
+          }
+          members.push({ dir, manifest });
+        }
+      }
+      buildable = deriveBuildablePackages(members);
+    } catch (err) {
+      violations.push(
+        `build graph: ${
+          err instanceof Error ? err.message : String(err)
+        } — the workspace member set must stay derivable`,
+      );
+    }
+    if (buildable !== null) {
+      const parsed = parseDockerfileBuilds(dockerfileText);
+      violations.push(...dockerfileClosureFindings({ buildable, ...parsed }));
+      if (turboText !== null) {
+        let globalDependencies = null;
+        try {
+          const turboConfig = JSON.parse(turboText);
+          if (Array.isArray(turboConfig.globalDependencies)) {
+            globalDependencies = turboConfig.globalDependencies;
+          } else {
+            violations.push(
+              "turbo.json: BUILD_GRAPH_TURBO_INVALID — globalDependencies must be an array; helper input coverage cannot be audited",
+            );
+          }
+        } catch (err) {
+          violations.push(
+            `turbo.json: BUILD_GRAPH_TURBO_INVALID — cannot parse (${
+              err instanceof Error ? err.message : String(err)
+            })`,
+          );
+        }
+        if (globalDependencies !== null) {
+          const references = [];
+          for (const pkg of buildable) {
+            const parsedScript = parseBuildScriptHelpers(
+              pkg.name,
+              pkg.buildScript,
+            );
+            for (const item of parsedScript.unsupported) {
+              violations.push(
+                `${pkg.dir}/package.json scripts.build: BUILD_GRAPH_HELPER_UNSUPPORTED_FORM — ${item.reason}`,
+              );
+            }
+            for (const reference of parsedScript.references) {
+              if (!existsSync(reference.helperPath)) {
+                violations.push(
+                  `BUILD_GRAPH_HELPER_MISSING — ${pkg.name} build script references repo-level helper "${reference.helperPath}" which does not exist in the repository`,
+                );
+                continue;
+              }
+              references.push(reference);
+            }
+          }
+          violations.push(
+            ...helperCoverageFindings({ references, globalDependencies }),
+          );
+        }
+      }
+    }
+  }
 }
 
 if (violations.length > 0) {
