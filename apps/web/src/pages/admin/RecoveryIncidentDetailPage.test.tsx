@@ -384,6 +384,15 @@ describe("RecoveryIncidentDetailPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the localized permission-denied state when the load is rejected with 403", async () => {
+    getMock.mockRejectedValueOnce(new ApiError(403, "Forbidden"));
+    renderPage();
+    // 403 → permission-denied kind → the page namespace's permissionDenied copy.
+    expect(
+      await screen.findByText("您没有查看事件详情的权限。"),
+    ).toBeInTheDocument();
+  });
+
   it("shows the classified network error state on fetch failure", async () => {
     getMock.mockRejectedValueOnce(new ApiError(0, "Network request failed"));
     renderPage();

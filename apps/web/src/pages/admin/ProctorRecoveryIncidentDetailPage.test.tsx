@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { permissionsForRole } from "@exam/authz";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { ProctorIncidentDetail } from "@exam/contracts";
 import { ProctorRecoveryIncidentDetailPage } from "./ProctorRecoveryIncidentDetailPage";
 
@@ -211,5 +211,40 @@ describe("ProctorRecoveryIncidentDetailPage", () => {
       interruptionId: "00000000-0000-4000-8000-000000000099",
       expectedVersion: 3,
     });
+  });
+
+  it("shows not-found for 404 and retry works", async () => {
+    getMock.mockRejectedValueOnce(new ApiError(404, "Not found"));
+    renderPage();
+    // 404 → not-found kind → the proctor namespace's localized copy.
+    expect(await screen.findByText("事件未找到")).toBeInTheDocument();
+
+    getMock.mockResolvedValue(detail(PROCTOR_ALLOWED_ACTIONS));
+    await userEvent.setup().click(screen.getByText("重试"));
+    expect(
+      await screen.findByText("proctor detail test incident"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the loaded page on screen with an inline warning when a background refresh fails", async () => {
+    renderPage();
+    await screen.findByText("proctor detail test incident");
+
+    // Manual refresh fails while data is on screen (503 → unavailable).
+    getMock.mockRejectedValueOnce(new ApiError(503, "unavailable"));
+    await userEvent.setup().click(screen.getByRole("button", { name: "刷新" }));
+
+    // Old data stays visible and the failure surfaces as an inline alert,
+    // not a full-screen ErrorState swap (no retry button). The proctor
+    // namespace carries no per-kind copy of its own — the kind→key mapping
+    // is pinned by recoveryErrors.test.ts, so the alert surface is asserted
+    // here instead of the translated string.
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(
+      screen.getByText("proctor detail test incident"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
   });
 });

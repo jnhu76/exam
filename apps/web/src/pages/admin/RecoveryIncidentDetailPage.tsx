@@ -11,7 +11,6 @@ import { useRecoveryProjection } from "@/hooks/useRecoveryProjection";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { PageSection } from "@/components/shared/PageSection";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DefinitionList } from "@/components/shared/DefinitionList";
@@ -23,7 +22,7 @@ import {
   IncidentCommand,
   PayloadSummary,
 } from "@/features/recovery-operations/IncidentCommand";
-import { ArrowLeft, CircleAlert, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CircleAlert, RefreshCw } from "lucide-react";
 
 /**
  * A point-in-time aggregate read (contract §6.3): the page renders exactly the
@@ -67,23 +66,21 @@ export function RecoveryIncidentDetailPage() {
       deps: [incidentId],
     });
 
-  if (isInitialLoading) return <LoadingState />;
-  if (error && !data) {
-    return (
-      <ErrorState
-        message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
-        onRetry={refresh}
-      />
-    );
-  }
+  // Projection-hook invariant: isInitialLoading iff (data === null &&
+  // error === null) — without data the page is Loading or the classified
+  // Error. The trailing return exhausts a statically impossible state
+  // without an assertion.
   if (!data) {
-    return (
-      <EmptyState
-        icon={<AppIcon icon={ShieldAlert} size="state" />}
-        title={t("admin.recoveryIncident.notFound")}
-        description={t("admin.recoveryIncident.notFoundDescription")}
-      />
-    );
+    if (isInitialLoading) return <LoadingState />;
+    if (error) {
+      return (
+        <ErrorState
+          message={t(recoveryErrorMessageKey(error.kind, NAMESPACE) as never)}
+          onRetry={refresh}
+        />
+      );
+    }
+    return null;
   }
 
   const snapshotStale = isStale;
