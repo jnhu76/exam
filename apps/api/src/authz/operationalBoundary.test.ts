@@ -4,9 +4,13 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   buildTestApp,
   createAssignedUserForTest,
+  createCandidateViaApi,
+  uniquePrefix,
 } from "../routes/testHelpers.js";
 import apiSurfacePlugin from "../routes/apiSurface.js";
 import type { TestContext } from "../routes/testHelpers.js";
+import { createCandidateFieldRepo } from "@exam/db/repository/candidateFieldRepo";
+import { createCandidateRepo } from "@exam/db/repository/candidateRepo";
 import { schema } from "@exam/db/schema/pg";
 import { eq } from "drizzle-orm";
 
@@ -17,7 +21,9 @@ import { eq } from "drizzle-orm";
  *   - Maintainer can login and read operational health/diagnostics;
  *   - Maintainer holds ZERO business authority (users/candidates/courses/
  *     questions/exams/grading/scores/settings/incidents/proctor-assignments/
- *     recovery all denied);
+ *     recovery all denied, plus the admin management surface: candidate-field
+ *     create/update/delete + template, candidate import/update, and the
+ *     business-summary dashboard);
  *   - Maintainer cannot perform business mutations (force-submit, time grant,
  *     misconduct, result publish);
  *   - Maintainer never receives business-integrity diagnostics (D8);
@@ -31,6 +37,8 @@ describe("Operational RBAC Boundary", () => {
   let cleanup: () => Promise<void>;
   let maintainerToken: string;
   let maintainerUsername: string;
+  let deniedFieldId: string;
+  let deniedCandidateId: string;
 
   const apiRoutes: FastifyPluginAsync = async (fastify) => {
     // The real production composition: one /api scope owning every route.
@@ -53,11 +61,52 @@ describe("Operational RBAC Boundary", () => {
     );
     maintainerToken = maintainer.token;
     maintainerUsername = maintainer.user.username;
+
+    // Real same-org fixtures for the dynamic admin-surface denial entries:
+    // the Maintainer PATCH/DELETE requests below target rows that actually
+    // exist, so the 403 proves the capability gate — never an incidental
+    // 404/400 from a random ID meeting an unrelated validation order.
+    // Order matters: candidate creation happens while the org still has ZERO
+    // configured fields (a non-empty field set requires exactly one unique
+    // identity field); the boundary field below is deliberately optional and
+    // non-unique so it never becomes an identity field.
+    const candidate = await createCandidateViaApi(
+      built.app,
+      built.adminToken,
+      `maintainer-boundary-cand-${uniquePrefix()}`,
+      built.org.id,
+    );
+    deniedCandidateId = candidate.candidateProfileId;
+    const field = await createCandidateFieldRepo(built.db).create(
+      repoCtx(built),
+      {
+        name: `maintainer-boundary-${uniquePrefix()}`,
+        label: "Maintainer Boundary Field",
+        fieldType: "text",
+        required: false,
+        unique: false,
+        sortOrder: 50,
+      },
+    );
+    deniedFieldId = field.id;
   });
 
   afterAll(async () => {
     await cleanup();
   });
+
+  /** Admin RequestContext for direct repo fixture writes/reads (repos do not
+   *  check capabilities; the route layer owns that gate). */
+  function repoCtx(target: Pick<TestContext, "admin" | "org">) {
+    return {
+      actorId: target.admin.id,
+      organizationId: target.org.id,
+      targetOrganizationId: target.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+  }
 
   async function asMaintainer(method: string, url: string, payload?: unknown) {
     return ctx.app.inject({
@@ -436,6 +485,133 @@ describe("Operational RBAC Boundary", () => {
         `/api/users/${ctx.admin.id}/role-assignments`,
       );
       expect(res.statusCode).toBe(403);
+    });
+
+    describe("admin management surface (PR #931)", () => {
+      // Seven HTTP entries the GET/POST matrices above do not reach:
+      // candidate-field create/update/delete + template, candidate
+      // import/update, and the business-summary dashboard. The route
+      // matrices in routes/adminSurfacePermissionBoundary.test.ts prove the
+      // same 403 gate for Teacher/Proctor/Grader/Candidate only — they never
+      // exercise the Maintainer role, so these entries are this file's
+      // detection. Bodies are schema-valid so a 400 can never mask the
+      // permission verdict; dynamic URLs resolve real fixture rows (created
+      // in beforeAll) so the 403 cannot be a 404 in disguise.
+      it.each([
+        [
+          "GET",
+          "/api/candidate-fields/template",
+          (): string => "/api/candidate-fields/template",
+          undefined,
+        ],
+        [
+          "GET",
+          "/api/system/dashboard",
+          (): string => "/api/system/dashboard",
+          undefined,
+        ],
+        [
+          "POST",
+          "/api/candidate-fields",
+          (): string => "/api/candidate-fields",
+          {
+            name: `maintainer-surface-${uniquePrefix()}`,
+            label: "Maintainer Denied Field",
+            fieldType: "text",
+            required: false,
+            unique: false,
+            sortOrder: 99,
+          },
+        ],
+        [
+          "POST",
+          "/api/candidates/import",
+          (): string => "/api/candidates/import",
+          {
+            rows: [
+              {
+                username: `maintainer-imp-${uniquePrefix()}`,
+                password: "password123",
+                name: "Maintainer Denied Import",
+              },
+            ],
+          },
+        ],
+        [
+          "PATCH",
+          "/api/candidate-fields/:id",
+          (): string => `/api/candidate-fields/${deniedFieldId}`,
+          { label: "Denied" },
+        ],
+        [
+          "DELETE",
+          "/api/candidate-fields/:id",
+          (): string => `/api/candidate-fields/${deniedFieldId}`,
+          undefined,
+        ],
+        [
+          "PATCH",
+          "/api/candidates/:id",
+          (): string => `/api/candidates/${deniedCandidateId}`,
+          { name: "Denied" },
+        ],
+      ] as const)(
+        "%s %s → 403 PERMISSION_DENIED",
+        async (method, route, url, payload) => {
+          const res = await asMaintainer(method, url(), payload);
+          expect(res.statusCode, `${method} ${route}`).toBe(403);
+          expect(res.json().error.code, `${method} ${route}`).toBe(
+            "PERMISSION_DENIED",
+          );
+        },
+      );
+
+      it("denied mutations leave the real fixture rows untouched (zero-write witness)", async () => {
+        // Self-contained: issues its own denied requests, so it never
+        // depends on execution order relative to the matrix above.
+        // Audit-row stability for this same capability gate is already
+        // owned by the zero-write evidence in
+        // routes/adminSurfacePermissionBoundary.test.ts; this witness adds
+        // only the Maintainer-role fact for the mutating entries.
+        const fieldRepo = createCandidateFieldRepo(ctx.db);
+        const beforeField = await fieldRepo.findById(
+          repoCtx(ctx),
+          deniedFieldId,
+        );
+        expect(beforeField, "field fixture must exist").toBeDefined();
+        const candidateRepo = createCandidateRepo(ctx.db);
+        const beforeCandidate = await candidateRepo.findById(
+          repoCtx(ctx),
+          deniedCandidateId,
+        );
+        expect(beforeCandidate, "candidate fixture must exist").toBeDefined();
+
+        const fieldRes = await asMaintainer(
+          "PATCH",
+          `/api/candidate-fields/${deniedFieldId}`,
+          { label: "Should Not Update" },
+        );
+        expect(fieldRes.statusCode).toBe(403);
+        const candidateRes = await asMaintainer(
+          "PATCH",
+          `/api/candidates/${deniedCandidateId}`,
+          { name: "Should Not Update" },
+        );
+        expect(candidateRes.statusCode).toBe(403);
+
+        const afterField = await fieldRepo.findById(
+          repoCtx(ctx),
+          deniedFieldId,
+        );
+        expect(JSON.stringify(afterField)).toBe(JSON.stringify(beforeField));
+        const afterCandidate = await candidateRepo.findById(
+          repoCtx(ctx),
+          deniedCandidateId,
+        );
+        expect(JSON.stringify(afterCandidate)).toBe(
+          JSON.stringify(beforeCandidate),
+        );
+      });
     });
   });
 

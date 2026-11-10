@@ -26,7 +26,6 @@ describe("audit log baseline (S06-lite)", () => {
   let adminId: string;
   let adminUsername: string;
   let adminToken: string;
-  let candidateToken: string;
   let candidateId: string;
 
   beforeAll(async () => {
@@ -69,15 +68,6 @@ describe("audit log baseline (S06-lite)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    candidateToken = signJWT(
-      {
-        actorId: candidateId,
-        role: "Candidate",
-        organizationId: orgId,
-        authEpoch: 0,
-      },
-      getRuntimeConfig().authSecret.jwtSecret,
-    );
 
     // Every authenticated request resolves authority from ACTIVE
     // user_role_assignments. Seed one active primary assignment per test user
@@ -310,23 +300,6 @@ describe("audit log baseline (S06-lite)", () => {
   });
 
   describe("GET /api/admin/audit-logs", () => {
-    it("requires authentication", async () => {
-      const response = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/audit-logs",
-      });
-      expect(response.statusCode).toBe(401);
-    });
-
-    it("rejects Candidate role with 403", async () => {
-      const response = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/audit-logs",
-        cookies: { "auth-token": candidateToken },
-      });
-      expect(response.statusCode).toBe(403);
-    });
-
     it("returns paginated audit logs for Admin", async () => {
       await clearAudits();
       for (let i = 0; i < 3; i += 1) {

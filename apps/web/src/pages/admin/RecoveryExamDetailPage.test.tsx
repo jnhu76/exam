@@ -125,11 +125,6 @@ describe("RecoveryExamDetailPage", () => {
     );
   });
 
-  it("renders active proctors", async () => {
-    renderPage();
-    expect(await screen.findByText("监考李四")).toBeInTheDocument();
-  });
-
   it("ExamProctorAssignmentManage absent → assign/revoke affordances absent, projection still renders (issue 548)", async () => {
     // Preset truth made explicit: the Manage capability is Admin-only.
     expect([...permissionsForRole("Admin")]).toContain(

@@ -61,7 +61,7 @@ import {
  * connection-local), so the physical per-worker database must be the isolation
  * authority. IN THE FILE-SCHEMA LANE the whole suite is skipped at collection
  * time, before any setup; the canonical evidence lane that RUNS this suite is
- * worker-database (pnpm verify / CI api-coverage).
+ * worker-database (pnpm verify / CI api-tests).
  */
 
 const workerDbDescribe = isWorkerDatabaseMode() ? describe : describe.skip;

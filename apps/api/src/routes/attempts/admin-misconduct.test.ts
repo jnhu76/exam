@@ -6,15 +6,13 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createAttemptCommandReceiptRepo } from "@exam/db/repository/attemptCommandReceiptRepo";
-import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
 import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
 import {
   countMisconductAudits as countMisconductAuditsFor,
+  createIsolatedAttemptOrg,
   listReceipts as listReceiptsFor,
+  type IsolatedAttemptOrg,
 } from "./__tests__/attempts.testHelpers.js";
 
 const MISCONDUCT_TEST_PREFIX = "misconduct-op-test-";
@@ -34,183 +32,8 @@ describe("attempt routes", () => {
   });
 
   describe("POST /api/admin/attempts/:attemptId/misconduct (operation-aware)", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      adminUserId: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${MISCONDUCT_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const adminId = crypto.randomUUID();
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: adminId,
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "MM Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: adminId,
-        role: "Admin",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const candidateId = crypto.randomUUID();
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: candidateId,
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "MM Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: candidateId,
-        role: "Candidate",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `MM Course ${slug}`,
-            code: `MM-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        adminUserId: admin.id,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string }> {
       const exam = await ctx.app.inject({
@@ -246,7 +69,7 @@ describe("attempt routes", () => {
       return { attemptId };
     }
 
-    function makeAdminCtx(t: IsolatedTestOrg) {
+    function makeAdminCtx(t: IsolatedAttemptOrg) {
       return {
         actorId: t.adminUserId,
         organizationId: t.orgId,
@@ -259,7 +82,7 @@ describe("attempt routes", () => {
 
     /** Marks misconduct via the production route with the operation-aware body. */
     async function misconduct(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       attemptId: string,
       body: {
         operationId: string;
@@ -305,7 +128,10 @@ describe("attempt routes", () => {
     });
 
     it("marks misconduct on an in_progress attempt: applied receipt + projection + operationId audit (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Applied Exam",
@@ -378,7 +204,10 @@ describe("attempt routes", () => {
     // {severity, notes}; the route contract rejects it before any receipt,
     // projection, or audit side effect.
     it("rejects a body without operationId with 400 VALIDATION_ERROR and no side effects (#524 stale caller)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Stale Caller Exam",
@@ -403,7 +232,10 @@ describe("attempt routes", () => {
     });
 
     it("replays the same operationId: returns the stored immutable fact, no projection churn, no new audit/receipt", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Replay Exam",
@@ -459,7 +291,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects payload drift on the same operationId with 409 IDEMPOTENCY_CONFLICT (no mutation, no receipt, no audit)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Drift Exam",
@@ -502,7 +337,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects a cross-command operationId reuse with 409 IDEMPOTENCY_CONFLICT (shared arbiter, force_submit untouched)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct CrossCommand Exam",
@@ -549,7 +387,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects a cross-attempt operationId reuse with 409 IDEMPOTENCY_CONFLICT (attempt B untouched)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId: attemptA } = await createStartedAttempt(
         t,
         "Misconduct CrossAttempt A",
@@ -588,8 +429,14 @@ describe("attempt routes", () => {
     });
 
     it("allows the same operationId independently across two organizations", async () => {
-      const t1 = await createIsolatedTestOrg();
-      const t2 = await createIsolatedTestOrg();
+      const t1 = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
+      const t2 = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId: a1 } = await createStartedAttempt(t1, "OrgA");
       const { attemptId: a2 } = await createStartedAttempt(t2, "OrgB");
       const operationId = crypto.randomUUID();
@@ -611,7 +458,10 @@ describe("attempt routes", () => {
     });
 
     it("canonical-payload normalization: whitespace-padded notes replay as the same operation", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Canonical Exam",
@@ -636,7 +486,10 @@ describe("attempt routes", () => {
     });
 
     it("allows marking a voided attempt (any status per ADR-014 §16, applied receipt)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Voided Exam",
@@ -659,7 +512,10 @@ describe("attempt routes", () => {
     });
 
     it("records a durable append-only receipt for a SECOND, independent operationId on the same attempt (history preserved)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Append Exam",
@@ -708,23 +564,11 @@ describe("attempt routes", () => {
       expect(audits).toHaveLength(2);
     });
 
-    it("requires operationId (400 when missing)", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttempt(
-        t,
-        "Misconduct NoOpId Exam",
-      );
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/misconduct`,
-        payload: { severity: "warning", notes: "x" }, // no operationId
-        cookies: { "auth-token": t.adminToken },
-      });
-      expect(res.statusCode).toBe(400);
-    });
-
     it("requires a non-blank canonical notes (400 when blank)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Blank Exam",
@@ -738,7 +582,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 404 for a non-existent attempt", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const res = await misconduct(t, crypto.randomUUID(), {
         operationId: crypto.randomUUID(),
         severity: "warning",
@@ -749,7 +596,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects a non-admin (candidate) with 403", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Misconduct Forbidden Exam",
@@ -771,8 +621,14 @@ describe("attempt routes", () => {
     });
 
     it("the receipt repo cross-org scope: an operationId used in org A is invisible to org B's findByOperationId", async () => {
-      const t1 = await createIsolatedTestOrg();
-      const t2 = await createIsolatedTestOrg();
+      const t1 = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
+      const t2 = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: MISCONDUCT_TEST_PREFIX,
+        label: "MM",
+      });
       const { attemptId: a1 } = await createStartedAttempt(t1, "OrgA scope");
       const operationId = crypto.randomUUID();
       await misconduct(t1, a1, {

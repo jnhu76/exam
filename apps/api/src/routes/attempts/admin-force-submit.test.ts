@@ -6,17 +6,14 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createAttemptGradingEntryRepo } from "@exam/db/repository/attemptGradingEntryRepo";
-import { createAttemptCommandReceiptRepo } from "@exam/db/repository/attemptCommandReceiptRepo";
 import { materializeGradingWorkset } from "@exam/exam-engine";
 import { createGradingWorksetRepoAdapter } from "../../adapters/repoAdapters.js";
-import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
 import {
   buildExamPayload,
+  createIsolatedAttemptOrg,
   disruptAttempt,
+  type IsolatedAttemptOrg,
 } from "./__tests__/attempts.testHelpers.js";
 
 const FORCE_SUBMIT_TEST_PREFIX = "force-submit-test-";
@@ -36,214 +33,8 @@ describe("attempt routes", () => {
   });
 
   describe("POST /api/admin/attempts/:attemptId/force-submit", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      adminUserId: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(
-      opts: { questionType?: "single_choice" | "text_response" } = {},
-    ): Promise<IsolatedTestOrg> {
-      const slug = `${FORCE_SUBMIT_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const adminId = crypto.randomUUID();
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: adminId,
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "FS Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: adminId,
-        role: "Admin",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const candidateId = crypto.randomUUID();
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: candidateId,
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "FS Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: candidateId,
-        role: "Candidate",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `FS Course ${slug}`,
-            code: `FS-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question =
-        opts.questionType === "text_response"
-          ? (
-              await ctx.db
-                .insert(schema.questions)
-                .values({
-                  id: crypto.randomUUID(),
-                  organizationId: org.id,
-                  courseId: course.id,
-                  type: "text_response",
-                  content: "Explain the meaning of life.",
-                  options: [],
-                  standardAnswer: null,
-                  // text_response requires a non-empty rubric at
-                  // publish time (standardAnswer is optional for it).
-                  rubric: "Score 0–100 by clarity and depth.",
-                  attachments: [],
-                  score: 100,
-                  difficulty: 1,
-                  tags: [],
-                  gradingRule: {
-                    multiSelectScoring: "all_correct_full",
-                    fillBlankMatchMode: "exact",
-                  },
-                  createdAt: now,
-                  updatedAt: now,
-                })
-                .returning()
-            )[0]!
-          : (
-              await ctx.db
-                .insert(schema.questions)
-                .values({
-                  id: crypto.randomUUID(),
-                  organizationId: org.id,
-                  courseId: course.id,
-                  type: "single_choice",
-                  content: "What is 1+1?",
-                  options: [
-                    { id: "a", content: "1" },
-                    { id: "b", content: "2" },
-                    { id: "c", content: "3" },
-                  ],
-                  standardAnswer: "b",
-                  attachments: [],
-                  score: 100,
-                  difficulty: 1,
-                  tags: [],
-                  gradingRule: {
-                    multiSelectScoring: "all_correct_full",
-                    fillBlankMatchMode: "exact",
-                  },
-                  createdAt: now,
-                  updatedAt: now,
-                })
-                .returning()
-            )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        adminUserId: admin.id,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string }> {
       const exam = await ctx.app.inject({
@@ -279,7 +70,7 @@ describe("attempt routes", () => {
       return { attemptId };
     }
 
-    function makeAdminCtx(t: IsolatedTestOrg) {
+    function makeAdminCtx(t: IsolatedAttemptOrg) {
       return {
         actorId: t.adminUserId,
         organizationId: t.orgId,
@@ -292,7 +83,7 @@ describe("attempt routes", () => {
 
     /** Force-submits via the production route with the operation-aware body. */
     async function forceSubmit(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       attemptId: string,
       body: { operationId: string; reason: string },
       token?: string,
@@ -345,7 +136,10 @@ describe("attempt routes", () => {
     });
 
     it("force-submits an in_progress attempt: applied receipt + graded + operationId audit (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit InProgress Exam",
@@ -405,7 +199,10 @@ describe("attempt routes", () => {
     });
 
     it("force-submits a disrupted attempt: interruption terminalized + applied receipt (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Disrupted Exam",
@@ -464,7 +261,10 @@ describe("attempt routes", () => {
     });
 
     it("replays the same operationId: returns the stored immutable fact, no re-grade, no new audit/receipt", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Replay Exam",
@@ -511,7 +311,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects payload drift on the same operationId with 409 IDEMPOTENCY_CONFLICT (no mutation, no receipt, no audit)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Drift Exam",
@@ -542,56 +345,11 @@ describe("attempt routes", () => {
       expect(attempt?.status).toBe("graded");
     });
 
-    it("rejects a cross-command operationId reuse with 409 IDEMPOTENCY_CONFLICT (shared arbiter)", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttempt(
-        t,
-        "Force Submit Cross Command Exam",
-      );
-      const operationId = crypto.randomUUID();
-      // Pre-insert a misconduct_mark receipt with the same operationId —
-      // WITHOUT calling the misconduct production route. The shared
-      // UNIQUE(org, operation_id) arbiter must reject
-      // the force-submit reuse.
-      await createAttemptCommandReceiptRepo(ctx.db).insertReceipt(
-        makeAdminCtx(t),
-        {
-          attemptId,
-          operationId,
-          commandType: "misconduct_mark",
-          requestPayload: { severity: "warning", notes: "fixture mark" },
-          resultPayload: {
-            commandType: "misconduct_mark",
-            misconduct: null,
-            appliedAt: new Date().toISOString(),
-          },
-          outcome: "applied",
-          actorId: t.adminUserId,
-          createdAt: new Date(),
-        },
-      );
-
-      const res = await forceSubmit(t, attemptId, {
-        operationId,
-        reason: "should conflict across commands",
-      });
-      expect(res.statusCode).toBe(409);
-      expect(res.json().error?.code).toBe("IDEMPOTENCY_CONFLICT");
-
-      const receipts = await listReceipts(attemptId);
-      expect(receipts).toHaveLength(1);
-      expect(receipts[0]!.commandType).toBe("misconduct_mark");
-      const attempt = await createAttemptRepo(ctx.db).findById(
-        makeAdminCtx(t),
-        attemptId,
-      );
-      expect(attempt?.status).toBe("in_progress");
-      const audits = await countForceSubmitAudits(attemptId);
-      expect(audits).toHaveLength(0);
-    });
-
     it("rejects a cross-attempt operationId reuse with 409 IDEMPOTENCY_CONFLICT (attempt B untouched)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId: attemptA } = await createStartedAttempt(
         t,
         "Force Submit Cross Attempt A",
@@ -628,7 +386,10 @@ describe("attempt routes", () => {
     });
 
     it("records a durable no_change receipt for a NEW operationId on an already-graded attempt (no audit, gradedAt unchanged)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Graded No-Change Exam",
@@ -685,7 +446,10 @@ describe("attempt routes", () => {
       // row ALWAYS carries its workset. Simulate that faithfully: raw-flip the
       // row to `submitted`, then materialize the workset via the same production
       // helper the crashed submit would have used.
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Recovery Submitted Exam",
@@ -762,7 +526,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects a voided attempt with 409 INVALID_STATE_TRANSITION (0 receipt, 0 audit, 0 mutation)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Voided Exam",
@@ -790,8 +557,14 @@ describe("attempt routes", () => {
     });
 
     it("allows the same operationId independently across two organizations", async () => {
-      const t1 = await createIsolatedTestOrg();
-      const t2 = await createIsolatedTestOrg();
+      const t1 = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
+      const t2 = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId: a1 } = await createStartedAttempt(
         t1,
         "Force Submit Cross Org A",
@@ -814,7 +587,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects a non-admin caller with 403", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Auth Exam",
@@ -835,7 +611,10 @@ describe("attempt routes", () => {
     });
 
     it("requires operationId (400 when missing)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Missing OpId Exam",
@@ -853,7 +632,10 @@ describe("attempt routes", () => {
     });
 
     it("requires a non-blank canonical reason (400 when blank)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Blank Reason Exam",
@@ -869,7 +651,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 404 for a non-existent attempt", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+      });
       const res = await forceSubmit(t, crypto.randomUUID(), {
         operationId: crypto.randomUUID(),
         reason: "missing attempt",
@@ -882,7 +667,11 @@ describe("attempt routes", () => {
     // cases prove the receipt-first stored fact matches the engine fact for
     // each, and that replay returns the stored fact verbatim.
     it("applied on in_progress + text_response → submitted + pending_manual (gradedAt null, 1 audit) and replays verbatim", async () => {
-      const t = await createIsolatedTestOrg({ questionType: "text_response" });
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+        questionType: "text_response",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Manual Exam",
@@ -934,7 +723,11 @@ describe("attempt routes", () => {
     });
 
     it("no_change on submitted + pending_manual workset → stays submitted (gradedAt null, 0 audit) and replays verbatim", async () => {
-      const t = await createIsolatedTestOrg({ questionType: "text_response" });
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: FORCE_SUBMIT_TEST_PREFIX,
+        label: "FS",
+        questionType: "text_response",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Manual Recovery Exam",

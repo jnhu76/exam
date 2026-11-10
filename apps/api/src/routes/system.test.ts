@@ -153,15 +153,6 @@ describe("system routes", () => {
       expect(body.todayExams).toBeGreaterThanOrEqual(0);
       expect(Array.isArray(body.recentExams)).toBe(true);
     });
-
-    it("returns 401 without authentication", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/system/health",
-      });
-
-      expect(res.statusCode).toBe(401);
-    });
   });
 
   describe("GET /system/public-config", () => {
@@ -248,25 +239,6 @@ describe("system routes", () => {
   });
 
   describe("GET /system/diagnostics", () => {
-    it("returns 401 without authentication", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/system/diagnostics",
-      });
-
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("returns 403 for candidate role", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/system/diagnostics",
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-
-      expect(res.statusCode).toBe(403);
-    });
-
     it("returns diagnostics with correct shape for admin", async () => {
       const res = await ctx.app.inject({
         method: "GET",

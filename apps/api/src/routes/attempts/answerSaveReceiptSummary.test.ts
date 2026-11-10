@@ -5,12 +5,12 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAuditLogTestRepo } from "@exam/db/testHelpers/auditLogTestRepo";
-import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
-import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
+import {
+  buildExamPayload,
+  createIsolatedAttemptOrg,
+  type IsolatedAttemptOrg,
+} from "./__tests__/attempts.testHelpers.js";
 
 const RECEIPT_SUMMARY_PREFIX = "receipt-summary-test-";
 
@@ -29,187 +29,8 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
   });
 
   describe("GET /api/admin/attempts/:attemptId/answer-save-receipt-summary", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      adminUserId: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${RECEIPT_SUMMARY_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "TL Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "TL Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      // Authenticate resolves authority from ACTIVE
-      // user_role_assignments. Seed one active primary per user so the
-      // matrix-of-roles-under-test authenticates and gates run as written.
-      await ctx.db.insert(schema.userRoleAssignments).values([
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: admin.id,
-          role: "Admin" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: candidate.id,
-          role: "Candidate" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ]);
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `TL Course ${slug}`,
-            code: `TL-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        adminUserId: admin.id,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string }> {
       const exam = await ctx.app.inject({
@@ -274,7 +95,10 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
     });
 
     it("rejects Candidate role with 403", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: RECEIPT_SUMMARY_PREFIX,
+        label: "Receipt",
+      });
       const { attemptId } = await createStartedAttempt(t, "RS Candidate 403");
       const res = await ctx.app.inject({
         method: "GET",
@@ -285,7 +109,10 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
     });
 
     it("returns 404 NOT_FOUND for a nonexistent attempt UUID", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: RECEIPT_SUMMARY_PREFIX,
+        label: "Receipt",
+      });
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/attempts/${crypto.randomUUID()}/answer-save-receipt-summary`,
@@ -295,7 +122,10 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
     });
 
     it("an attempt with no accepted saves summarizes to zeros/nulls — never 'never saved'", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: RECEIPT_SUMMARY_PREFIX,
+        label: "Receipt",
+      });
       const { attemptId } = await createStartedAttempt(t, "RS Empty");
       const res = await ctx.app.inject({
         method: "GET",
@@ -311,7 +141,10 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
     });
 
     it("aggregates count / MAX clientSeq / last savedAt over planted receipts, exposing ONLY the three summary fields", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: RECEIPT_SUMMARY_PREFIX,
+        label: "Receipt",
+      });
       const { attemptId } = await createStartedAttempt(t, "RS Aggregate");
       const base = new Date("2026-11-04T10:00:00Z");
       const rows = [
@@ -353,8 +186,14 @@ describe("attempt routes — answer-save-receipt summary (#866)", () => {
     });
 
     it("does not leak another organization's receipts (org boundary, 404)", async () => {
-      const orgA = await createIsolatedTestOrg();
-      const orgB = await createIsolatedTestOrg();
+      const orgA = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: RECEIPT_SUMMARY_PREFIX,
+        label: "Receipt",
+      });
+      const orgB = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: RECEIPT_SUMMARY_PREFIX,
+        label: "Receipt",
+      });
       const { attemptId } = await createStartedAttempt(orgA, "RS OrgB");
       // A receipt exists in org A…
       await ctx.db.insert(schema.examAnswerSaveReceipts).values({

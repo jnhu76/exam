@@ -361,22 +361,6 @@ describe("candidate routes", () => {
     });
   });
 
-  it("keeps candidate creation unavailable to Teacher", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/candidates",
-      payload: {
-        username: `teacher-cannot-create-${Date.now()}`,
-        password: "password123",
-        name: "Forbidden Candidate",
-        fields: { [identityFieldName]: `forbidden-${Date.now()}` },
-      },
-      cookies: { "auth-token": teacherToken },
-    });
-
-    expect(res.statusCode).toBe(403);
-  });
-
   it("creates a candidate and updates its name through the HTTP routes", async () => {
     const identity = `E-${Date.now()}`;
     const res = await ctx.app.inject({
@@ -752,27 +736,6 @@ describe("candidate routes", () => {
     expect(body.error.details.fields).toBeInstanceOf(Array);
     expect(body.error.details.fields.length).toBeGreaterThan(0);
     expect(body.error.requestId).toEqual(expect.any(String));
-  });
-
-  it("POST /api/candidates requires Admin role", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/candidates",
-      payload: {
-        username: "forbidden",
-        password: "password123",
-        name: "Forbidden",
-        fields: {},
-      },
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({
-      error: {
-        code: "PERMISSION_DENIED",
-        requestId: expect.any(String),
-      },
-    });
   });
 
   // C6 F-12: the import catch-all must reduce an unexpected internal

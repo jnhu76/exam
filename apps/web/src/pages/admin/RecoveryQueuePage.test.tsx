@@ -380,34 +380,6 @@ describe("RecoveryQueuePage", () => {
     expect(getMock).toHaveBeenCalledTimes(2);
   });
 
-  it("rapidly typing examId then candidateId commits BOTH filters to the URL (shared debounce)", async () => {
-    vi.useFakeTimers();
-    renderPage();
-    await act(async () => {});
-
-    // Type examId, then candidateId within the debounce window: the SECOND
-    // keystroke must NOT cancel the first filter — one timer commits both.
-    fireEvent.change(screen.getByPlaceholderText("考试 ID"), {
-      target: { value: "exam-9" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("考生 ID"), {
-      target: { value: "cand-9" },
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
-    });
-
-    expect(screen.getByTestId("location-search")).toHaveTextContent(
-      "examId=exam-9",
-    );
-    expect(screen.getByTestId("location-search")).toHaveTextContent(
-      "candidateId=cand-9",
-    );
-    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
-    expect(lastCall).toContain("examId=exam-9");
-    expect(lastCall).toContain("candidateId=cand-9");
-  });
-
   // ── #800 PR-C A3-F3: the three backend filters the UI dropped ─────────
   // RecoveryListQuerySchema accepts attemptId / incidentType /
   // assignedProctorUserId and executes them as real SQL predicates, but

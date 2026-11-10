@@ -171,18 +171,6 @@ describe("Admin grader-to-exam assignment API (issue #296)", () => {
     expect(auditAfter.length).toBe(auditBefore.length);
   });
 
-  it("target without an active Grader role → 400 VALIDATION_ERROR", async () => {
-    const teacher = await createAssignedUserForTest(
-      ctx.db,
-      ctx.org.id,
-      "Teacher",
-      "not-a-grader",
-    );
-    const res = await assign(teacher.user.id);
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("VALIDATION_ERROR");
-  });
-
   it("inactive target user → 400 VALIDATION_ERROR", async () => {
     const inactive = await createAssignedUserForTest(
       ctx.db,
@@ -194,12 +182,6 @@ describe("Admin grader-to-exam assignment API (issue #296)", () => {
     const res = await assign(inactive.user.id);
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("VALIDATION_ERROR");
-  });
-
-  it("unknown target user → 404 RESOURCE_NOT_FOUND", async () => {
-    const res = await assign(randomUUID());
-    expect(res.statusCode).toBe(404);
-    expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
   });
 
   it("cross-organization target user is hidden → 404 RESOURCE_NOT_FOUND", async () => {

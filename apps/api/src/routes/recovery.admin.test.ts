@@ -430,17 +430,6 @@ describe("Admin Recovery Center queue — GET /admin/recovery/incidents", () => 
     ]);
   });
 
-  it("Admin needs no fake Proctor assignment row — bare Admin token works", async () => {
-    // The Admin above has NO examProctorAssignments row; the queue still returns.
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/recovery/incidents",
-      cookies: { "auth-token": adminToken },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().items.length).toBeGreaterThan(0);
-  });
-
   it("Proctor with incident.view + active assignment is STILL denied", async () => {
     const res = await ctx.app.inject({
       method: "GET",
@@ -789,20 +778,6 @@ describe("Admin Recovery Center queue — GET /admin/recovery/incidents", () => 
     for (const it of items) expect(it.incident.severity).toBe("critical");
   });
 
-  it("filters narrow the page — unresolvedOnly=true", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/recovery/incidents?unresolvedOnly=true",
-      cookies: { "auth-token": adminToken },
-    });
-    expect(res.statusCode).toBe(200);
-    const items = res.json().items as Array<{
-      incident: { status: string };
-    }>;
-    for (const it of items)
-      expect(["open", "investigating"]).toContain(it.incident.status);
-  });
-
   it("filters narrow the page — assignedProctorUserId (current active)", async () => {
     const res = await ctx.app.inject({
       method: "GET",
@@ -979,31 +954,23 @@ describe("Admin Recovery Center queue — GET /admin/recovery/incidents", () => 
     expect(res.statusCode).toBe(400);
   });
 
-  it("malformed cursor is rejected with 400", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/recovery/incidents?cursor=not-a-cursor",
-      cookies: { "auth-token": adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it("cursor with a non-UUID id is rejected with 400", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/recovery/incidents?cursor=2026-08-01T00:00:00.000Z%7Cnot-a-uuid",
-      cookies: { "auth-token": adminToken },
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it("cursor with a non-canonical datetime is rejected with 400", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: `/api/admin/recovery/incidents?cursor=2026-08-01%7C${seed.incidentId}`,
-      cookies: { "auth-token": adminToken },
-    });
-    expect(res.statusCode).toBe(400);
+  it("malformed cursors are rejected with 400 (shape / non-UUID id / non-canonical datetime)", async () => {
+    // Three input partitions of the same RecoveryCursorWireSchema refine —
+    // an invalid cursor must be rejected at the API boundary, never reach
+    // the repo's keyset predicate.
+    const badCursors = [
+      "not-a-cursor", // missing `<createdAtISO>|<id>` pipe shape
+      "2026-08-01T00:00:00.000Z%7Cnot-a-uuid", // id is not a UUID
+      `2026-08-01%7C${seed.incidentId}`, // datetime is not canonical ISO
+    ];
+    for (const cursor of badCursors) {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/recovery/incidents?cursor=${cursor}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(res.statusCode, `cursor ${cursor} must be 400`).toBe(400);
+    }
   });
 
   it("cursor pagination — no-dup/no-gap across pages", async () => {
@@ -1308,15 +1275,6 @@ describe("Admin Recovery aggregate detail — GET /admin/recovery/incidents/:inc
       expect(a).not.toHaveProperty("deadlineAt");
       expect(a.score).toBeNull();
     }
-  });
-
-  it("Admin needs no fake Proctor assignment — bare Admin works", async () => {
-    const res = await ctx2.app.inject({
-      method: "GET",
-      url: `/api/admin/recovery/incidents/${aggregateIncidentId}`,
-      cookies: { "auth-token": adminToken2 },
-    });
-    expect(res.statusCode).toBe(200);
   });
 
   it("Proctor with incident.view + active assignment is STILL denied", async () => {

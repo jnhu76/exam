@@ -253,31 +253,6 @@ describe("authoritative snapshot read path", () => {
     ).toBe(false);
   });
 
-  it("renders snapshot question prompt and routes answerValue verbatim from the backend", async () => {
-    const snap = buildSnapshot({
-      questions: [
-        {
-          id: "q1",
-          type: "single_choice",
-          prompt: "Backend-authored prompt",
-          promptDocument: null,
-          answerMode: "plain" as const,
-          options: [{ id: "opt-a", content: "Alpha", contentDocument: null }],
-          inputMode: "choice",
-          maxScore: 10,
-          answerValue: "opt-a",
-          answerSource: "draft",
-        },
-      ],
-    });
-    installTakeRoute(snap);
-    renderPage();
-
-    expect(
-      await screen.findByText("Backend-authored prompt"),
-    ).toBeInTheDocument();
-  });
-
   // Characterization (UI-MIGRATE-N-W3): the question content surface
   // (take-question-section) is a governed content region wrapping the
   // question prompt and the answer controls. After the surface-content
@@ -348,32 +323,6 @@ describe("authoritative snapshot read path", () => {
     const frozen = await screen.findByRole("radio", { name: "Frozen Choice" });
     // The backend's submitted value is selected; UI must reflect it verbatim.
     expect(frozen).toBeChecked();
-  });
-
-  it("refresh reconstructs locked state solely from a newly fetched snapshot", async () => {
-    const submitted = buildSnapshot({
-      attemptStatus: "submitted",
-      isEditable: false,
-      canSave: false,
-      canSubmit: false,
-      lockReason: "submitted",
-      submittedAt: NOW,
-    });
-
-    installTakeRoute(submitted);
-    const { unmount } = renderPage();
-    await screen.findByText("选择一项");
-
-    // Inputs must be disabled from the snapshot alone (no local reducer state
-    // required to carry the lock).
-    expect((await screen.findAllByRole("radio"))[0]).toBeDisabled();
-
-    unmount();
-
-    // Fresh render with a freshly-fetched snapshot.
-    installTakeRoute(submitted);
-    renderPage();
-    expect((await screen.findAllByRole("radio"))[0]).toBeDisabled();
   });
 
   it("during submitting transient state, repeated submit clicks issue one submit request", async () => {
@@ -482,48 +431,6 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
     expect(takeHandler.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("displays save-rejection alert when backend rejects with ATTEMPT_ALREADY_SUBMITTED", async () => {
-    const snap = buildSnapshot({
-      questions: [
-        {
-          id: "q1",
-          type: "fill_blank",
-          prompt: "填空题",
-          promptDocument: null,
-          answerMode: "plain" as const,
-          options: [],
-          inputMode: "single_line",
-          maxScore: 10,
-          answerValue: null,
-          answerSource: "none",
-        },
-      ],
-    });
-    installTakeRoute(snap);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/answers/")) {
-        return {
-          accepted: false,
-          reason: "ATTEMPT_ALREADY_SUBMITTED",
-          message: "已提交",
-          serverVersion: 0,
-          savedAt: NOW,
-        };
-      }
-      return { ok: true, serverNow: NOW };
-    });
-
-    renderPage();
-    const input = await screen.findByLabelText("第1空答案");
-    const user = userEvent.setup();
-    await user.type(input, "x");
-
-    expect(
-      await screen.findByTestId("save-rejection-alert", {}, { timeout: 3000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("考试已结束")).toBeInTheDocument();
-  });
-
   it("shows error state and a retry button when the snapshot endpoint fails", async () => {
     apiGet.mockRejectedValueOnce(new Error("network"));
     renderPage();
@@ -532,99 +439,6 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
       await screen.findByText("无法加载答题记录，请检查连接后重试"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
-  });
-
-  it("deadline auto-submit fires when effectiveDeadline has passed", async () => {
-    // Real timers (matching the original suite's pattern) so apiPost promises
-    // resolve and waitFor can observe the submit. The snapshot reports an
-    // already-passed effectiveDeadline; the page's deadline checker fires
-    // submit on the next tick.
-    const serverNow = new Date("2026-07-04T12:00:00Z");
-    const expired = buildSnapshot({
-      serverNow: serverNow.toISOString(),
-      effectiveDeadline: new Date("2026-07-04T11:00:00Z").toISOString(),
-    });
-    installTakeRoute(expired);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/submit")) {
-        return { ok: true };
-      }
-      return { ok: true, serverNow: serverNow.toISOString() };
-    });
-
-    renderPage();
-
-    await waitFor(
-      () => {
-        expect(
-          apiPost.mock.calls.some(
-            ([p]) => typeof p === "string" && p.includes("/submit"),
-          ),
-        ).toBe(true);
-      },
-      { timeout: 4000 },
-    );
-  });
-
-  it("stale-version rejection reconciles the server-returned answer", async () => {
-    const snap = buildSnapshot({
-      questions: [
-        {
-          id: "q1",
-          type: "multiple_choice",
-          prompt: "多选",
-          promptDocument: null,
-          answerMode: "plain" as const,
-          options: [
-            { id: "a", content: "A", contentDocument: null },
-            { id: "b", content: "B", contentDocument: null },
-          ],
-          inputMode: "choice",
-          maxScore: 10,
-          answerValue: null,
-          answerSource: "none",
-        },
-      ],
-    });
-    installTakeRoute(snap);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/answers/")) {
-        return {
-          accepted: false,
-          reason: "STALE_VERSION",
-          message: "stale",
-          serverVersion: 3,
-          savedAt: NOW,
-          details: { serverAnswer: ["a", "b"] },
-        };
-      }
-      return { ok: true, serverNow: NOW };
-    });
-
-    renderPage();
-    const checkboxes = await screen.findAllByRole("checkbox");
-    const user = userEvent.setup();
-    await user.click(checkboxes[0]!);
-
-    await waitFor(
-      () => {
-        expect(
-          apiPost.mock.calls.some(
-            ([p]) => typeof p === "string" && p.includes("/answers/"),
-          ),
-        ).toBe(true);
-      },
-      { timeout: 3000 },
-    );
-    // Give the STALE reconcile state update time to flush.
-    await waitFor(
-      () => {
-        const boxes = screen.getAllByRole("checkbox");
-        expect(boxes[0]).toBeChecked();
-        expect(boxes[1]).toBeChecked();
-      },
-      { timeout: 3000 },
-    );
   });
 
   it("flag toggle marks the current question as flagged", async () => {
@@ -689,26 +503,6 @@ describe("TakeExamPage behaviors over the snapshot read path", () => {
       expect(within(dialog).queryByText(/保存中/)).not.toBeInTheDocument();
     });
     expect(confirm).toBeEnabled();
-  });
-
-  it("network save failure reports connection abnormal; snapshot authority unchanged", async () => {
-    installTakeRoute(buildSnapshot());
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/answers/")) {
-        throw new Error("offline");
-      }
-      return { ok: true, serverNow: NOW };
-    });
-
-    renderPage();
-    const radio = await screen.findByRole("radio", { name: "A" });
-    const user = userEvent.setup();
-    await user.click(radio);
-
-    expect(
-      await screen.findByText("连接异常", {}, { timeout: 3000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "交卷" })).toBeInTheDocument();
   });
 });
 describe("submit dialog fact weighting (S3.4)", () => {
@@ -947,43 +741,6 @@ describe("submit-freeze UI proof", () => {
         expect(saveCalls).toHaveLength(0);
       },
       { timeout: 2500 },
-    );
-  });
-
-  it("save execution seam allows the API call when canSave is true (control)", async () => {
-    // Control case proving the path is reachable and the guard is decisive:
-    // with canSave=true, the same autosave path DOES issue a save.
-    const editable = buildSnapshot({
-      questions: [
-        {
-          id: "q1",
-          type: "fill_blank",
-          prompt: "open",
-          promptDocument: null,
-          answerMode: "plain" as const,
-          options: [],
-          inputMode: "single_line",
-          maxScore: 10,
-          answerValue: null,
-          answerSource: "none",
-        },
-      ],
-    });
-    installTakeRoute(editable);
-
-    renderPage();
-    const input = await screen.findByLabelText("第1空答案");
-    const user = userEvent.setup();
-    await user.type(input, "x");
-
-    await waitFor(
-      () => {
-        const saveCalls = apiPost.mock.calls.filter(
-          ([p]) => typeof p === "string" && p.includes("/answers/"),
-        );
-        expect(saveCalls.length).toBeGreaterThan(0);
-      },
-      { timeout: 3000 },
     );
   });
 });

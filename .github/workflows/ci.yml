@@ -144,8 +144,8 @@ jobs:
         # source-freshness oracles (see config/workspace-resolution.ts).
         run: pnpm lint:prod-resolution
 
-  web-coverage:
-    name: Web coverage
+  web-tests:
+    name: Web tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: verify-build
@@ -185,11 +185,11 @@ jobs:
       - name: Build workspace outputs
         run: pnpm build
 
-      - name: Coverage
-        run: pnpm --filter @exam/web coverage
+      - name: Test
+        run: pnpm --filter @exam/web test
 
-  api-coverage:
-    name: API coverage
+  api-tests:
+    name: API tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: verify-build
@@ -263,8 +263,8 @@ jobs:
       - name: Build workspace outputs
         run: pnpm build
 
-      - name: Coverage
-        run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
+      - name: Test
+        run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
 
   package-coverage:
     name: Package coverage

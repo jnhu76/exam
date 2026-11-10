@@ -5,12 +5,13 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAuditLogTestRepo } from "@exam/db/testHelpers/auditLogTestRepo";
-import { signJWT } from "@exam/auth/session";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { RequestContext, Role } from "@exam/domain";
-import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
+import {
+  buildExamPayload,
+  createIsolatedAttemptOrg,
+  type IsolatedAttemptOrg,
+} from "./__tests__/attempts.testHelpers.js";
 
 const TIMELINE_TEST_PREFIX = "timeline-test-";
 
@@ -29,187 +30,8 @@ describe("attempt routes", () => {
   });
 
   describe("GET /api/admin/attempts/:attemptId/timeline", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      adminUserId: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${TIMELINE_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "TL Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "TL Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      // Authenticate resolves authority from ACTIVE
-      // user_role_assignments. Seed one active primary per user so the
-      // matrix-of-roles-under-test authenticates and gates run as written.
-      await ctx.db.insert(schema.userRoleAssignments).values([
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: admin.id,
-          role: "Admin" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: candidate.id,
-          role: "Candidate" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ]);
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `TL Course ${slug}`,
-            code: `TL-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        adminUserId: admin.id,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string }> {
       const exam = await ctx.app.inject({
@@ -243,7 +65,7 @@ describe("attempt routes", () => {
       return { attemptId: startRes.json().id as string };
     }
 
-    function makeAdminCtx(t: IsolatedTestOrg): RequestContext {
+    function makeAdminCtx(t: IsolatedAttemptOrg): RequestContext {
       return {
         actorId: t.adminUserId,
         organizationId: t.orgId,
@@ -285,7 +107,10 @@ describe("attempt routes", () => {
     });
 
     it("rejects Candidate role with 403", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: TIMELINE_TEST_PREFIX,
+        label: "Timeline",
+      });
       const response = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/attempts/${crypto.randomUUID()}/timeline`,
@@ -295,7 +120,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 404 NOT_FOUND for a nonexistent attempt UUID", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: TIMELINE_TEST_PREFIX,
+        label: "Timeline",
+      });
       const response = await ctx.app.inject({
         method: "GET",
         url: `/api/admin/attempts/${crypto.randomUUID()}/timeline`,
@@ -306,7 +134,10 @@ describe("attempt routes", () => {
     });
 
     it("returns events for an attempt ordered chronologically", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: TIMELINE_TEST_PREFIX,
+        label: "Timeline",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Timeline Ordered Exam",
@@ -386,14 +217,20 @@ describe("attempt routes", () => {
     });
 
     it("does not leak another organization's audit rows (org boundary)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: TIMELINE_TEST_PREFIX,
+        label: "Timeline",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Timeline Boundary Exam",
       );
 
       // A second isolated org seeds an audit row for the SAME targetId.
-      const other = await createIsolatedTestOrg();
+      const other = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: TIMELINE_TEST_PREFIX,
+        label: "Timeline",
+      });
       const otherCtx: RequestContext = {
         actorId: other.adminUserId,
         organizationId: other.orgId,

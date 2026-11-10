@@ -269,6 +269,11 @@ describe("REC-I3 — disrupted direct restore", () => {
       { timeout: 4000 },
     );
 
+    // The recovery action is the REAL restore command — the ADR-012 restore
+    // endpoint, not an invented UI API (oracle carried from the #674
+    // locked-state matrix merge).
+    expect(apiPost).toHaveBeenCalledWith("/api/attempts/att-1/restore");
+
     // The take endpoint is called at least twice (initial load + post-restore
     // reload). The reload — NOT the restore response — is the page authority.
     await waitFor(() => {
@@ -282,6 +287,10 @@ describe("REC-I3 — disrupted direct restore", () => {
 
     // The restored, editable exam renders. The question control is enabled.
     expect(await screen.findByRole("radio", { name: "A" })).not.toBeDisabled();
+
+    // INVARIANT (#674): once the restored snapshot applies, the locked-state
+    // overlay must be gone — recovery clears the lock surface.
+    expect(screen.queryByTestId("deadline-overlay")).not.toBeInTheDocument();
   });
 
   it("Case 2: ordinary in-progress attempt does NOT call restore", async () => {
@@ -357,6 +366,12 @@ describe("REC-I3 — disrupted direct restore", () => {
     expect(failedSurface).toHaveTextContent(/未能确认考试状态/);
     expect(
       within(failedSurface).getByRole("button", { name: "重试恢复" }),
+    ).toBeInTheDocument();
+
+    // The failure surface must also offer the list exit alongside the retry
+    // (oracle carried from the restoring-UX matrix merge).
+    expect(
+      screen.getByRole("button", { name: "返回考试列表" }),
     ).toBeInTheDocument();
 
     // The generic deadline/time-up copy MUST NOT appear merely because
@@ -1617,63 +1632,5 @@ describe("REC-I3 — restoring UX and accessibility", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-  });
-
-  it("restore failure surfaces a '返回考试列表' control alongside the retry", async () => {
-    const disrupted = buildSnapshot({
-      attemptStatus: "disrupted",
-      isEditable: false,
-      canResume: true,
-      canSave: false,
-      canSubmit: false,
-      lockReason: "disrupted",
-    });
-    routeTakeOnly(disrupted);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.endsWith("/restore")) {
-        throw new ApiError(0, "Network request failed");
-      }
-      throw new Error(`unexpected POST ${path}`);
-    });
-
-    renderPage();
-
-    expect(
-      await screen.findByRole("button", { name: "重试恢复" }),
-    ).toBeInTheDocument();
-    // The "back to list" affordance must be reachable.
-    expect(
-      screen.getByRole("button", { name: "返回考试列表" }),
-    ).toBeInTheDocument();
-  });
-});
-
-describe("REC-I3 — regression: existing StartExam flow stays intact", () => {
-  it("Case 10: ordinary editable attempt navigates, edits, and saves via the existing flow", async () => {
-    routeTakeOnly(buildSnapshot());
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/answers/")) {
-        return { accepted: true, serverVersion: 1, savedAt: NOW };
-      }
-      if (typeof path === "string" && path.includes("/heartbeat")) {
-        return { ok: true, serverNow: NOW };
-      }
-      throw new Error(`unexpected POST ${path}`);
-    });
-
-    renderPage();
-    const radio = await screen.findByRole("radio", { name: "A" });
-    const user = userEvent.setup();
-    await user.click(radio);
-
-    await waitFor(
-      () => {
-        const saves = apiPost.mock.calls.filter(
-          ([p]) => typeof p === "string" && (p as string).includes("/answers/"),
-        );
-        expect(saves.length).toBeGreaterThan(0);
-      },
-      { timeout: 3000 },
-    );
   });
 });

@@ -347,14 +347,14 @@ describe("timing modes — authoring gate", () => {
 // detectTabSwitch/disableCopyPaste are UI-exposed; restrictIp/requireLockdown
 // are API-only. None has runtime enforcement, so activation must fail closed
 // on every policy-authority path while historical rows stay readable.
+// The four-flag vocabulary is enumerated member-by-member by the pure
+// validator (exam-engine examPolicy "rejects activating %s"); these route
+// rows keep one representative flag per route as the wire-mapping and
+// no-persistence witnesses (same layering as the EXAM_TIMING_MODE_INVALID
+// rows above).
 
 describe("unsupported control flags — activation gate (#516)", () => {
-  const UNSUPPORTED_FLAGS = [
-    "detectTabSwitch",
-    "disableCopyPaste",
-    "restrictIp",
-    "requireLockdown",
-  ] as const;
+  const REPRESENTATIVE_FLAG = "requireLockdown" as const;
 
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
@@ -419,45 +419,43 @@ describe("unsupported control flags — activation gate (#516)", () => {
 
   // ── T2: create route — flag=true rejected, exam NOT created ──────
 
-  it.each(UNSUPPORTED_FLAGS)(
-    "rejects create with controlFlags.%s=true (deterministic, no exam created)",
-    async (flag) => {
-      const listBefore = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const totalBefore = listBefore.json().total as number;
+  it(`rejects create with controlFlags.${REPRESENTATIVE_FLAG}=true (deterministic, no exam created)`, async () => {
+    const flag = REPRESENTATIVE_FLAG;
+    const listBefore = await ctx.app.inject({
+      method: "GET",
+      url: "/api/exams",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const totalBefore = listBefore.json().total as number;
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: {
-          ...validCreatePayload(courseId, questionId),
-          controlFlags: { [flag]: true },
-        },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(400);
-      const body = res.json();
-      expect(body.error.code).toBe("VALIDATION_ERROR");
-      const findings = fieldFindings(body);
-      expect(findings).toEqual([
-        {
-          field: flag,
-          code: "UNSUPPORTED_EXAM_CONTROL",
-          message: expect.any(String),
-        },
-      ]);
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        ...validCreatePayload(courseId, questionId),
+        controlFlags: { [flag]: true },
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    const findings = fieldFindings(body);
+    expect(findings).toEqual([
+      {
+        field: flag,
+        code: "UNSUPPORTED_EXAM_CONTROL",
+        message: expect.any(String),
+      },
+    ]);
 
-      const listAfter = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(listAfter.json().total).toBe(totalBefore);
-    },
-  );
+    const listAfter = await ctx.app.inject({
+      method: "GET",
+      url: "/api/exams",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listAfter.json().total).toBe(totalBefore);
+  });
 
   it("accepts the same create payload with all unsupported flags false", async () => {
     const res = await ctx.app.inject({
@@ -480,43 +478,41 @@ describe("unsupported control flags — activation gate (#516)", () => {
 
   // ── T3: update route — rejected, persisted policy unchanged ──────
 
-  it.each(UNSUPPORTED_FLAGS)(
-    "rejects draft update setting controlFlags.%s=true and leaves persisted policy unchanged",
-    async (flag) => {
-      const createRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: validCreatePayload(courseId, questionId),
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(createRes.statusCode).toBe(201);
-      const id = createRes.json().id;
+  it(`rejects draft update setting controlFlags.${REPRESENTATIVE_FLAG}=true and leaves persisted policy unchanged`, async () => {
+    const flag = REPRESENTATIVE_FLAG;
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: validCreatePayload(courseId, questionId),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const id = createRes.json().id;
 
-      const res = await ctx.app.inject({
-        method: "PATCH",
-        url: `/api/exams/${id}`,
-        payload: { controlFlags: { [flag]: true } },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(400);
-      expect(res.json().error.code).toBe("VALIDATION_ERROR");
-      expect(fieldFindings(res.json())).toEqual([
-        {
-          field: flag,
-          code: "UNSUPPORTED_EXAM_CONTROL",
-          message: expect.any(String),
-        },
-      ]);
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${id}`,
+      payload: { controlFlags: { [flag]: true } },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(fieldFindings(res.json())).toEqual([
+      {
+        field: flag,
+        code: "UNSUPPORTED_EXAM_CONTROL",
+        message: expect.any(String),
+      },
+    ]);
 
-      const getRes = await ctx.app.inject({
-        method: "GET",
-        url: `/api/exams/${id}`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(getRes.statusCode).toBe(200);
-      expect(getRes.json().controlFlags[flag]).toBe(false);
-    },
-  );
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${id}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.json().controlFlags[flag]).toBe(false);
+  });
 
   // ── T4: publish revalidation + historical-row compatibility ──────
   // The historical/stale row is represented through the allowed fixture seam

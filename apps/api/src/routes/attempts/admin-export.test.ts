@@ -5,12 +5,11 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
-import { signJWT } from "@exam/auth/session";
-import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
-import { buildExamPayload } from "./__tests__/attempts.testHelpers.js";
+import {
+  buildExamPayload,
+  createIsolatedAttemptOrg,
+  type IsolatedAttemptOrg,
+} from "./__tests__/attempts.testHelpers.js";
 
 const EXPORT_TEST_PREFIX = "export-test-";
 
@@ -61,183 +60,8 @@ describe("attempt routes", () => {
   });
 
   describe("GET /api/admin/attempts/:attemptId/export", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      adminUserId: string;
-      candidateToken: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${EXPORT_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const adminId = crypto.randomUUID();
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: adminId,
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "Export Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: adminId,
-        role: "Admin",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const candidateId = crypto.randomUUID();
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: candidateId,
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "Export Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: org.id,
-        userId: candidateId,
-        role: "Candidate",
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `Export Course ${slug}`,
-            code: `EX-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        adminUserId: admin.id,
-        candidateToken,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
     async function createStartedAttempt(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string }> {
       const exam = await ctx.app.inject({
@@ -273,7 +97,7 @@ describe("attempt routes", () => {
       return { attemptId };
     }
 
-    function makeAdminCtx(t: IsolatedTestOrg) {
+    function makeAdminCtx(t: IsolatedAttemptOrg) {
       return {
         actorId: t.adminUserId,
         organizationId: t.orgId,
@@ -285,7 +109,10 @@ describe("attempt routes", () => {
     }
 
     it("exports attempt detail as JSON (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const { attemptId } = await createStartedAttempt(t, "Export JSON Exam");
 
       const res = await ctx.app.inject({
@@ -307,7 +134,10 @@ describe("attempt routes", () => {
     });
 
     it("exports attempt detail as CSV (200)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const { attemptId } = await createStartedAttempt(t, "Export CSV Exam");
 
       const res = await ctx.app.inject({
@@ -333,7 +163,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 404 for non-existent attempt (JSON and CSV)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const missingId = crypto.randomUUID();
       const jsonRes = await ctx.app.inject({
         method: "GET",
@@ -351,7 +184,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 403 for Candidate role (JSON and CSV)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Export Forbidden Exam",
@@ -373,7 +209,10 @@ describe("attempt routes", () => {
     });
 
     it("returns 400 for malformed UUID", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const res = await ctx.app.inject({
         method: "GET",
         url: "/api/admin/attempts/not-a-uuid/export",
@@ -384,7 +223,10 @@ describe("attempt routes", () => {
     });
 
     it("records audit log on export", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const { attemptId } = await createStartedAttempt(t, "Export Audit Exam");
 
       await ctx.app.inject({
@@ -406,7 +248,10 @@ describe("attempt routes", () => {
     });
 
     it("does not return sensitive export data before its audit insert succeeds", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const { attemptId } = await createStartedAttempt(
         t,
         "Export Ordering Exam",
@@ -432,7 +277,10 @@ describe("attempt routes", () => {
     });
 
     it("exports graded attempt with question results", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: EXPORT_TEST_PREFIX,
+        label: "Export",
+      });
       const { attemptId } = await createStartedAttempt(t, "Export Graded Exam");
 
       // Save correct answer ("b") before force-submitting.
@@ -480,7 +328,7 @@ describe("attempt routes", () => {
     describe("answer-source authority (EXSEM-007/008/009: F8)", () => {
       /** Saves one candidate answer on the started attempt. */
       async function saveAnswer(
-        t: IsolatedTestOrg,
+        t: IsolatedAttemptOrg,
         attemptId: string,
         answer: string,
       ) {
@@ -501,7 +349,7 @@ describe("attempt routes", () => {
       }
 
       /** Force-submits (auto-grades) the attempt via the admin operation. */
-      async function forceSubmit(t: IsolatedTestOrg, attemptId: string) {
+      async function forceSubmit(t: IsolatedAttemptOrg, attemptId: string) {
         const res = await ctx.app.inject({
           method: "POST",
           url: `/api/admin/attempts/${attemptId}/force-submit`,
@@ -540,7 +388,10 @@ describe("attempt routes", () => {
       }
 
       it("exports the frozen submitted value after submission when draft differs", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: EXPORT_TEST_PREFIX,
+          label: "Export",
+        });
         const { attemptId } = await createStartedAttempt(
           t,
           "Export Submitted Authority Exam",
@@ -564,7 +415,10 @@ describe("attempt routes", () => {
       });
 
       it("exports the frozen submitted value in CSV after submission", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: EXPORT_TEST_PREFIX,
+          label: "Export",
+        });
         const { attemptId } = await createStartedAttempt(
           t,
           "Export Submitted Authority CSV Exam",
@@ -589,7 +443,10 @@ describe("attempt routes", () => {
       });
 
       it("exports draft answers for an in-progress attempt (pre-submit source)", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: EXPORT_TEST_PREFIX,
+          label: "Export",
+        });
         const { attemptId } = await createStartedAttempt(
           t,
           "Export PreSubmit Exam",
@@ -608,7 +465,10 @@ describe("attempt routes", () => {
       });
 
       it("uses draft answers only for legacy rows marked by a NULL submissionReason", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: EXPORT_TEST_PREFIX,
+          label: "Export",
+        });
         const { attemptId } = await createStartedAttempt(
           t,
           "Export Legacy Row Exam",
@@ -633,7 +493,10 @@ describe("attempt routes", () => {
       });
 
       it("fails closed when a submitted row lost its frozen answers without the legacy marker", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: EXPORT_TEST_PREFIX,
+          label: "Export",
+        });
         const { attemptId } = await createStartedAttempt(
           t,
           "Export Corruption Exam",

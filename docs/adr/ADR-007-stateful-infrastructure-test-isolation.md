@@ -10,7 +10,7 @@ the per-file / per-slot lifecycle contract below is the current authority.
 
 > **Superseded: CI gate / shard shape.** The Phase 6 sections below (`CI
 > strategy`, `Phase 6 Plan`, `Phase 6G`) record a planned `api-fast` shard
-> matrix that was never adopted. CI wiring today — one `api-coverage` job on
+> matrix that was never adopted. CI wiring today — one `api-tests` job on
 > worker-database isolation — is owned by `.github/workflows/ci.yml` and the
 > root `package.json`; never treat the job/script names in those sections as
 > runnable commands. Phase 7 (Redis/Queue prefix) remains deferred until

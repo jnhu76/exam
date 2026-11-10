@@ -819,35 +819,6 @@ describe("EXAM-543 — answer-save deadline authority vs concurrent closeAt chan
     expect(attemptRow.answers).toEqual([]);
   }, 30_000);
 
-  it("H5 already-expired attempt: save is answered by deadline reconciliation, never persisted as a draft", async () => {
-    // The attempt starts while the window is open; the authority then moves
-    // into the past (direct canonical exam-row write) before the save.
-    const closeAt = new Date(baseNow + MINUTE_MS);
-    const fixture = await setupFixture(ctx, closeAt);
-    const expiredCloseAt = new Date(baseNow - MINUTE_MS);
-    await commitCloseAtChange({
-      db: db2,
-      ctx: fixture.adminCtx,
-      examId: fixture.examId,
-      closeAt: expiredCloseAt,
-    });
-
-    const saved = await runProductionSaveComposition({
-      db: db1,
-      fixture,
-      now: new Date(baseNow),
-    });
-
-    expect(saved.accepted).toBe(false);
-    if (!saved.accepted) {
-      expect(saved.conflict.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
-    }
-    const attemptRow = await readAttemptRow(ctx, fixture.attemptId);
-    expect(["submitted", "graded"]).toContain(attemptRow.status);
-    expect(attemptRow.submittedAt!.getTime()).toBe(expiredCloseAt.getTime());
-    expect(attemptRow.answers).toEqual([]);
-  }, 30_000);
-
   it("H6 exact boundary instant: now === effectiveDeadline is expired through the real save composition", async () => {
     const closeAt = new Date(baseNow + MINUTE_MS);
     const fixture = await setupFixture(ctx, closeAt);

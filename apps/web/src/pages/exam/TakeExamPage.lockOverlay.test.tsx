@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -191,24 +191,6 @@ describe("locked-state presentation matrix", () => {
     ).not.toBeInTheDocument();
     expect(within(overlay).queryByText("正在恢复考试")).not.toBeInTheDocument();
     expect(screen.getByTestId("lock-back-to-list-btn")).toBeInTheDocument();
-  });
-
-  it("disrupted + canResume: the explicit restore command fires and the page recovers", async () => {
-    installTakeRoute(
-      lockedSnapshot("disrupted", { canResume: true }),
-      buildSnapshot(),
-    );
-    renderPage();
-
-    await waitFor(() => {
-      expect(apiPost).toHaveBeenCalledWith("/api/attempts/att-1/restore");
-    });
-    // The re-read applies the restored (editable) snapshot — the recovery
-    // action is the REAL restore command, not an invented UI API.
-    await waitFor(() => {
-      expect(screen.getByRole("radio", { name: "A" })).toBeEnabled();
-    });
-    expect(screen.queryByTestId("deadline-overlay")).not.toBeInTheDocument();
   });
 
   it("deadline: time-up copy, no false auto-submit while the flow is not in flight", async () => {

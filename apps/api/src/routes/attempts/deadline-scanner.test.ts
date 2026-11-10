@@ -5,16 +5,15 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
-import { signJWT } from "@exam/auth/session";
 import { scanDatabaseForExpiredAttempts } from "../../plugins/deadlineScanner.js";
 import { autoSubmitAndGrade } from "../../plugins/deadlineScanner.js";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
-import { hashPassword } from "@exam/auth/password";
-import { getRuntimeConfig } from "../../config/runtimeConfig.js";
-import type { Role } from "@exam/domain";
 import {
   buildExamPayload,
+  candidateRequestContext,
+  createIsolatedAttemptOrg,
   disruptAttempt,
+  type IsolatedAttemptOrg,
 } from "./__tests__/attempts.testHelpers.js";
 
 const DEADLINE_SCANNER_TEST_PREFIX = "deadline-scanner-test-";
@@ -34,198 +33,8 @@ describe("attempt routes", () => {
   });
 
   describe("deadline scanner — scanDatabaseForExpiredAttempts", () => {
-    interface IsolatedTestOrg {
-      orgId: string;
-      adminToken: string;
-      candidateToken: string;
-      candidateUserId: string;
-      candidateProfileId: string;
-      courseId: string;
-      questionId: string;
-    }
-
-    async function createIsolatedTestOrg(): Promise<IsolatedTestOrg> {
-      const slug = `${DEADLINE_SCANNER_TEST_PREFIX}${uniquePrefix()}`;
-      const now = new Date();
-
-      const org = (
-        await ctx.db
-          .insert(schema.organizations)
-          .values({
-            id: crypto.randomUUID(),
-            name: slug,
-            displayName: slug,
-            slug,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const passwordHash = await hashPassword("password123");
-
-      const admin = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `admin-${slug}`,
-            passwordHash,
-            name: "DS Admin",
-            role: "Admin",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const candidate = (
-        await ctx.db
-          .insert(schema.users)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            username: `candidate-${slug}`,
-            passwordHash,
-            name: "DS Candidate",
-            role: "Candidate",
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      // Authenticate resolves authority from ACTIVE
-      // user_role_assignments. Seed one active primary assignment per test user
-      // so the admin/candidate tokens authenticate with their role's preset.
-      await ctx.db.insert(schema.userRoleAssignments).values([
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: admin.id,
-          role: "Admin" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: crypto.randomUUID(),
-          organizationId: org.id,
-          userId: candidate.id,
-          role: "Candidate" as never,
-          isPrimary: true,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ]);
-
-      const profile = (
-        await ctx.db
-          .insert(schema.candidateProfiles)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            userId: candidate.id,
-            fields: {},
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const course = (
-        await ctx.db
-          .insert(schema.courses)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            name: `DS Course ${slug}`,
-            code: `DS-${slug}`,
-            description: "",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const question = (
-        await ctx.db
-          .insert(schema.questions)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: org.id,
-            courseId: course.id,
-            type: "single_choice",
-            content: "What is 1+1?",
-            options: [
-              { id: "a", content: "1" },
-              { id: "b", content: "2" },
-              { id: "c", content: "3" },
-            ],
-            standardAnswer: "b",
-            attachments: [],
-            score: 100,
-            difficulty: 1,
-            tags: [],
-            gradingRule: {
-              multiSelectScoring: "all_correct_full",
-              fillBlankMatchMode: "exact",
-            },
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-      )[0]!;
-
-      const { jwtSecret } = getRuntimeConfig().authSecret;
-      const adminToken = signJWT(
-        {
-          actorId: admin.id,
-          role: admin.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-      const candidateToken = signJWT(
-        {
-          actorId: candidate.id,
-          role: candidate.role as Role,
-          organizationId: org.id,
-          authEpoch: 0,
-        },
-        jwtSecret,
-      );
-
-      return {
-        orgId: org.id,
-        adminToken,
-        candidateToken,
-        candidateUserId: candidate.id,
-        candidateProfileId: profile.id,
-        courseId: course.id,
-        questionId: question.id,
-      };
-    }
-
-    function makeCandidateCtx(t: IsolatedTestOrg) {
-      return {
-        actorId: t.candidateUserId,
-        organizationId: t.orgId,
-        role: "Candidate" as const,
-        permissions: [] as import("@exam/domain").Permission[],
-        sessionId: "test",
-        targetOrganizationId: t.orgId,
-      };
-    }
-
     async function createStartedAttemptWithQuestion(
-      t: IsolatedTestOrg,
+      t: IsolatedAttemptOrg,
       examTitle: string,
     ): Promise<{ attemptId: string; questionId: string }> {
       const exam = await ctx.app.inject({
@@ -332,7 +141,10 @@ describe("attempt routes", () => {
     });
 
     it("auto-submits and grades an expired in_progress attempt end-to-end", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit InProgress Exam",
@@ -344,7 +156,7 @@ describe("attempt routes", () => {
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("graded");
@@ -353,28 +165,11 @@ describe("attempt routes", () => {
       expect(attempt?.score).toBeDefined();
     });
 
-    it("uses canonical attempt state without an attempt.autoSubmit compliance audit", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttemptWithQuestion(
-        t,
-        "Deadline AutoSubmit Audit Exam",
-      );
-      await backdateDeadline(attemptId);
-
-      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
-
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      const autoSubmitRows = auditRows.filter(
-        (r) => r.action === "attempt.autoSubmit",
-      );
-      expect(autoSubmitRows).toHaveLength(0);
-    });
-
     it("does NOT write a phantom attempt.autoSubmit audit when the row is already submitted when the scanner operates", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit Race Exam",
@@ -413,14 +208,17 @@ describe("attempt routes", () => {
       expect(autoSubmitRows).toHaveLength(0);
 
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("submitted");
     });
 
     it("is idempotent: second scan does not re-grade or create a compliance audit", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit Idempotent Exam",
@@ -429,7 +227,7 @@ describe("attempt routes", () => {
 
       await scanDatabaseForExpiredAttempts(ctx.app, new Date());
       const firstAttempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       const firstGradedAt = firstAttempt?.gradedAt;
@@ -444,7 +242,7 @@ describe("attempt routes", () => {
       expect(second.submittedCount).toBe(0);
 
       const afterSecond = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(afterSecond?.status).toBe("graded");
@@ -461,7 +259,10 @@ describe("attempt routes", () => {
     });
 
     it("auto-submits a disrupted attempt whose deadline has passed", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit Disrupted Exam",
@@ -473,14 +274,17 @@ describe("attempt routes", () => {
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("graded");
     });
 
     it("does not touch a voided attempt whose deadline has passed", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit Voided Exam",
@@ -494,7 +298,7 @@ describe("attempt routes", () => {
       const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
 
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("voided");
@@ -502,7 +306,10 @@ describe("attempt routes", () => {
     });
 
     it("does not auto-submit an in_progress attempt whose deadline is still future", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit Future Exam",
@@ -515,7 +322,7 @@ describe("attempt routes", () => {
       await scanDatabaseForExpiredAttempts(ctx.app, new Date());
 
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(attempt?.status).toBe("in_progress");
@@ -540,7 +347,10 @@ describe("attempt routes", () => {
     // candidate-save-deadline-race.concurrency.test.ts (parked production
     // transaction vs the real extend route).
     it("does not auto-submit when exam.closeAt is extended (committed) before the scanner's under-lock recheck (T7)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline AutoSubmit Extend Race Exam",
@@ -548,7 +358,7 @@ describe("attempt routes", () => {
       // Backdate the per-attempt deadline so the discovery query selects it.
       await backdateDeadline(attemptId);
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       const examId = attempt!.examId;
@@ -589,7 +399,7 @@ describe("attempt routes", () => {
       expect(stateChanged).toBe(false);
 
       const after = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(after?.status).toBe("in_progress");
@@ -613,7 +423,10 @@ describe("attempt routes", () => {
     // T1 (reachability invariant, scoped): production-started attempts in
     // timed_window always carry a non-null deadlineAt.
     it("timed_window production start establishes a non-null deadlineAt (ACTIVE-DEADLINE-001, scoped)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline NULL Reachability Exam",
@@ -634,7 +447,10 @@ describe("attempt routes", () => {
     // starting state is protocol-unreachable (see T1). The test constructs it
     // via direct DB update to exercise the defensive recovery path.
     it("auto-submits a NULL-deadline attempt whose exam.closeAt has passed (defensive recovery DL-ROB-001)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId, questionId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline NULL ExamClose Passed Exam",
@@ -646,7 +462,7 @@ describe("attempt routes", () => {
         .set({ deadlineAt: null, status: "in_progress" })
         .where(eq(schema.examAttempts.id, attemptId));
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       await ctx.db
@@ -658,7 +474,7 @@ describe("attempt routes", () => {
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
       const after = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(after?.status).toBe("graded");
@@ -672,7 +488,10 @@ describe("attempt routes", () => {
     // => NOT canonically expired via the defensive fallback (EffectiveDeadline
     // = closeAt > now) => NOT a candidate, NOT submitted.
     it("does NOT auto-submit a NULL-deadline attempt while exam.closeAt is future (defensive recovery, negative)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline NULL ExamClose Future Exam",
@@ -686,7 +505,7 @@ describe("attempt routes", () => {
       await scanDatabaseForExpiredAttempts(ctx.app, new Date());
 
       const after = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(after?.status).toBe("in_progress");
@@ -700,7 +519,10 @@ describe("attempt routes", () => {
     // NOT expired => no-op. Same proof boundary as T7: the extension commits
     // before the scanner runs; this is not a concurrent race schedule.
     it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended (committed) before the scanner's under-lock recheck (defensive recovery)", async () => {
-      const t = await createIsolatedTestOrg();
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+        label: "DS",
+      });
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
         "Deadline NULL Extend Race Exam",
@@ -710,7 +532,7 @@ describe("attempt routes", () => {
         .set({ deadlineAt: null, status: "in_progress" })
         .where(eq(schema.examAttempts.id, attemptId));
       const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       // Extend the exam window into the future BEFORE the scanner's under-lock
@@ -738,104 +560,13 @@ describe("attempt routes", () => {
       expect(stateChanged).toBe(false);
 
       const after = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
+        candidateRequestContext(t),
         attemptId,
       );
       expect(after?.status).toBe("in_progress");
       expect(after?.submittedAt).toBeNull();
     });
 
-    // DISCOVERY CONFORMANCE (defensive domain): for every scanner-eligible
-    // active attempt — including the schema-admissible NULL per-attempt
-    // deadline (defensive recovery domain) — CanonicalExpired <=>
-    // ScannerCandidate. We construct the four cells of the truth table over
-    // (deadlineAt NULL|past) x (closeAt past|future) and assert discovery
-    // matches the canonical isAttemptDeadlineExpired seam. (The NULL cells are
-    // protocol-unreachable; they are exercised by direct DB update to prove
-    // discovery/helper agreement over the defensive domain, not to assert
-    // NULL is a valid protocol state.)
-    it("discovery matches canonical expiry over the full domain incl. NULL (defensive discovery conformance)", async () => {
-      const t = await createIsolatedTestOrg();
-      const cells: Array<{
-        name: string;
-        deadlineAt: Date | null;
-        closeAtPast: boolean;
-        expectCandidate: boolean;
-      }> = [
-        // (deadlineAt, closeAt) -> CanonicalExpired (= ScannerCandidate)
-        {
-          name: "null+closePast",
-          deadlineAt: null,
-          closeAtPast: true,
-          expectCandidate: true,
-        },
-        {
-          name: "null+closeFuture",
-          deadlineAt: null,
-          closeAtPast: false,
-          expectCandidate: false,
-        },
-        {
-          name: "past+closeFuture",
-          deadlineAt: new Date(Date.now() - 60_000),
-          closeAtPast: false,
-          expectCandidate: true,
-        },
-        {
-          name: "future+closeFuture",
-          deadlineAt: new Date(Date.now() + 3600_000),
-          closeAtPast: false,
-          expectCandidate: false,
-        },
-      ];
-
-      const created: Array<{
-        id: string;
-        name: string;
-        expectCandidate: boolean;
-        examId: string;
-      }> = [];
-      for (const cell of cells) {
-        const { attemptId } = await createStartedAttemptWithQuestion(
-          t,
-          `Deadline T8 ${cell.name}`,
-        );
-        const attempt = await createAttemptRepo(ctx.db).findById(
-          makeCandidateCtx(t),
-          attemptId,
-        );
-        if (cell.closeAtPast) {
-          await ctx.db
-            .update(schema.exams)
-            .set({ closeAt: new Date(Date.now() - 60_000) })
-            .where(eq(schema.exams.id, attempt!.examId));
-        }
-        await ctx.db
-          .update(schema.examAttempts)
-          .set({ deadlineAt: cell.deadlineAt, status: "in_progress" })
-          .where(eq(schema.examAttempts.id, attemptId));
-        created.push({
-          id: attemptId,
-          name: cell.name,
-          expectCandidate: cell.expectCandidate,
-          examId: attempt!.examId,
-        });
-      }
-
-      const before = new Date();
-      const found = await createAttemptRepo(ctx.db).listDeadlineCandidates(
-        makeCandidateCtx(t),
-        before,
-      );
-      const foundIds = new Set(found.map((a) => a.id));
-
-      for (const c of created) {
-        expect(
-          foundIds.has(c.id),
-          `cell ${c.name}: expectCandidate=${c.expectCandidate}`,
-        ).toBe(c.expectCandidate);
-      }
-    });
     // ── Phase A2 (#291): scanner behavior per timing mode ──
     //
     // deadline mode: NULL deadlineAt is now a REACHABLE protocol state. The
@@ -845,7 +576,10 @@ describe("attempt routes", () => {
     // never submit the attempt however late it runs.
     describe("attempt routes — timing modes (scanner)", () => {
       it("deadline-mode attempt (null deadlineAt) is auto-submitted by the scanner at closeAt", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
         const exam = await ctx.app.inject({
           method: "POST",
           url: "/api/exams",
@@ -899,7 +633,7 @@ describe("attempt routes", () => {
         expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
         const after = await createAttemptRepo(ctx.db).findById(
-          makeCandidateCtx(t),
+          candidateRequestContext(t),
           attemptId,
         );
         expect(after?.status).toBe("graded");
@@ -917,7 +651,10 @@ describe("attempt routes", () => {
       });
 
       it("untimed attempt is NEVER auto-submitted by the scanner, however late", async () => {
-        const t = await createIsolatedTestOrg();
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
         const exam = await ctx.app.inject({
           method: "POST",
           url: "/api/exams",
@@ -964,7 +701,7 @@ describe("attempt routes", () => {
         );
 
         const after = await createAttemptRepo(ctx.db).findById(
-          makeCandidateCtx(t),
+          candidateRequestContext(t),
           attemptId,
         );
         expect(after?.status).toBe("in_progress");

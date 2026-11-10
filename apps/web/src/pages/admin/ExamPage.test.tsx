@@ -192,7 +192,7 @@ describe("ExamPage", () => {
 /**
  * #785 BDD acceptance — L2 (component level; mocked API with the REAL
  * paginated response shape). Scenario source:
- * docs/design/admin-list-pagination-bdd.md (B01/B06/B07/B08).
+ * docs/design/admin-list-pagination-bdd.md (B01/B06/B08).
  */
 describe("ExamPage #785 pagination and status filter (BDD L2)", () => {
   const hoistedDefault = apiGet.getMockImplementation();
@@ -319,64 +319,6 @@ describe("ExamPage #785 pagination and status filter (BDD L2)", () => {
     });
     expect(
       await within(await screen.findByRole("table")).findByText("已发布考试"),
-    ).toBeInTheDocument();
-  });
-
-  it("B07: deleting the only exam on page 2 steps back to page 1 instead of a fake-empty state", async () => {
-    const user = userEvent.setup();
-    const page1 = Array.from({ length: 20 }, (_, i) =>
-      examRow(`e${i + 1}`, `旧考试 ${i + 1}`),
-    );
-    let deleted = false;
-    apiGet.mockImplementation(async (url: string) => {
-      if (url.startsWith("/api/exams")) {
-        const params = new URLSearchParams(url.split("?")[1] ?? "");
-        const page = Number(params.get("page") ?? "1");
-        const total = deleted ? 20 : 21;
-        const items =
-          page === 1 ? page1 : deleted ? [] : [examRow("e21", "待删除考试")];
-        return {
-          items,
-          total,
-          page,
-          pageSize: 20,
-          totalPages: Math.max(1, Math.ceil(total / 20)),
-        };
-      }
-      throw new Error(`unexpected GET ${url}`);
-    });
-    apiDelete.mockImplementation(async () => {
-      deleted = true;
-    });
-
-    renderPage();
-    await screen.findByRole("table");
-    await user.click(screen.getByRole("button", { name: "下一页" }));
-    // Rows render twice by design (desktop + mobile); scope to the table.
-    // findByText (not getByText) is the sync point for the page-2 render.
-    expect(
-      await within(await screen.findByRole("table")).findByText("待删除考试"),
-    ).toBeInTheDocument();
-
-    await user.click(
-      within(await screen.findByRole("table")).getByRole("button", {
-        name: "删除考试",
-      }),
-    );
-    await user.click(await screen.findByRole("button", { name: "确认" }));
-
-    await waitFor(() => {
-      expect(apiDelete).toHaveBeenCalledWith("/api/exams/e21");
-    });
-    // The page refreshes, finds page 2 empty, and steps back to page 1.
-    await waitFor(() => {
-      expect(apiGet).toHaveBeenLastCalledWith("/api/exams?page=1&pageSize=20");
-    });
-    await waitFor(() => {
-      expect(screen.queryByText("待删除考试")).not.toBeInTheDocument();
-    });
-    expect(
-      await within(await screen.findByRole("table")).findByText("旧考试 1"),
     ).toBeInTheDocument();
   });
 

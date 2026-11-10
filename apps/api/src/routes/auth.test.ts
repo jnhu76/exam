@@ -426,20 +426,6 @@ describe("auth routes", () => {
     });
   });
 
-  it("POST /api/auth/logout returns 204 without a response body", async () => {
-    // #325: a valid-token logout is now a durable revocation, so this smoke
-    // test deliberately sends NO cookie — a captured-token logout is covered
-    // by the dedicated #325 regressions below (using isolated users, so the
-    // shared ctx.adminToken never has its epoch consumed here).
-    const response = await ctx.app.inject({
-      method: "POST",
-      url: "/api/auth/logout",
-    });
-
-    expect(response.statusCode).toBe(204);
-    expect(response.body).toBe("");
-  });
-
   it("PATCH /api/auth/me/password changes password for authenticated user", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",

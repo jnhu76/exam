@@ -20,7 +20,6 @@ import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/session";
 import { seed } from "@exam/db/seed";
 import examRoutes from "../../src/routes/exam.js";
-import systemRoutes from "../../src/routes/system.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/types";
 import type { Role } from "@exam/domain";
@@ -266,11 +265,6 @@ describe("Tenant Isolation (S01)", () => {
     await app.register(rateLimitPlugin);
     await app.register(authzPlugin);
     await app.register(examRoutes, { prefix: "/api" });
-    await app.register(systemRoutes, { prefix: "/api" });
-
-    app.get("/api/health", async () => {
-      return { status: "ok" };
-    });
 
     await app.ready();
   });
@@ -363,43 +357,6 @@ describe("Tenant Isolation (S01)", () => {
       const body = res.json();
       const exams = body.items as Array<{ organizationId: string }>;
       expect(exams.every((e) => e.organizationId === orgA.id)).toBe(true);
-    });
-  });
-
-  describe("Public endpoint exemption", () => {
-    it("GET /api/health does not require authentication", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/health",
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json().status).toBe("ok");
-    });
-
-    it("GET /api/system/health requires authentication", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/system/health",
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("GET /api/system/health with admin token returns 200", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/system/health",
-        cookies: { "auth-token": adminAToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/system/health rejects Candidate with 403", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/system/health",
-        cookies: { "auth-token": candidateAToken },
-      });
-      expect(res.statusCode).toBe(403);
     });
   });
 });

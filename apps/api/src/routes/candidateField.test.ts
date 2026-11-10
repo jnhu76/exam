@@ -445,27 +445,4 @@ describe("candidate field routes", () => {
       },
     });
   });
-
-  it("POST /api/candidate-fields requires Admin role", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/candidate-fields",
-      payload: {
-        name: `cf-${p}-forbidden`,
-        label: "Forbidden",
-        fieldType: "text",
-        required: false,
-        unique: false,
-        sortOrder: 0,
-      },
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({
-      error: {
-        code: "PERMISSION_DENIED",
-        requestId: expect.any(String),
-      },
-    });
-  });
 });

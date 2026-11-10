@@ -474,16 +474,8 @@ describe("heartbeat wire-failure classification (#800 PR-B A2-F7)", () => {
     expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
   });
 
-  it("a transport-class heartbeat (ApiError status 0) renders the connectivity banner", async () => {
-    installTakeRoute();
-    // The api client wraps fetch-level failures as ApiError status 0; the
-    // heartbeat path must treat that as transport, exactly like the save
-    // path — not clear the connection banner and not claim a server fault.
-    heartbeatFailsWith(0, undefined);
-
-    await renderAndFireHeartbeat();
-
-    expect(screen.getByText("连接异常")).toBeInTheDocument();
-    expect(screen.queryByText("服务器错误")).not.toBeInTheDocument();
-  });
+  // The transport leg (ApiError status 0 → connectivity banner) is asserted
+  // in TakeExamPage.reconcile.test.tsx ("heartbeat network failure → generic
+  // disconnect, no authoritative re-read") with a strict superset of these
+  // assertions, so the three-way heartbeat partition stays complete.
 });
