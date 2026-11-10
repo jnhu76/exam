@@ -4,21 +4,40 @@ dist
 .turbo
 *.tsbuildinfo
 .env
-.env.local
-.env.*.local
-.env.production
+.env.*
+# Version-controlled examples are public documentation, not live credentials.
+!.env.example
+!.env.*.example
 # Local deployment credentials — never commit.
 /.env.deploy
 *.db
 *.db-shm
 *.db-wal
 coverage/
-.opencode/skills/
-.claude/skills/
-apps/api/public/
+# AI agent state/config may include local authorization rules, session logs,
+# shell commands, tokens or private workspace paths. Never commit it.
 .claude/
+.opencode/
+.codex/
+.mimosa/
+.gemini/
+.cursor/
+.continue/
+.aider*
+.agents/
+apps/api/public/
 .zcode/
 .mimocode/
+
+# Local authentication material (add sanitized examples separately).
+.npmrc
+.pypirc
+.netrc
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
 
 # Throwaway mutation-testing artifacts (mutant logs, source snapshots).
 # Findings belong in docs/dev/test-flakes.md or the relevant phase report,
