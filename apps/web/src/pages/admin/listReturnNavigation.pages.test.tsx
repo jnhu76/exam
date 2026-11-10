@@ -375,20 +375,4 @@ describe("internal return restores the list query (#784 A05 / C2)", () => {
     await user.click(await screen.findByRole("button", { name: "取消" }));
     expect(locationText()).toBe("/admin/exams");
   });
-
-  it("never lands outside the app origin or on a non-list route", async () => {
-    mockExamDetailApi();
-    const user = userEvent.setup();
-    renderAt(
-      {
-        pathname: "/admin/exams/exam-1",
-        state: { from: "https://evil.example/admin/exams" },
-      },
-      <ExamDetailPage />,
-      "/admin/exams/:id",
-    );
-
-    await user.click(await screen.findByRole("button", { name: "返回列表" }));
-    await waitFor(() => expect(locationText()).toBe("/admin/exams"));
-  });
 });

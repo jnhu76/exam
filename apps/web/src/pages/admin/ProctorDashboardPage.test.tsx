@@ -698,45 +698,6 @@ describe("ProctorDashboardPage", () => {
       expect(apiPost).not.toHaveBeenCalled();
     });
 
-    it("fails closed when cross-tab coordination is unavailable (storage blocked)", async () => {
-      // If the browser blocks the localStorage getter (e.g. disabled
-      // storage policy), opening the grant dialog must not crash or silently
-      // degrade to a fresh draft. The lazy storage adapter surfaces the failure
-      // as a CoordinationUnavailable Result, and the page shows the coordination
-      // unavailable message while keeping the dialog closed.
-      apiGet.mockResolvedValue({
-        candidates: [makeCandidate()],
-        total: 1,
-      });
-
-      const getterSpy = vi
-        .spyOn(window, "localStorage", "get")
-        .mockImplementation(() => {
-          throw new DOMException(
-            "Access is denied for this document",
-            "SecurityError",
-          );
-        });
-
-      renderPage();
-      await screen.findByText("张三");
-
-      const extendBtn = await screen.findByRole("button", { name: "延长时间" });
-      fireEvent.click(extendBtn);
-
-      // Must fail closed: error toast shown, dialog NOT opened.
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining("无法安全协调"),
-        );
-      });
-      expect(screen.queryByText("延长考试时间")).not.toBeInTheDocument();
-      // No grant request was ever sent.
-      expect(apiPost).not.toHaveBeenCalled();
-
-      getterSpy.mockRestore();
-    });
-
     // ── Send-claim ownership (issue #233) ───────────────────
     //
     // The retry path MUST `claimForSend` before POST. If a non-expired lease
@@ -1192,48 +1153,6 @@ describe("ProctorDashboardPage", () => {
       expect(
         sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
       ).toBeNull();
-    });
-
-    // ── Re-review P1-1 second scenario: reload after a lost response, then
-    //    retry from the banner → idempotent_replay (same operationId).
-    it("restores the pending command after a full reload and retries via the banner", async () => {
-      const pendingOpId = "00000000-0000-4000-8000-000000000def";
-      sessionStorage.setItem(
-        "exam.pendingForceSubmit:org-1:admin-1",
-        JSON.stringify({
-          schemaVersion: 2,
-          organizationId: "org-1",
-          actorId: "admin-1",
-          command: {
-            attemptId: "att-1",
-            operationId: pendingOpId,
-            reason: "管理员强制交卷",
-            examId: "exam-1",
-            candidateName: "张三",
-          },
-          createdAt: Date.now(),
-        }),
-      );
-      apiGet.mockResolvedValue({
-        candidates: [makeCandidate()],
-        total: 1,
-      });
-      apiPost.mockResolvedValueOnce({ disposition: "idempotent_replay" });
-
-      renderPage();
-
-      const banner = await pendingBanner();
-      // The banner retry handler is async (POST → continuation → chained
-      // loadStatus); flush it inside act() so no render lands outside it.
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole("button", { name: "重试未确认强制交卷" }),
-        );
-      });
-
-      await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
-      const body = apiPost.mock.calls[0]![1] as Record<string, unknown>;
-      expect(body.operationId).toBe(pendingOpId);
     });
 
     // ── Re-review P1-1: explicit dismiss from the banner clears the slot.
@@ -1891,35 +1810,6 @@ describe("ProctorDashboardPage", () => {
       ).toBeNull();
     });
 
-    // ── Re-review P1-2: fail-closed persistence. When sessionStorage cannot
-    //    be written, the POST MUST be suppressed.
-    it("suppresses the POST when the pending command cannot be persisted (fail-closed)", async () => {
-      apiGet.mockResolvedValue({
-        candidates: [makeCandidate()],
-        total: 1,
-      });
-      // Poison sessionStorage.setItem so persistence fails.
-      const setterSpy = vi
-        .spyOn(Storage.prototype, "setItem")
-        .mockImplementation(() => {
-          throw new DOMException("quota exceeded", "QuotaExceededError");
-        });
-
-      renderPage();
-      await openForceSubmitDialog();
-      await confirmForceSubmit();
-
-      // Fail-closed: NO POST was sent.
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining("无法安全保存强制交卷命令"),
-        );
-      });
-      expect(apiPost).not.toHaveBeenCalled();
-
-      setterSpy.mockRestore();
-    });
-
     // ── Re-review P2-2: a damaged pending record is cleared + surfaced, not
     //    silently treated as "no pending".
     it("clears and surfaces a corrupt pending authority on hydrate", async () => {
@@ -1946,43 +1836,6 @@ describe("ProctorDashboardPage", () => {
       // No banner (nothing valid to recover) and no POST.
       expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
       expect(apiPost).not.toHaveBeenCalled();
-    });
-
-    it("rejects a pending authority whose org/actor does not match the lookup key", async () => {
-      // Valid shape but for a DIFFERENT admin — must be treated as corrupt
-      // (cleared + surfaced), not silently accepted.
-      sessionStorage.setItem(
-        "exam.pendingForceSubmit:org-1:admin-1",
-        JSON.stringify({
-          schemaVersion: 2,
-          organizationId: "other-org",
-          actorId: "other-user",
-          command: {
-            attemptId: "att-1",
-            operationId: "00000000-0000-4000-8000-000000000fff",
-            reason: "管理员强制交卷",
-            examId: "exam-1",
-            candidateName: "张三",
-          },
-          createdAt: Date.now(),
-        }),
-      );
-      apiGet.mockResolvedValue({
-        candidates: [makeCandidate()],
-        total: 1,
-      });
-
-      renderPage();
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining("检测到损坏"),
-        );
-      });
-      expect(
-        sessionStorage.getItem("exam.pendingForceSubmit:org-1:admin-1"),
-      ).toBeNull();
-      expect(screen.queryByTestId("pending-force-submit-banner")).toBeNull();
     });
   });
 

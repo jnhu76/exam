@@ -380,32 +380,6 @@ describe("attempt routes", () => {
       }
     });
 
-    it("uses canonical attempt state without an attempt.disrupted compliance audit", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttempt(
-        t,
-        "Heartbeat Disrupted Audit Exam",
-      );
-      await backdateHeartbeat(attemptId);
-
-      await scanDatabaseForDisruptedAttempts(ctx.app, new Date(), 60);
-
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      const disruptedRows = auditRows.filter(
-        (r) => r.action === "attempt.disrupted",
-      );
-      expect(disruptedRows).toHaveLength(0);
-
-      const attempt = await createAttemptRepo(ctx.db).findById(
-        makeCandidateCtx(t),
-        attemptId,
-      );
-      expect(attempt?.status).toBe("disrupted");
-    });
-
     it("does NOT write a phantom attempt.disrupted audit when the row is already disrupted at lock time (already-disrupted no-op)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(

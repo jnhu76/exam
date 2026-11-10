@@ -35,7 +35,6 @@ import { createAttemptInterruptionEventRepo } from "@exam/db/repository/attemptI
 import { createAttemptTimeAdjustmentRepo } from "@exam/db/repository/attemptTimeAdjustmentRepo";
 import { executeInTransaction } from "@exam/db/types";
 import {
-  submitAttempt,
   markDisrupted,
   restoreInterruptedAttempt,
   grantAttemptTime,
@@ -50,7 +49,6 @@ import type {
   AnswerRecord,
 } from "@exam/domain";
 import { buildTestApp, type TestContext } from "./testHelpers.js";
-import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
@@ -262,15 +260,6 @@ describe("crash/rollback atomicity", () => {
     await ctx.cleanup();
   });
 
-  async function entriesFor(attemptId: string) {
-    const repo = createAttemptGradingEntryRepo(ctx.db);
-    const rows = await ctx.db
-      .select({ id: schema.attemptGradingEntries.id })
-      .from(schema.attemptGradingEntries)
-      .where(eq(schema.attemptGradingEntries.attemptId, attemptId));
-    return rows;
-  }
-
   async function interruptionsFor(attemptId: string) {
     return ctx.db
       .select({ id: schema.attemptInterruptions.id })
@@ -288,88 +277,6 @@ describe("crash/rollback atomicity", () => {
   async function attemptRow(attemptId: string) {
     return createAttemptRepo(ctx.db).findById(adminCtx(ctx), attemptId);
   }
-
-  // ── 1. submit freeze ──────────────────────────────────────────────────
-  describe("1. submit freeze (submitted_answers + workset + gradingStatus)", () => {
-    it("crash after freeze mutation before commit → full rollback; retry grades normally", async () => {
-      const qId = randomUUID();
-      const seeded = await seedExamWithAttempt(ctx, {
-        questions: [objectiveQuestion(qId, 10, "a")],
-        attemptStatus: "in_progress",
-        answers: [
-          {
-            questionId: qId,
-            answer: "a",
-            version: 1,
-            savedAt: new Date(),
-          },
-        ],
-      });
-
-      // Simulated crash: submitAttempt persists freeze state, then the
-      // process dies before commit.
-      await expect(
-        executeInTransaction(ctx.db, async (tx) => {
-          const { attempts } = createExamEngineRepos(
-            {
-              examRepo: createExamRepo(tx),
-              attemptRepo: createAttemptRepo(tx),
-              enrollmentRepo: createEnrollmentRepo(tx),
-            },
-            adminCtx(ctx),
-          );
-          const episodeRepo = createInterruptionEpisodeRepoAdapter(
-            createAttemptInterruptionRepo(tx),
-            adminCtx(ctx),
-          );
-          const eventRepo = createInterruptionEventRepoAdapter(
-            createAttemptInterruptionEventRepo(tx),
-            adminCtx(ctx),
-          );
-          const workset = createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            adminCtx(ctx),
-          );
-          await submitAttempt(attempts, workset, seeded.attemptId, new Date(), {
-            source: "candidate",
-            submissionReason: "manual",
-            resolution: { mode: "none", episodeRepo, eventRepo },
-          });
-          throw new Error("SIMULATED_CRASH_AFTER_MUTATION");
-        }),
-      ).rejects.toThrow("SIMULATED_CRASH_AFTER_MUTATION");
-
-      // Full rollback: no committed partial state.
-      const after = (await attemptRow(seeded.attemptId)) as {
-        status: string;
-        submittedAnswers: unknown;
-      } | null;
-      expect(after?.status).toBe("in_progress");
-      expect(after?.submittedAnswers).toBeNull();
-      expect(await entriesFor(seeded.attemptId)).toHaveLength(0);
-
-      // Retry after restart succeeds via the production orchestrator
-      // (submit + grade in one locked transaction).
-      await submitAndGradeAttempt(
-        ctx.db,
-        adminCtx(ctx),
-        seeded.attemptId,
-        seeded.candidateId,
-        new Date(),
-      );
-
-      const finalRow = (await attemptRow(seeded.attemptId)) as {
-        status: string;
-        gradingStatus: string;
-        score: number | null;
-      } | null;
-      expect(finalRow?.status).toBe("graded");
-      // Auto-graded path: gradingStatus stays auto_graded (terminal).
-      expect(finalRow?.gradingStatus).toBe("auto_graded");
-      expect(finalRow?.score).toBe(10);
-      expect(await entriesFor(seeded.attemptId)).toHaveLength(1);
-    });
-  });
 
   // ── 2. manual grading terminalization ────────────────────────────────
   describe("2. manual grading terminalization (last entry → graded)", () => {

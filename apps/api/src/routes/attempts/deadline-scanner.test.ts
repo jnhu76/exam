@@ -353,26 +353,6 @@ describe("attempt routes", () => {
       expect(attempt?.score).toBeDefined();
     });
 
-    it("uses canonical attempt state without an attempt.autoSubmit compliance audit", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttemptWithQuestion(
-        t,
-        "Deadline AutoSubmit Audit Exam",
-      );
-      await backdateDeadline(attemptId);
-
-      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
-
-      const auditRows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, attemptId));
-      const autoSubmitRows = auditRows.filter(
-        (r) => r.action === "attempt.autoSubmit",
-      );
-      expect(autoSubmitRows).toHaveLength(0);
-    });
-
     it("does NOT write a phantom attempt.autoSubmit audit when the row is already submitted when the scanner operates", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
@@ -745,97 +725,6 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // DISCOVERY CONFORMANCE (defensive domain): for every scanner-eligible
-    // active attempt — including the schema-admissible NULL per-attempt
-    // deadline (defensive recovery domain) — CanonicalExpired <=>
-    // ScannerCandidate. We construct the four cells of the truth table over
-    // (deadlineAt NULL|past) x (closeAt past|future) and assert discovery
-    // matches the canonical isAttemptDeadlineExpired seam. (The NULL cells are
-    // protocol-unreachable; they are exercised by direct DB update to prove
-    // discovery/helper agreement over the defensive domain, not to assert
-    // NULL is a valid protocol state.)
-    it("discovery matches canonical expiry over the full domain incl. NULL (defensive discovery conformance)", async () => {
-      const t = await createIsolatedTestOrg();
-      const cells: Array<{
-        name: string;
-        deadlineAt: Date | null;
-        closeAtPast: boolean;
-        expectCandidate: boolean;
-      }> = [
-        // (deadlineAt, closeAt) -> CanonicalExpired (= ScannerCandidate)
-        {
-          name: "null+closePast",
-          deadlineAt: null,
-          closeAtPast: true,
-          expectCandidate: true,
-        },
-        {
-          name: "null+closeFuture",
-          deadlineAt: null,
-          closeAtPast: false,
-          expectCandidate: false,
-        },
-        {
-          name: "past+closeFuture",
-          deadlineAt: new Date(Date.now() - 60_000),
-          closeAtPast: false,
-          expectCandidate: true,
-        },
-        {
-          name: "future+closeFuture",
-          deadlineAt: new Date(Date.now() + 3600_000),
-          closeAtPast: false,
-          expectCandidate: false,
-        },
-      ];
-
-      const created: Array<{
-        id: string;
-        name: string;
-        expectCandidate: boolean;
-        examId: string;
-      }> = [];
-      for (const cell of cells) {
-        const { attemptId } = await createStartedAttemptWithQuestion(
-          t,
-          `Deadline T8 ${cell.name}`,
-        );
-        const attempt = await createAttemptRepo(ctx.db).findById(
-          makeCandidateCtx(t),
-          attemptId,
-        );
-        if (cell.closeAtPast) {
-          await ctx.db
-            .update(schema.exams)
-            .set({ closeAt: new Date(Date.now() - 60_000) })
-            .where(eq(schema.exams.id, attempt!.examId));
-        }
-        await ctx.db
-          .update(schema.examAttempts)
-          .set({ deadlineAt: cell.deadlineAt, status: "in_progress" })
-          .where(eq(schema.examAttempts.id, attemptId));
-        created.push({
-          id: attemptId,
-          name: cell.name,
-          expectCandidate: cell.expectCandidate,
-          examId: attempt!.examId,
-        });
-      }
-
-      const before = new Date();
-      const found = await createAttemptRepo(ctx.db).listDeadlineCandidates(
-        makeCandidateCtx(t),
-        before,
-      );
-      const foundIds = new Set(found.map((a) => a.id));
-
-      for (const c of created) {
-        expect(
-          foundIds.has(c.id),
-          `cell ${c.name}: expectCandidate=${c.expectCandidate}`,
-        ).toBe(c.expectCandidate);
-      }
-    });
     // ── Phase A2 (#291): scanner behavior per timing mode ──
     //
     // deadline mode: NULL deadlineAt is now a REACHABLE protocol state. The

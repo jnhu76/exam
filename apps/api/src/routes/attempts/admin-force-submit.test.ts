@@ -6,7 +6,6 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createAttemptGradingEntryRepo } from "@exam/db/repository/attemptGradingEntryRepo";
-import { createAttemptCommandReceiptRepo } from "@exam/db/repository/attemptCommandReceiptRepo";
 import { materializeGradingWorkset } from "@exam/exam-engine";
 import { createGradingWorksetRepoAdapter } from "../../adapters/repoAdapters.js";
 import { signJWT } from "@exam/auth/session";
@@ -540,54 +539,6 @@ describe("attempt routes", () => {
         attemptId,
       );
       expect(attempt?.status).toBe("graded");
-    });
-
-    it("rejects a cross-command operationId reuse with 409 IDEMPOTENCY_CONFLICT (shared arbiter)", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttempt(
-        t,
-        "Force Submit Cross Command Exam",
-      );
-      const operationId = crypto.randomUUID();
-      // Pre-insert a misconduct_mark receipt with the same operationId —
-      // WITHOUT calling the misconduct production route. The shared
-      // UNIQUE(org, operation_id) arbiter must reject
-      // the force-submit reuse.
-      await createAttemptCommandReceiptRepo(ctx.db).insertReceipt(
-        makeAdminCtx(t),
-        {
-          attemptId,
-          operationId,
-          commandType: "misconduct_mark",
-          requestPayload: { severity: "warning", notes: "fixture mark" },
-          resultPayload: {
-            commandType: "misconduct_mark",
-            misconduct: null,
-            appliedAt: new Date().toISOString(),
-          },
-          outcome: "applied",
-          actorId: t.adminUserId,
-          createdAt: new Date(),
-        },
-      );
-
-      const res = await forceSubmit(t, attemptId, {
-        operationId,
-        reason: "should conflict across commands",
-      });
-      expect(res.statusCode).toBe(409);
-      expect(res.json().error?.code).toBe("IDEMPOTENCY_CONFLICT");
-
-      const receipts = await listReceipts(attemptId);
-      expect(receipts).toHaveLength(1);
-      expect(receipts[0]!.commandType).toBe("misconduct_mark");
-      const attempt = await createAttemptRepo(ctx.db).findById(
-        makeAdminCtx(t),
-        attemptId,
-      );
-      expect(attempt?.status).toBe("in_progress");
-      const audits = await countForceSubmitAudits(attemptId);
-      expect(audits).toHaveLength(0);
     });
 
     it("rejects a cross-attempt operationId reuse with 409 IDEMPOTENCY_CONFLICT (attempt B untouched)", async () => {

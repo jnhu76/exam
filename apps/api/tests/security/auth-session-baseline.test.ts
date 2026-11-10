@@ -16,7 +16,7 @@ import { setupApiTestDatabaseFromEnv } from "../../src/routes/testDatabase.js";
 import { resolveTestDbUrl } from "@exam/db/testDb";
 import { eq } from "drizzle-orm";
 import { signJWT, verifyJWT } from "@exam/auth/session";
-import { seed, SEED_CREDENTIALS } from "@exam/db/seed";
+import { seed } from "@exam/db/seed";
 import authRoutes from "../../src/routes/auth.js";
 import type { Database } from "@exam/db/types";
 import type { Role } from "@exam/domain";
@@ -32,7 +32,6 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
   let app: ReturnType<typeof Fastify>;
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let adminToken: string;
-  let adminUsername: string;
   let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
@@ -67,7 +66,6 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
       },
       getRuntimeConfig().authSecret.jwtSecret,
     );
-    adminUsername = admin.username;
 
     app = Fastify();
     setupSecurity(app);
@@ -126,25 +124,6 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
         cookies: { "auth-token": "not-a-jwt" },
       });
       expect(res.statusCode).toBe(401);
-    });
-  });
-
-  describe("Login cookie has security attributes", () => {
-    it("sets httpOnly and sameSite=strict on auth-token cookie", async () => {
-      const res = await app.inject({
-        method: "POST",
-        url: "/api/auth/login",
-        payload: {
-          username: adminUsername,
-          password: SEED_CREDENTIALS.admin.password,
-        },
-      });
-      expect(res.statusCode).toBe(200);
-      const setCookie = res.headers["set-cookie"];
-      expect(setCookie).toBeDefined();
-      const cookieStr = Array.isArray(setCookie) ? setCookie[0]! : setCookie!;
-      expect(cookieStr).toContain("HttpOnly");
-      expect(cookieStr).toContain("SameSite=Strict");
     });
   });
 

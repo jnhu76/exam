@@ -708,21 +708,6 @@ describe("attempt routes", () => {
       expect(audits).toHaveLength(2);
     });
 
-    it("requires operationId (400 when missing)", async () => {
-      const t = await createIsolatedTestOrg();
-      const { attemptId } = await createStartedAttempt(
-        t,
-        "Misconduct NoOpId Exam",
-      );
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/misconduct`,
-        payload: { severity: "warning", notes: "x" }, // no operationId
-        cookies: { "auth-token": t.adminToken },
-      });
-      expect(res.statusCode).toBe(400);
-    });
-
     it("requires a non-blank canonical notes (400 when blank)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(

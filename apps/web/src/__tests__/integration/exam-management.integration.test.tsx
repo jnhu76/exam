@@ -8,8 +8,9 @@ import { ExamPage } from "@/pages/admin/ExamPage";
 import { permissionsForRole } from "@exam/authz";
 
 // ExamPage list rendering and action affordances are owned by
-// ExamPage.test.tsx (role-scoped table assertions). This file keeps only the
-// async request states of the page: empty, loading, and error.
+// ExamPage.test.tsx (role-scoped table assertions); first-load failure
+// presentation is owned by ExamPage.queryState.test.tsx (A16). This file
+// keeps only the async request states of the page: empty and loading.
 const server = setupServer(
   http.get("http://localhost:5173/api/auth/me", async () => {
     return HttpResponse.json({
@@ -127,25 +128,5 @@ describe("考试管理请求状态", () => {
       expect(screen.getAllByText("示例考试").length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.queryByText(/加载中/)).not.toBeInTheDocument();
-  });
-
-  it("应该显示错误状态当请求失败时", async () => {
-    server.use(
-      http.get("http://localhost:5173/api/exams", () => {
-        return HttpResponse.json(
-          { error: "Internal server error" },
-          { status: 500 },
-        );
-      }),
-    );
-
-    renderExamPage();
-
-    await waitFor(
-      () => {
-        expect(screen.getByText(/加载考试列表失败/)).toBeInTheDocument();
-      },
-      { timeout: 3000 },
-    );
   });
 });

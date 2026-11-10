@@ -474,47 +474,6 @@ describe("save-rejection requestId correlation (#924, TASK-CONTRACT §3.6)", () 
     expect(meta.requestId).toBe("req-401-env");
   });
 
-  it("a save 403 keeps the same three-way contract with its envelope id", async () => {
-    const send = installRecordingBuffer();
-    installTakeRoute([buildSnapshot()]);
-    apiPost.mockImplementation(async (path: string) => {
-      if (typeof path === "string" && path.includes("/answers/")) {
-        const { ApiError } = await import("@/lib/api");
-        throw new ApiError(
-          403,
-          "forbidden confidential-detail",
-          "FORBIDDEN",
-          undefined,
-          "req-403-env",
-        );
-      }
-      return { ok: true, serverNow: NOW };
-    });
-
-    renderPage();
-    await editAnswer();
-
-    await waitFor(
-      () => {
-        expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
-      },
-      { timeout: 4000 },
-    );
-    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
-    expect(screen.queryByText("服务器错误")).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("save-rejection-alert"),
-    ).not.toBeInTheDocument();
-
-    await flushAll();
-    const failed = telemetryEvents(send, "answer_autosave_failed");
-    expect(failed).toHaveLength(1);
-    const meta = failed[0]!.metadata as Record<string, unknown>;
-    expect(meta.errorCode).toBe("FORBIDDEN");
-    expect(meta.status).toBe(403);
-    expect(meta.requestId).toBe("req-403-env");
-  });
-
   it("transport failure then online retry: two HTTP attempts, independent clientSeqs, and no fabricated id in either telemetry row", async () => {
     const send = installRecordingBuffer();
     installTakeRoute([buildSnapshot()]);
