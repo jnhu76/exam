@@ -8,6 +8,8 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-11-11
+
 ### Added
 
 - Server-owned `x-request-id` response header on every Fastify-managed
@@ -28,6 +30,12 @@ for repository releases from `v0.0.1` onward.
   helpers must be registered in turbo `globalDependencies`, and unsupported
   Dockerfile `RUN` forms fail closed as named violations instead of being
   silently skipped (#938, PR #939).
+- Additive machine error code `UNRESOLVED_ATTEMPTS_EXIST` on the results
+  access path, alongside the shared `resolveAdminResultsAccess` verdict
+  (#927, PR #929).
+- Minute-precision `formatDateTimeMinute` in the product date/time
+  authority — seconds dropped, not rounded; second precision remains the
+  default for ordering-documenting surfaces (#932, PR #943).
 
 ### Changed
 
@@ -55,9 +63,28 @@ for repository releases from `v0.0.1` onward.
   a silent partial release. Contract, failure semantics and execution
   evidence are recorded in ADR-027 (ACCEPTED, with errata E1–E3) (#938,
   PR #940).
+- Admin dashboard order is todo → 资产概览 KPI → 近期考试 with quick actions
+  in the page header; section order pinned by document-position tests
+  (#932, PR #945).
+- Candidate exam list: visible page h1 我的考试, historical-best badge whose
+  trophy renders only at `bestScore >= passingScore` (server-projected,
+  below-passing demotes to secondary), mobile-only badge wrap keeping titles
+  full-width at 320px, minute-precision exam windows, and an empty state
+  naming cause and next step; server projections untouched (#932,
+  PRs #943/#944).
+- CI runs the API/Web PR checks in plain test mode (`web-tests`/`api-tests`
+  instead of coverage lanes); redundant test suites pruned via a
+  detection-owner audit (PR #931).
 
 ### Fixed
 
+- The #927 implicit state-machine audit's five state-authority findings:
+  exam-list scores affordance shares the canonical results-access verdict
+  with the scores API and CSV export; deadline auto-submit is one
+  attempt-scoped episode that stale outcomes cannot misuse; disrupt/restore
+  use a canonical transition table; force-submit parity pinned
+  biconditionally; repository update inputs narrowed with a guarded PATCH
+  cast (PR #929).
 - `rich-content-overflow` E2E geometry flake under 2-shard CI load (#878):
   root cause causally proven (Chromium's internal key-scroll animation can
   commit its first frame 59ms–1078ms after the press under contention, and
@@ -73,6 +100,34 @@ for repository releases from `v0.0.1` onward.
   build-side face of the stale-dist mixed-runtime class reported in #920
   (that issue's HTTP 500 causality remains under its own RESEARCH_FIRST
   gate) (#938, PR #941).
+
+### Security
+
+- Raw client URLs no longer reach disk in pino request lines, authz/error
+  log sites or the nginx access log (#925, PR #926).
+- Local agent state/config directories and common credential file patterns
+  are ignored by Git (PR #936).
+
+### Deployment / operations
+
+- No database migration; no environment-variable or Compose topology
+  change. The nginx privacy access-log format and the `/healthz` loopback
+  healthcheck are baked into the published `exam-web` image; log consumers
+  should expect route templates or `(unrouted)` in pino request lines and
+  the new access-log format carrying `x-request-id` (PR #926).
+
+### Internal / infrastructure
+
+- ADR-027 (build-first development execution) accepted with errata E1–E3
+  (PR #940); E2E runner build closure guarded in `lint:arch` by call-order
+  proof and `@exam/db#build` narrowed to its product dependency edge
+  (#947, PRs #950/#951); script surface converged to single semantic
+  entries for E2E, integration and lint (#948, PR #949).
+- Test-evidence consolidation: Recovery detail collapsed to the
+  error/loading two-way split (#933), TakeExamPage test harness
+  consolidated (#934), recovery i18n vocabulary and error-key catalog
+  resolution pinned (#935), obsolete phase/milestone labels removed from
+  test titles (#917).
 
 ## [0.0.12] - 2026-11-07
 
@@ -885,7 +940,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.12...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.13...HEAD
+[0.0.13]: https://github.com/jnhu76/exam/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/jnhu76/exam/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/jnhu76/exam/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/jnhu76/exam/compare/v0.0.9...v0.0.10
