@@ -127,10 +127,13 @@ process starts, so a dev server can never silently consume missing or stale
 Turbo restarts the managed `dev` tasks. The restart of each task is
 independent: there is a transient window in which the API and the Web app
 run different generations. There is no atomic cross-process generation
-switch — a failed build emits no new artifacts of that run, previous
-artifacts remain on disk, and processes keep executing the old version
-until a successful rebuild restarts them. A failed build is never a
-successful release.
+switch and no cross-package atomic publication promise. A failed build
+emits no new artifacts of that run (the failing package's `dist` is cleaned
+before its rebuild, while non-failing upstream packages keep theirs), the
+failure surfaces loudly in the watch output, and the managed `dev` tasks
+stop: the stack stays down until the failing source is fixed and a rebuild
+succeeds, after which the tasks restart and serve the new version. A failed
+build is never a successful release.
 
 **One-shot entry.** `pnpm dev:once` (`turbo dev`) starts the dev servers
 once after building the dependency closure. It does not enable Turbo's
