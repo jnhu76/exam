@@ -479,6 +479,18 @@ async function listPackageDirs() {
 // counterfactual harness can inject a repo root by running from a
 // disposable worktree. Any unreadable input is a violation, never a
 // vacuous pass — the closure must stay checkable (fail closed).
+//
+// Dependency-model scope (declared narrowing, #939 turbo 2.9.16 probe
+// 2026-11-11): the build edges below are the declared product
+// `dependencies` only (#824 D2). Turbo's `^build` also schedules workspace
+// devDependency edges (probed via `turbo build --dry-run=json`: b#build
+// depends on a#build with `a` declared solely in devDependencies), so
+// turbo's task graph is a deliberate superset of the Dockerfile model —
+// the image builds product artifacts that never consume a test-scope
+// dependency. The Dockerfile order rule is scoped to the product graph,
+// not to turbo's task graph; the scratch probe and pinning tests are
+// recorded in config/build-graph-policy.mjs and
+// apps/web/src/buildGraphGuard.test.ts.
 
 async function readRepoTextOrNull(path, rule) {
   try {

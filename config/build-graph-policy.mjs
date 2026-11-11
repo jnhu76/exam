@@ -23,6 +23,23 @@
 //               (single filter, `build` as the final token; heredoc,
 //                multi-line, chained, recursive/glob-filtered and
 //                non-pnpm build commands are unsupported forms)
+//
+//   Fail-closed heuristic for unrecognized RUN forms (#939): this guard
+//   does NOT parse shell or Dockerfile exec-form semantics. Any RUN line
+//   outside the grammar whose text still carries a workspace-build signal
+//   — a workspace package-manager/monorepo runner token (pnpm, npm, yarn,
+//   pnpmx, npx, bun, turbo, nx, lerna) AND a standalone `build` task token,
+//   scanned after stripping only the wrapper punctuation (quotes, brackets,
+//   commas) that a `sh -c "…"` wrapper or JSON exec form hides behind — is
+//   rejected as BUILD_GRAPH_DOCKER_UNSUPPORTED: an unsupported RUN form
+//   may execute a workspace build, so the closure cannot be verified.
+//   Declared coverage boundary: RUN lines are classified on their own line
+//   text, so a multi-line continuation or heredoc whose first line shows
+//   no signal is not scanned further; wrapper forms whose runner is not a
+//   workspace runner (make, gradle, cargo, custom scripts) carry no
+//   workspace-build signal and stay outside this heuristic. Extending the
+//   coverage is a deliberate policy change, never a silent widening.
+//
 //   build script: `&&`-chained simple commands; repo-level helpers may
 //               only be invoked as `node ../../scripts/<file> [simple args]`
 //               (variable indirection, pipes, other runners, paths escaping
@@ -44,6 +61,29 @@ const SIMPLE_ARG = /^[A-Za-z0-9@/._,:+=-]+$/;
 // Plain relative path token: no leading "/", no backslash, no expansion.
 // Optional "./" or "../" prefix; further dot segments match the body.
 const REL_PATH_TOKEN = /^(\.\.?\/)?[A-Za-z0-9@._-][A-Za-z0-9@/._-]*$/;
+
+// #939 fail-closed tail for unrecognized RUN forms. Wrapper punctuation
+// (shell quoting, JSON exec-form brackets/commas) hides command text from
+// the raw-text BUILD_TOKEN scan, which made `RUN sh -c "pnpm --filter x
+// build"` and `RUN ["pnpm", "--filter", "x", "build"]` silently pass.
+// Stripping ONLY that punctuation is not shell parsing — it just exposes
+// the tokens the wrapper hides, so the workspace-build signal below can
+// see them. INVARIANT: the signal requires BOTH a workspace runner token
+// and a standalone `build` task token; lines carrying neither (apt-get,
+// chmod, corepack, `npm config set`, …) stay non-build lines. Declared
+// boundary (see module header): no multi-line signal chasing, and runners
+// outside the workspace set (make, gradle, cargo, …) carry no signal.
+const RUN_WRAPPER_PUNCTUATION = /["'`[\],]/g;
+const WORKSPACE_RUNNER_SIGNAL =
+  /(?:^|\s)(?:pnpm|npm|yarn|pnpx|npx|bun|turbo|nx|lerna)\b/;
+const BUILD_TASK_SIGNAL = /(?:^|\s)build(?:\s|$)/;
+
+function carriesWorkspaceBuildSignal(runContent) {
+  const unquoted = runContent.replace(RUN_WRAPPER_PUNCTUATION, " ");
+  return (
+    WORKSPACE_RUNNER_SIGNAL.test(unquoted) && BUILD_TASK_SIGNAL.test(unquoted)
+  );
+}
 
 /**
  * Read the `packages:` entries from pnpm-workspace.yaml. Only the repo's
@@ -102,6 +142,17 @@ export function expandWorkspaceGlobs(globs) {
  * member names — derived from the manifests, never hardcoded (#824 D2:
  * `dependencies` is the product graph; devDependencies are test scope).
  *
+ * Dependency-edge scope vs turbo (#939, turbo 2.9.16 probe 2026-11-11):
+ * turbo's `^build` schedules workspace devDependency edges too — in a
+ * scratch pnpm workspace with `build: { dependsOn: ["^build"] }`,
+ * `turbo build --dry-run=json` reports b#build.dependencies =
+ * ["a#build"] when b declares a solely in devDependencies. Turbo's task
+ * graph is therefore a superset of this model, and the narrowing here is
+ * deliberate: the Docker builder sequence builds product artifacts, which
+ * consume declared `dependencies` only, so the closure and order rules
+ * must not invent the turbo devDependency edge. Pinning tests live in
+ * apps/web/src/buildGraphGuard.test.ts (devDependency-only edge cases).
+ *
  * `members` is [{ dir, manifest }]; manifests must already carry a string
  * `name` (the checker fails closed on unnamed members before this call).
  */
@@ -133,9 +184,15 @@ export function deriveBuildablePackages(members) {
  * grammar — the caller turns those into violations, fail closed.
  *
  * Non-build RUN lines (apt-get, chmod, deploy, install) are ignored: they
- * carry no build-graph claim. The scan covers the whole file, not only the
- * builder stage — any stage that starts building workspace code belongs to
- * the same artifact-chain claim.
+ * carry no build-graph claim. Lines whose build signal is hidden behind
+ * wrapper punctuation (shell quoting, JSON exec form) are NOT ignored —
+ * the #939 fail-closed tail strips only the wrapper punctuation and
+ * rejects any unrecognized form that still signals a workspace build, so
+ * an unverifiable spelling can never pass the closure silently.
+ *
+ * The scan covers the whole file, not only the builder stage — any stage
+ * that starts building workspace code belongs to the same artifact-chain
+ * claim.
  */
 export function parseDockerfileBuilds(dockerfileText) {
   const builds = [];
@@ -173,6 +230,15 @@ export function parseDockerfileBuilds(dockerfileText) {
       if (BUILD_TOKEN.test(content)) {
         reject(
           `non-pnpm build runner "${tokens[0]}" is not a supported Dockerfile form — builds must be explicit pnpm --filter invocations`,
+        );
+      } else if (carriesWorkspaceBuildSignal(content)) {
+        // Fail-closed tail (#939): the build token is hidden behind wrapper
+        // punctuation, so the raw-text scan above cannot see it. Rejecting
+        // here is the only safe direction — an unrecognized RUN form that
+        // carries workspace-build signals may execute a workspace build the
+        // closure cannot account for.
+        reject(
+          `unrecognized RUN form may execute a workspace build ("${content.trim()}") — the guard does not parse shell or exec-form semantics, so this spelling cannot be verified against the Docker closure; spell builds as "RUN pnpm [flags] --filter <exact-name> build"`,
         );
       }
       return;
