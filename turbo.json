@@ -96,6 +96,10 @@
     "@exam/web#coverage": {
       "dependsOn": ["^build", "@exam/api#coverage"]
     },
+    "@exam/db#build": {
+      "dependsOn": ["@exam/domain#build"],
+      "outputs": ["dist/**"]
+    },
     "smoke": {
       "cache": false,
       "passThroughEnv": [

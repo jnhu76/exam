@@ -779,6 +779,250 @@ describe("E2E runner build precondition (#947)", () => {
   });
 });
 
+/**
+ * #947 — `@exam/db#build` dependsOn override pinning. turbo's `^build`
+ * schedules workspace devDependency edges too (#939 probe), so db#build was
+ * serial-gated on @exam/auth#build and @exam/source-fixture#build — both
+ * test-scope (db devDependencies), neither imported by the db build-scope
+ * compile set. The override in turbo.json narrows db#build dependsOn to the
+ * declared product dependency (@exam/domain#build), which is sound ONLY
+ * while that holds. This test scans the REAL tsconfig.build.json compile
+ * set (not a filename guess) and fails both drift directions:
+ *
+ *   - the build scope imports an @exam/* package outside db's declared
+ *     product dependencies → the override would let the build consume
+ *     stale (or absent) dist — extend the override deliberately;
+ *   - db declares a workspace product dependency the override does not
+ *     list → the narrowed dependsOn no longer covers the product graph.
+ *
+ * Exclusion patterns are translated from the repo's real tsconfig.build.json
+ * forms; an unrecognized pattern is a loud failure, never a silently
+ * narrowed scan.
+ */
+describe("#947 db build-scope dependency pinning", () => {
+  function isExcludedBuildPattern(pattern: string): boolean {
+    return (
+      pattern === "dist" ||
+      pattern === "src/**/__tests__/**" ||
+      /^src\/\*\*\/\*\.(?:test|spec|testHelpers)\.ts$/.test(pattern)
+    );
+  }
+
+  // The tsconfig compile set, not a filename guess: every TypeScript source
+  // under src/ that survives the build exclude patterns. Test scope is not
+  // part of the build graph (turbo's ^build still schedules db devDependency
+  // edges for tests, which is why the narrowed override must NOT cover
+  // test-only imports).
+  function isBuildScopeSource(relPath: string): boolean {
+    if (relPath.split("/").includes("__tests__")) return false;
+    return (
+      /\.(?:ts|tsx|mts|cts)$/.test(relPath) &&
+      !/\.(?:test|spec|testHelpers)\.ts$/.test(relPath)
+    );
+  }
+
+  // package.json declares package NAMES, never subpaths. A specifier is an
+  // edge on its first two segments (`@scope/name`); the remainder is a
+  // package subpath. Normalization never invents a declaration: an
+  // undeclared or nonexistent package still fails the productDeps check.
+  function workspacePackageName(specifier: string): string {
+    const [scope, name] = specifier.split("/");
+    return scope !== undefined && name !== undefined
+      ? `${scope}/${name}`
+      : specifier;
+  }
+
+  // Import forms that can create a workspace dependency edge: static
+  // import/export-from, side-effect import, require/require.resolve, and
+  // dynamic import with a static (including template literal) specifier.
+  // `import type` is covered by the `from` branch. This is deliberately a
+  // small regex guard, not a TypeScript AST: the build scope is a closed
+  // file set and unrecognized dynamic forms fail closed below.
+  const WORKSPACE_IMPORT_SPECIFIER =
+    /(?:\bfrom\s+|\brequire(?:\.resolve)?\s*\(\s*|\bimport\s*\(\s*|\bimport\s+)["'`](@exam\/[^"'`]+)["'`]/g;
+
+  // A dynamic import whose argument is not a static string literal cannot
+  // be attributed to a workspace package. Fail closed instead of silently
+  // omitting a possible build dependency.
+  const NON_LITERAL_DYNAMIC_IMPORT = /\bimport\s*\(\s*(?!["'`])[^)]*\)/g;
+
+  function collectWorkspacePackageImports(text: string): string[] {
+    const packages = new Set<string>();
+    for (const match of text.matchAll(WORKSPACE_IMPORT_SPECIFIER)) {
+      const specifier = match[1];
+      if (specifier !== undefined) {
+        packages.add(workspacePackageName(specifier));
+      }
+    }
+    return [...packages];
+  }
+
+  function unresolvedDynamicImports(text: string): string[] {
+    return [...text.matchAll(NON_LITERAL_DYNAMIC_IMPORT)].map(
+      (match) => match[0],
+    );
+  }
+
+  async function realBuildScopeFiles(): Promise<string[]> {
+    const buildConfig = JSON.parse(
+      await readFile(
+        join(REPO_ROOT, "packages/db/tsconfig.build.json"),
+        "utf8",
+      ),
+    ) as { exclude?: string[] };
+    const exclude = buildConfig.exclude ?? [];
+    const unhandled = exclude.filter((p) => !isExcludedBuildPattern(p));
+    expect(unhandled).toEqual([]);
+
+    const files: string[] = [];
+    const dbRoot = join(REPO_ROOT, "packages", "db");
+    async function walk(dir: string): Promise<void> {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const abs = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === "__tests__") continue;
+          await walk(abs);
+          continue;
+        }
+        const rel = abs.slice(dbRoot.length + 1).replace(/[/\\]/g, "/");
+        if (!isBuildScopeSource(rel)) continue;
+        files.push(rel);
+      }
+    }
+    await walk(join(dbRoot, "src"));
+    return files;
+  }
+
+  it("classifies package and subpath specifiers as one dependency edge", () => {
+    const declared = ["@exam/domain"];
+    const undeclaredFor = (text: string) =>
+      collectWorkspacePackageImports(text).filter(
+        (pkg) => !declared.includes(pkg),
+      );
+
+    expect(undeclaredFor('import { x } from "@exam/domain";')).toEqual([]);
+    expect(
+      undeclaredFor('import type { X } from "@exam/domain/subpath";'),
+    ).toEqual([]);
+    expect(
+      undeclaredFor('const x = await import("@exam/domain/subpath");'),
+    ).toEqual([]);
+    expect(
+      undeclaredFor("const x = await import(`@exam/domain/subpath`);"),
+    ).toEqual([]);
+    expect(undeclaredFor('const x = require("@exam/domain/subpath");')).toEqual(
+      [],
+    );
+    expect(
+      undeclaredFor('const x = require.resolve("@exam/domain/subpath");'),
+    ).toEqual([]);
+    // A nonexistent workspace package and a real-but-undeclared workspace
+    // package are both dependency violations; normalization does not erase
+    // the distinction from a declared package.
+    expect(
+      undeclaredFor('import x from "@exam/no-such-workspace-package";'),
+    ).toEqual(["@exam/no-such-workspace-package"]);
+    expect(
+      undeclaredFor('import x from "@exam/no-such-workspace-package/sub";'),
+    ).toEqual(["@exam/no-such-workspace-package"]);
+    expect(undeclaredFor('import x from "@exam/auth";')).toEqual([
+      "@exam/auth",
+    ]);
+    expect(undeclaredFor('import x from "@exam/auth/password";')).toEqual([
+      "@exam/auth",
+    ]);
+  });
+
+  it("excludes test-scope files from the build-scope scan", () => {
+    expect(isBuildScopeSource("src/index.ts")).toBe(true);
+    expect(isBuildScopeSource("src/schema/pg.ts")).toBe(true);
+    expect(isBuildScopeSource("src/component.tsx")).toBe(true);
+    expect(isBuildScopeSource("src/module.mts")).toBe(true);
+    expect(isBuildScopeSource("src/index.test.ts")).toBe(false);
+    expect(isBuildScopeSource("src/index.spec.ts")).toBe(false);
+    expect(isBuildScopeSource("src/testHelpers/repo.testHelpers.ts")).toBe(
+      false,
+    );
+    expect(isBuildScopeSource("src/__tests__/index.ts")).toBe(false);
+  });
+
+  it("fails closed on a dynamic import without a static specifier", () => {
+    const text = "const mod = await import(modulePath);\n";
+    expect(unresolvedDynamicImports(text)).toEqual(["import(modulePath)"]);
+    expect(
+      unresolvedDynamicImports('const mod = await import("@exam/domain");\n'),
+    ).toEqual([]);
+  });
+
+  it("db build-scope @exam/* imports stay within product dependencies and the turbo override", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(REPO_ROOT, "packages/db/package.json"), "utf8"),
+    ) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const productDeps = Object.keys(manifest.dependencies ?? {}).filter((d) =>
+      d.startsWith("@exam/"),
+    );
+    const testScopeDeps = Object.keys(manifest.devDependencies ?? {}).filter(
+      (d) => d.startsWith("@exam/"),
+    );
+    // The override only pays for itself while there ARE test-scope edges to
+    // drop; if that changes, revisit the override deliberately.
+    expect(testScopeDeps).toEqual(["@exam/auth", "@exam/source-fixture"]);
+
+    const turboConfig = JSON.parse(
+      await readFile(join(REPO_ROOT, "turbo.json"), "utf8"),
+    ) as {
+      tasks: Record<string, { dependsOn?: string[]; outputs?: string[] }>;
+    };
+    const override = turboConfig.tasks["@exam/db#build"];
+    if (!override) {
+      throw new Error(
+        "turbo.json: @exam/db#build override missing — restore dependsOn [@exam/domain#build] or re-prove the db build scope",
+      );
+    }
+    const overrideNames = (override.dependsOn ?? []).map((t) =>
+      t.replace(/#build$/, ""),
+    );
+
+    // A `#task` entry REPLACES the shared task config rather than merging
+    // (observed live: without an explicit outputs here, db#build lost
+    // `dist/**` and a cache hit stopped restoring dist). Pin the outputs so
+    // the narrowed dependsOn cannot silently disable dist caching.
+    expect(override.outputs).toEqual(["dist/**"]);
+
+    const consumed = new Set<string>();
+    for (const rel of await realBuildScopeFiles()) {
+      const text = await readFile(join(REPO_ROOT, "packages/db", rel), "utf8");
+      for (const pkg of collectWorkspacePackageImports(text)) {
+        consumed.add(pkg);
+      }
+      const unresolved = unresolvedDynamicImports(text);
+      expect(
+        unresolved,
+        `${rel}: dynamic import(s) ${unresolved.join(
+          ", ",
+        )} have no static specifier — a possible workspace build dependency cannot be attributed; use a static @exam/* specifier or extend the guard deliberately`,
+      ).toEqual([]);
+    }
+
+    const undeclared = [...consumed].filter((p) => !productDeps.includes(p));
+    expect(
+      undeclared,
+      `db build scope consumes ${undeclared.join(", ")} outside declared product dependencies (${productDeps.join(", ")}) — a narrowed @exam/db#build dependsOn would serve stale or missing dist; extend the override deliberately`,
+    ).toEqual([]);
+
+    const uncovered = productDeps.filter((p) => !overrideNames.includes(p));
+    expect(
+      uncovered,
+      `db product dependencies (${uncovered.join(", ")}) are not listed in the turbo.json @exam/db#build dependsOn (${overrideNames.join(", ")}) — the override no longer covers the product graph`,
+    ).toEqual([]);
+
+    expect(consumed.size).toBeGreaterThan(0);
+  }, 30_000);
+});
+
 describe("real repo scans clean through the policy the checker uses", () => {
   async function collectMembers(): Promise<WorkspaceMember[]> {
     const yaml = await readFile(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
