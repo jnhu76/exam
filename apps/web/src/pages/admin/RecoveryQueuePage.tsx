@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router";
+import {
+  UNSAFE_NavigationContext,
+  Link,
+  useLocation,
+  useSearchParams,
+  type Location,
+  type Navigator,
+} from "react-router";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import type { RecoveryQueueItem, RecoveryQueueResponse } from "@exam/contracts";
@@ -146,6 +153,29 @@ export function RecoveryQueuePage() {
   const { t } = useTranslation();
   const { formatTime } = useProductDateTime();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  // The declarative routers put the live history instance in the navigation
+  // context as `navigator`; the published `Navigator` type narrows it to the
+  // mutation surface, but the runtime object is a full history, so widen it
+  // once here to read `location` — the only channel that reflects a committed
+  // navigation synchronously, before React renders it (same contract as the
+  // QuestionPage search commit boundary, #953).
+  const history = useContext(UNSAFE_NavigationContext)
+    .navigator as Navigator & {
+    location: Location;
+  };
+  // The history entry this page last observed or wrote. Every page-side
+  // signal — render props, the refs below — still describes the PREVIOUS
+  // entry between a committed external navigation (Back/Forward, a link) and
+  // the flush of the render/effect chain that would retire a pending draft.
+  // A debounce deadline can expire inside that gap (#953 interleaving), so
+  // the commit boundary in commitFilter must compare against the history
+  // instance itself, keyed on the ENTRY (location.key), never on the params
+  // string. Re-observed synchronously after every page-authored write.
+  const observedEntryKey = useRef<string | null>(null);
+  if (observedEntryKey.current === null) {
+    observedEntryKey.current = history.location.key;
+  }
 
   // The params every consumer reads are the CONFLICT-FREE form: a deep link
   // carrying both `unresolvedOnly=true` and a terminal status is corrected
@@ -245,6 +275,11 @@ export function RecoveryQueuePage() {
   // committed value (back/forward, link share). A draft that has moved ahead
   // of the URL is an in-progress input and wins until its own commit lands —
   // otherwise committing one filter would reset the other's pending draft.
+  // That rule is scoped to the SAME history entry: on a foreign entry (an
+  // external navigation, even one carrying identical params) the URL the
+  // user navigated to wins over every pending draft — the fields must
+  // describe the restored entry, and a draft armed on the departed entry can
+  // never commit anyway (the entry guard in commitFilter).
   const lastCommitted = useRef({
     examId: filters.examId,
     candidateId: filters.candidateId,
@@ -252,17 +287,26 @@ export function RecoveryQueuePage() {
     assignedProctorUserId: filters.assignedProctorUserId,
   });
   useEffect(() => {
-    if (examIdDraft === lastCommitted.current.examId) {
+    if (observedEntryKey.current !== location.key) {
       setExamIdDraft(filters.examId);
-    }
-    if (candidateIdDraft === lastCommitted.current.candidateId) {
       setCandidateIdDraft(filters.candidateId);
-    }
-    if (attemptIdDraft === lastCommitted.current.attemptId) {
       setAttemptIdDraft(filters.attemptId);
-    }
-    if (assignedProctorDraft === lastCommitted.current.assignedProctorUserId) {
       setAssignedProctorDraft(filters.assignedProctorUserId);
+    } else {
+      if (examIdDraft === lastCommitted.current.examId) {
+        setExamIdDraft(filters.examId);
+      }
+      if (candidateIdDraft === lastCommitted.current.candidateId) {
+        setCandidateIdDraft(filters.candidateId);
+      }
+      if (attemptIdDraft === lastCommitted.current.attemptId) {
+        setAttemptIdDraft(filters.attemptId);
+      }
+      if (
+        assignedProctorDraft === lastCommitted.current.assignedProctorUserId
+      ) {
+        setAssignedProctorDraft(filters.assignedProctorUserId);
+      }
     }
     lastCommitted.current = {
       examId: filters.examId,
@@ -270,7 +314,12 @@ export function RecoveryQueuePage() {
       attemptId: filters.attemptId,
       assignedProctorUserId: filters.assignedProctorUserId,
     };
+    // Re-observe the entry here so a REJECTED stale deadline (guard hit in
+    // commitFilter) still leaves the page able to accept fresh commits on
+    // the entry it is now on.
+    observedEntryKey.current = location.key;
   }, [
+    location,
     filters.examId,
     filters.candidateId,
     filters.attemptId,
@@ -300,6 +349,11 @@ export function RecoveryQueuePage() {
   }, [params]);
 
   function commitFilter(patch: Partial<QueueFilters>) {
+    // INVARIANT: a filter draft may only commit on the history entry it was
+    // typed on. The live entry key is the synchronous authority — a pending
+    // deadline expiring after a committed external navigation is rejected
+    // here instead of rewriting the entry the user navigated TO.
+    if (history.location.key !== observedEntryKey.current) return;
     const next = new URLSearchParams(latestParams.current);
     for (const [key, value] of Object.entries(patch)) {
       if (value) next.set(key, value);
@@ -307,6 +361,11 @@ export function RecoveryQueuePage() {
     }
     latestParams.current = next;
     setSearchParams(next, { replace: true });
+    // The replace lands on the history instance synchronously and the
+    // replaced entry gets its own key: observe it now, so this page's own
+    // writes (including a second filter deadline committing right after the
+    // first) are never mistaken for a foreign navigation.
+    observedEntryKey.current = history.location.key;
   }
 
   function clearFilters() {
@@ -317,6 +376,7 @@ export function RecoveryQueuePage() {
     const cleared = new URLSearchParams();
     latestParams.current = cleared;
     setSearchParams(cleared, { replace: true });
+    observedEntryKey.current = history.location.key;
   }
 
   const fromDate = filters.createdFrom

@@ -63,6 +63,17 @@ function LocationProbe() {
   return <div data-testid="location-search">{location.search}</div>;
 }
 
+/** Test-only navigation control: a bare synchronous Back, mirroring the
+ * browser's `history.back()` without userEvent's pointer-event chain. */
+function HistoryNav() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => void navigate(-1)}>
+      后退
+    </button>
+  );
+}
+
 function makeItem(
   overrides: Partial<RecoveryQueueResponse["items"][number]> = {},
 ): RecoveryQueueResponse["items"][number] {
@@ -126,6 +137,7 @@ function renderPage(initialEntries = ["/admin/recovery"]) {
               element={
                 <>
                   <LocationProbe />
+                  <HistoryNav />
                   <RecoveryQueuePage />
                 </>
               }
@@ -233,6 +245,42 @@ describe("RecoveryQueuePage", () => {
     const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
     expect(lastCall).toContain("examId=exam-abc");
     expect(lastCall).toContain("candidateId=cand-1");
+  });
+
+  it("a filter draft whose deadline expires after Back commits must not rewrite the restored entry", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    // Two entries in one document: the bare queue, then a filtered one. The
+    // router starts on the filtered entry; the draft is typed there.
+    renderPage(["/admin/recovery", "/admin/recovery?examId=exam-1"]);
+    await act(async () => {});
+    const callsBeforeNav = getMock.mock.calls.length;
+
+    fireEvent.change(screen.getByRole("textbox", { name: "考试 ID" }), {
+      target: { value: "exam-stale" },
+    });
+    // Arm the debounce but do not cross the deadline yet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(299);
+    });
+
+    // Back commits the bare entry on the history instance, but the cancel
+    // chain is render/effect-carried (queryKey change → loading flip →
+    // toolbar unmount → debounce cleanup) and has not flushed. The deadline
+    // expires inside that gap — the same interleaving class as the
+    // QuestionPage search race (#953).
+    screen.getByRole("button", { name: "后退" }).click();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    // URL: the restored entry keeps exactly what it committed — nothing.
+    expect(screen.getByTestId("location-search").textContent).toBe("");
+    // Field: the foreign-entry reset re-seeds it from the restored URL.
+    expect(screen.getByRole("textbox", { name: "考试 ID" })).toHaveValue("");
+    // API: no request from the Back onward carries the departed draft.
+    for (const call of getMock.mock.calls.slice(callsBeforeNav)) {
+      expect(String(call[0])).not.toContain("exam-stale");
+    }
   });
 
   it("clearing filters resets the URL and refetches", async () => {
