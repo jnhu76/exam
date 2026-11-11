@@ -3477,10 +3477,10 @@ ROOT_CAUSE_CONFIDENCE = CAUSALLY_PROVEN（两个独立根因，均已分别修�
 浏览器证据边界：真实 Chromium **未复现**——同文档 SPA 拓扑（in-app push 造第二 entry），CDP CPU throttle 1×/6× × back@270–297ms 共 8 次尝试全部 CLEAN（恢复后 URL 无 search、字段为空）。两次 `page.goto` 构成的跨文档拓扑结构性不可复现（departed document 的 timer 被冻结）。未复现 ≠ 风险不存在：产品缺陷由 jsdom 确定性重放与 CI attempt 1 证明。
 
 ```text
-当前缓解 = RESOLVED（双层）：测试层 #954；产品层 fix PR（提交边界 entry-key 校验
+当前缓解 = RESOLVED（双层）：测试层 #954；产品层 #955（提交边界 entry-key 校验
   + detector entry 归属判别；mutation RED/GREEN 4/4，web 全套件绿）
 关联 = #953（产品缺陷登记 + R1 重放）、#954（测试修复，run 43048399836 8/8）、
-  43030066262（原始失败）、修复 PR（编号见本条更新评论）
+  #955（产品修复）、43030066262（原始失败）
 AGGREGATION_BASIS = 不与 OBS-2026-11-02-CI-WEB 聚合：那是 coverage lane 固定预算族
   （C1/A12(d)/Users/Course 多签名预算到期，CURRENT_INTERPRETATION =
   CASE-2026-11-03-CI-COVERAGE-BUDGETS）；本条是单一用例的 deadline/cancel 顺序竞态 +
