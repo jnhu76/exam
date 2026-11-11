@@ -781,9 +781,14 @@ wait_health() {
 }
 
 build_assets() {
-  log "构建前端 + API + 同步 apps/api/public..."
-  pnpm --filter @exam/web build >/dev/null
-  pnpm --filter @exam/api build >/dev/null
+  # INVARIANT (#938)：E2E 运行时不得加载陈旧的内部包产物。web（Vite 打包）
+  # 与 api（tsc 产物；并行路径 start 模式以 node dist/server.js 运行）都经由
+  # 各内部包 package.json exports 的 dist 消费 @exam/*。仅构建 web/api 会在
+  # 上游 dist 过期时静默成功（#920 报告过此类 stale-dist 混跑观察），因此
+  # 这里必须走 canonical workspace 构建闭包（pnpm build = turbo build，
+  # dependsOn ^build），在 server 启动前重建完整依赖闭包。
+  log "构建 workspace 全部包（canonical build）+ 同步 apps/api/public..."
+  pnpm build >/dev/null
   rm -rf apps/api/public
   cp -r apps/web/dist apps/api/public
 }
