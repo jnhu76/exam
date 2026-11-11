@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { PageHeader } from "@/components/shared/PageHeader";
 import {
   ClipboardList,
   Clock,
@@ -62,7 +63,7 @@ function ExamCard({
   onResult: (attemptId: string) => void;
 }) {
   const { t } = useTranslation();
-  const { formatDateTime } = useProductDateTime();
+  const { formatDateTimeMinute } = useProductDateTime();
   // A retake card's primary action is start; the published prior result must
   // stay viewable from the same card. bestScore is only projected by the API
   // when the canonical result-visibility authority says the result is
@@ -117,15 +118,35 @@ function ExamCard({
   return (
     <Card data-testid={`exam-card-${exam.examId}`}>
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
+        {/* WHY (#932): flex-wrap lets the badge pair drop under the title on
+            the smallest supported viewport instead of squeezing the exam name
+            into a narrow column; desktop/tablet keep the side-by-side layout
+            (wrap is mobile-only via sm:flex-nowrap). */}
+        <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap">
           <CardTitle className="min-w-0 break-words text-lg">
             {exam.title}
           </CardTitle>
           <div className="flex items-center gap-2 shrink-0">
             {exam.bestScore != null && (
-              <Badge variant="default" data-testid="exam-best-score">
-                <AppIcon icon={Trophy} size="badge" className="mr-1" />
-                {exam.bestScore}
+              // The score is data, not an achievement (#932): the label
+              // states it is the historical best, the passing threshold
+              // (server-projected passingScore) decides the tone, and the
+              // trophy icon renders only on a genuine pass so a zero /
+              // below-passing score never carries achievement imagery.
+              <Badge
+                variant={
+                  exam.passingScore != null &&
+                  exam.bestScore >= exam.passingScore
+                    ? "default"
+                    : "secondary"
+                }
+                data-testid="exam-best-score"
+              >
+                {exam.passingScore != null &&
+                  exam.bestScore >= exam.passingScore && (
+                    <AppIcon icon={Trophy} size="badge" className="mr-1" />
+                  )}
+                {t("examList.meta.bestScore", { score: exam.bestScore })}
               </Badge>
             )}
             <Badge variant={statusBadgeVariant(exam.availabilityStatus)}>
@@ -176,11 +197,14 @@ function ExamCard({
                   })}
           </span>
         </div>
+        {/* Exam windows carry no per-second exam-rule meaning on the list
+            card; minute precision halves the string so 390 no longer wraps.
+            Exact-second rendering stays on proctor/audit surfaces. */}
         <div className="type-secondary">
-          {formatDateTime(exam.windowStartAt)} —{" "}
+          {formatDateTimeMinute(exam.windowStartAt)} —{" "}
           {exam.windowEndAt === null
             ? t("examList.meta.noEnd")
-            : formatDateTime(exam.windowEndAt)}
+            : formatDateTimeMinute(exam.windowEndAt)}
         </div>
         {/* DESIGN.md mobile direct-touch contract: card action buttons are
             size="sm" (36px desktop standard) and must reach 44px on mobile.
@@ -279,6 +303,12 @@ export function ExamListPage() {
 
   return (
     <PageContainer role="candidate" className="flex flex-col gap-6">
+      {/* WHY (#932): the candidate shell had no page h1 (unlike settings /
+          start / result, which all show a visible title under the same
+          top-bar nav link). A visible title — rather than a visually-hidden
+          heading — keeps the shell's consistent scannable page anchor, and
+          its vertical cost stays inside the first screen even at 320x700. */}
+      <PageHeader title={t("examList.pageTitle")} />
       {canTake.length > 0 && (
         <section className="flex flex-col gap-4">
           <h2 className="type-section-title">

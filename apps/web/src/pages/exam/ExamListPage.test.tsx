@@ -99,6 +99,26 @@ describe("ExamListPage", () => {
     expect(screen.getByText("开始考试")).toBeInTheDocument();
   });
 
+  // The visible page title is the list's heading landmark — the candidate
+  // shell previously had no page h1 (#932).
+  it("renders the visible page h1 我的考试", async () => {
+    getMock.mockResolvedValue([makeExam({})]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const h1 = await screen.findByRole("heading", {
+      level: 1,
+      name: "我的考试",
+    });
+    expect(h1).toBeInTheDocument();
+  });
+
   // R0-F5: the card meta row states the passing requirement with the
   // unified concept name and an explicit unit — same fact as the start page,
   // result page and admin surfaces, one vocabulary.
@@ -183,12 +203,47 @@ describe("ExamListPage", () => {
     expect(await screen.findByText("已评分")).toBeInTheDocument();
     const scoreBadge = screen.getByTestId("exam-best-score");
     expect(scoreBadge).toBeInTheDocument();
-    expect(scoreBadge).toHaveTextContent("85");
+    // The label names the number as the historical best; a passing score
+    // keeps the primary tone and the trophy icon.
+    expect(scoreBadge).toHaveTextContent("历史最高 85 分");
+    expect(scoreBadge).toHaveAttribute("data-variant", "default");
+    expect(scoreBadge.querySelector("svg.lucide-trophy")).not.toBeNull();
     expect(screen.getByText("查看成绩")).toBeInTheDocument();
     expect(screen.getByTestId("exam-primary-action")).toHaveAttribute(
       "data-action",
       "view_result",
     );
+  });
+
+  // A zero score below the passing threshold is data, not an achievement —
+  // unit present, tone demoted to secondary (#932).
+  it("renders a below-passing bestScore with unit and neutral tone", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        availabilityStatus: "graded",
+        primaryAction: "view_result",
+        bestScore: 0,
+        bestScorePercent: 0,
+        attemptsUsed: 1,
+        latestAttemptId: "att-1",
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const scoreBadge = await screen.findByTestId("exam-best-score");
+    // A zero / below-passing score is stated as the historical best in the
+    // neutral tone and carries NO trophy icon — the
+    // achievement glyph is reserved for a genuine pass.
+    expect(scoreBadge).toHaveTextContent("历史最高 0 分");
+    expect(scoreBadge).toHaveAttribute("data-variant", "secondary");
+    expect(scoreBadge.querySelector("svg.lucide-trophy")).toBeNull();
   });
 
   it("graded retake card keeps the published result viewable next to the start action", async () => {
@@ -334,6 +389,9 @@ describe("ExamListPage", () => {
     );
 
     expect(await screen.findByText("暂无可参加的考试")).toBeInTheDocument();
+    // The empty state names the cause and the next step instead of restating
+    // emptiness (#932).
+    expect(await screen.findByText(/考试由管理员统一分配/)).toBeInTheDocument();
   });
 
   // Characterization (UI-MIGRATE-N-W3): each section heading introduces a
