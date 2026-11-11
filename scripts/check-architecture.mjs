@@ -11,6 +11,7 @@ import {
 import {
   deriveBuildablePackages,
   dockerfileClosureFindings,
+  e2eRunnerBuildFindings,
   expandWorkspaceGlobs,
   helperCoverageFindings,
   parseBuildScriptHelpers,
@@ -617,6 +618,22 @@ async function readRepoTextOrNull(path, rule) {
         }
       }
     }
+  }
+
+  // #947 — E2E runner build precondition: scripts/e2e/run.sh build_assets()
+  // must run the canonical workspace build before any server boots. CI does
+  // not execute run.sh (its E2E job builds the closure itself), so this
+  // static gate is the only structural check on the local E2E entry. The
+  // policy authority is config/build-graph-policy.mjs (same module as the
+  // Dockerfile and helper guards — no second grammar).
+  const runShText = await readRepoTextOrNull(
+    "scripts/e2e/run.sh",
+    "BUILD_GRAPH_RUNSH_UNREADABLE",
+  );
+  if (runShText !== null) {
+    violations.push(
+      ...e2eRunnerBuildFindings({ runShText, functionName: "build_assets" }),
+    );
   }
 }
 

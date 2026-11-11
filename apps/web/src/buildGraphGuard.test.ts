@@ -27,12 +27,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  *     violations (BUILD_GRAPH_DOCKER_CLOSURE, BUILD_GRAPH_DOCKER_STALE_ENTRY,
  *     BUILD_GRAPH_DOCKER_DUPLICATE, BUILD_GRAPH_DOCKER_ORDER,
  *     BUILD_GRAPH_DOCKER_CYCLE, BUILD_GRAPH_DOCKER_UNSUPPORTED,
- *     BUILD_GRAPH_HELPER_UNREGISTERED, BUILD_GRAPH_HELPER_UNSUPPORTED_FORM);
+ *     BUILD_GRAPH_HELPER_UNREGISTERED, BUILD_GRAPH_HELPER_UNSUPPORTED_FORM,
+ *     BUILD_GRAPH_E2E_RUNNER_FILTER_BUILD, BUILD_GRAPH_E2E_RUNNER_UNSUPPORTED,
+ *     BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING, BUILD_GRAPH_E2E_RUNNER_CALL_MISSING,
+ *     BUILD_GRAPH_E2E_RUNNER_BODY_NOT_FOUND);
  *   - the REAL repo scans clean through the same functions the checker uses;
  *   - the REAL `node scripts/check-architecture.mjs` entry rejects the two
  *     audited counterfactuals (#938 C4.1 synthetic package without a
  *     Dockerfile build; C4.2 build script referencing an unregistered
- *     repo-level helper) in a disposable `git worktree` and passes the
+ *     repo-level helper) and the #947 F2 runner mutations (historical
+ *     two-filter build_assets, deleted build, deleted call site,
+ *     unsupported spelling) in a disposable `git worktree` and passes the
  *     pristine tree — unit fixtures alone do not prove the checker is
  *     wired to the policy.
  *
@@ -106,6 +111,14 @@ interface BuildGraphPolicy {
   helperCoverageFindings(input: {
     references: readonly HelperReference[];
     globalDependencies: readonly string[];
+  }): string[];
+  extractRunnerFunctionBody(
+    runShText: string,
+    functionName: string,
+  ): readonly string[] | null;
+  e2eRunnerBuildFindings(input: {
+    runShText: string;
+    functionName: string;
   }): string[];
 }
 
@@ -573,6 +586,102 @@ describe("C2 helper coverage", () => {
   });
 });
 
+describe("E2E runner build precondition (#947)", () => {
+  // The repo's real build_assets() shape, compressed: comments/blank lines
+  // and non-build statements (log/rm/cp) must never masquerade as build
+  // claims; the canonical line is `pnpm build >/dev/null`; the invocation
+  // is a bare `build_assets` line outside the definition.
+  const canonicalRunSh = [
+    "set -euo pipefail",
+    "build_assets() {",
+    "  # INVARIANT (#938): no stale internal dist before server boot",
+    '  log "构建 workspace 全部包（canonical build）+ 同步 apps/api/public..."',
+    "  pnpm build >/dev/null",
+    "  rm -rf apps/api/public",
+    "  cp -r apps/web/dist apps/api/public",
+    "}",
+    "",
+    "build_assets",
+  ].join("\n");
+
+  const findingsFor = (runShText: string): string[] =>
+    policy.e2eRunnerBuildFindings({
+      runShText,
+      functionName: "build_assets",
+    });
+
+  it("the canonical form scans clean", () => {
+    expect(findingsFor(canonicalRunSh)).toEqual([]);
+  });
+
+  it("extracts exactly the lines between the marker and the closing brace", () => {
+    expect(
+      policy.extractRunnerFunctionBody(canonicalRunSh, "build_assets"),
+    ).toEqual([
+      "  # INVARIANT (#938): no stale internal dist before server boot",
+      '  log "构建 workspace 全部包（canonical build）+ 同步 apps/api/public..."',
+      "  pnpm build >/dev/null",
+      "  rm -rf apps/api/public",
+      "  cp -r apps/web/dist apps/api/public",
+    ]);
+  });
+
+  it("returns null for a missing or unterminated body — the precondition must stay checkable", () => {
+    expect(
+      policy.extractRunnerFunctionBody("set -euo pipefail\n", "build_assets"),
+    ).toBeNull();
+    expect(
+      policy.extractRunnerFunctionBody(
+        "build_assets() {\n  pnpm build >/dev/null\n",
+        "build_assets",
+      ),
+    ).toBeNull();
+    expect(findingsFor("set -euo pipefail\n")).toEqual([
+      expect.stringContaining("BUILD_GRAPH_E2E_RUNNER_BODY_NOT_FOUND"),
+    ]);
+  });
+
+  it("the historical #941 two-filter partial closure is named and rejected", () => {
+    const regressed = canonicalRunSh.replace(
+      "  pnpm build >/dev/null\n",
+      "  pnpm --filter @exam/web build >/dev/null\n" +
+        "  pnpm --filter @exam/api build >/dev/null\n",
+    );
+    const findings = findingsFor(regressed);
+    expect(
+      findings.filter((f) => f.includes("BUILD_GRAPH_E2E_RUNNER_FILTER_BUILD")),
+    ).toHaveLength(2);
+    expect(findings.join("\n")).toContain("#941");
+  });
+
+  it("deleting the canonical build line is BUILD_MISSING", () => {
+    const deleted = canonicalRunSh.replace("  pnpm build >/dev/null\n", "");
+    expect(findingsFor(deleted)).toEqual([
+      expect.stringContaining("BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING"),
+    ]);
+  });
+
+  it("an unrecognized build spelling is UNSUPPORTED — the guard does not parse shell semantics", () => {
+    const respelled = canonicalRunSh.replace(
+      "  pnpm build >/dev/null\n",
+      "  pnpm run build >/dev/null\n",
+    );
+    const findings = findingsFor(respelled);
+    // Both directions: the unknown spelling is rejected AND the canonical
+    // build it displaced is reported missing.
+    expect(findings[0]).toContain("BUILD_GRAPH_E2E_RUNNER_UNSUPPORTED");
+    expect(findings[0]).toContain("pnpm run build >/dev/null");
+    expect(findings[1]).toContain("BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING");
+  });
+
+  it("an uninvoked definition is CALL_MISSING", () => {
+    const uninvoked = canonicalRunSh.replace(/\nbuild_assets$/, "");
+    expect(findingsFor(uninvoked)).toEqual([
+      expect.stringContaining("BUILD_GRAPH_E2E_RUNNER_CALL_MISSING"),
+    ]);
+  });
+});
+
 describe("real repo scans clean through the policy the checker uses", () => {
   async function collectMembers(): Promise<WorkspaceMember[]> {
     const yaml = await readFile(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
@@ -802,5 +911,58 @@ describe("real lint:arch entry rejects the counterfactuals (disposable worktree)
     expect(run.code, run.stderr).toBe(1);
     expect(run.stderr).toContain("BUILD_GRAPH_DOCKER_UNSUPPORTED");
     expect(run.stderr).toContain("workspace build");
+  }, 60_000);
+
+  // #947 F2 — runner mutations through the real gate. CI does not execute
+  // run.sh, so these worktree counterfactuals are the only proof that the
+  // checker actually enforces the build_assets() precondition.
+  async function runWithMutatedRunSh(
+    mutate: (original: string) => string,
+  ): Promise<{ code: number; stderr: string }> {
+    const runShPath = join(worktree, "scripts", "e2e", "run.sh");
+    const original = await readFile(runShPath, "utf8");
+    await writeFile(runShPath, mutate(original));
+    const run = runChecker();
+    await writeFile(runShPath, original);
+    return { code: run.code, stderr: run.stderr };
+  }
+
+  it("F2: reverting build_assets to the historical two-filter closure is rejected", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original.replace(
+        "  pnpm build >/dev/null\n",
+        "  pnpm --filter @exam/web build >/dev/null\n" +
+          "  pnpm --filter @exam/api build >/dev/null\n",
+      ),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_FILTER_BUILD");
+    expect(run.stderr).toContain("@exam/web");
+    expect(run.stderr).toContain("@exam/api");
+  }, 60_000);
+
+  it("F2: deleting the canonical build from build_assets is rejected", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original.replace("  pnpm build >/dev/null\n", ""),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING");
+  }, 60_000);
+
+  it("F2: deleting the build_assets call site is rejected", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original.replace("\nbuild_assets\n", "\n"),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_CALL_MISSING");
+  }, 60_000);
+
+  it("F2: an unrecognized build spelling in build_assets is rejected", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original.replace("  pnpm build >/dev/null\n", "  pnpm run build\n"),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_UNSUPPORTED");
+    expect(run.stderr).toContain("pnpm run build");
   }, 60_000);
 });

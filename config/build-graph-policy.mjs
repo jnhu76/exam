@@ -578,3 +578,102 @@ function coversHelperEntry(entry, helperPath) {
   }
   return false;
 }
+
+// ── E2E runner build precondition (#947) ────────────────────────────────
+// `scripts/e2e/run.sh` `build_assets()` is the third hand-maintained
+// description of the workspace build chain beside the Dockerfile builder
+// sequence (C1) and the manifest build scripts + helpers (C2). #941
+// collapsed its two `pnpm --filter <pkg> build` calls into the canonical
+// workspace build; a silent regression to that partial-closure shape would
+// resurrect the stale-dist mixed-runtime class (#920 observation, #941 RED
+// evidence) — and CI would not notice, because CI's E2E job builds the
+// closure itself and never executes run.sh. The guard pins the canonical
+// form inside build_assets() and rejects the historical partial shape by
+// name.
+//
+// Grammar (fail-closed, same bias as the rest of this module):
+//   recognized canonical: `pnpm build` optionally followed by a stdout
+//     redirect to /dev/null (the repo's real form `pnpm build >/dev/null`).
+//   BUILD_GRAPH_E2E_RUNNER_FILTER_BUILD — a --filter workspace build inside
+//     build_assets(): the #941 regression shape (partial closure silently
+//     serves stale internal-package dist).
+//   BUILD_GRAPH_E2E_RUNNER_UNSUPPORTED — any other build-bearing line in
+//     build_assets() (same workspace-build signal as the Dockerfile
+//     heuristic): extension is a deliberate policy change, never a silent
+//     widening.
+//   BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING — no canonical build in the body:
+//     the E2E entry would consume whatever dist the host happens to hold.
+//   BUILD_GRAPH_E2E_RUNNER_CALL_MISSING — build_assets() defined but never
+//     invoked in run.sh: the precondition exists but never runs.
+//   BUILD_GRAPH_E2E_RUNNER_BODY_NOT_FOUND — the function body cannot be
+//     delimited: the precondition must stay checkable.
+
+/**
+ * One shell function body as a line array, or null when the body cannot be
+ * delimited. Only the repo's real shape (`name() {` … a line that is exactly
+ * `}`) is recognized; anything else fails closed — the checker treats null
+ * as a violation, never a vacuous pass.
+ */
+export function extractRunnerFunctionBody(runShText, functionName) {
+  const lines = runShText.split(/\r?\n/);
+  const start = lines.findIndex((line) =>
+    line.trimStart().startsWith(`${functionName}() {`),
+  );
+  if (start === -1) return null;
+  const body = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === "}") return body;
+    body.push(lines[i]);
+  }
+  return null;
+}
+
+// Canonical runner build: `pnpm build` with an optional simple redirect.
+const RUNNER_CANONICAL_BUILD = /^pnpm\s+build(?:\s+>\s*\/dev\/null)?$/;
+
+export function e2eRunnerBuildFindings({ runShText, functionName }) {
+  const findings = [];
+  const body = extractRunnerFunctionBody(runShText, functionName);
+  if (body === null) {
+    findings.push(
+      `${functionName}(): BUILD_GRAPH_E2E_RUNNER_BODY_NOT_FOUND — the ${functionName}() { … } body cannot be located or is unterminated; the E2E build precondition must stay checkable (fail closed)`,
+    );
+    return findings;
+  }
+  let canonicalCount = 0;
+  for (const raw of body) {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (RUNNER_CANONICAL_BUILD.test(line)) {
+      canonicalCount += 1;
+      continue;
+    }
+    if (/(?:^|\s)--filter/.test(line) && carriesWorkspaceBuildSignal(line)) {
+      findings.push(
+        `BUILD_GRAPH_E2E_RUNNER_FILTER_BUILD — ${functionName}() builds individual packages with --filter ("${line}"): a partial closure silently serves stale internal-package dist (#941); run the canonical workspace build (pnpm build) instead`,
+      );
+      continue;
+    }
+    if (carriesWorkspaceBuildSignal(line)) {
+      findings.push(
+        `BUILD_GRAPH_E2E_RUNNER_UNSUPPORTED — unrecognized build form in ${functionName}() ("${line}"): the guard does not parse shell semantics, so this form cannot be verified as the canonical closure; spell it as "pnpm build >/dev/null" or extend the policy deliberately`,
+      );
+    }
+  }
+  if (canonicalCount === 0) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING — ${functionName}() contains no canonical workspace build (pnpm build); the E2E entry would consume whatever dist the host happens to hold (#920 class)`,
+    );
+  }
+  // The precondition must actually run: a bare invocation line outside the
+  // definition, before any server boot.
+  const hasCall = runShText
+    .split(/\r?\n/)
+    .some((line) => line.trim() === functionName);
+  if (!hasCall) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_CALL_MISSING — ${functionName}() is defined but never invoked; the canonical build would never execute`,
+    );
+  }
+  return findings;
+}
