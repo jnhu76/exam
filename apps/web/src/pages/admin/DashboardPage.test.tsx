@@ -462,4 +462,50 @@ describe("DashboardPage", () => {
       expect(screen.getByText("近期考试")).toBeInTheDocument();
     });
   });
+
+  // PageHeader actions slot + section order todo → stats → recent exams.
+  // The order IS the behavioral contract; pinned with document position,
+  // not visual inspection (#932).
+  describe("dashboard ordering and actions slot", () => {
+    beforeEach(() => {
+      mockApiRouting({});
+    });
+
+    it("renders quick actions inside the PageHeader actions slot", async () => {
+      renderPage();
+      await screen.findByText("需要处理");
+      const header = document.querySelector("header");
+      expect(header).not.toBeNull();
+      expect(
+        within(header as HTMLElement).getByRole("button", {
+          name: "创建考试",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        within(header as HTMLElement).getByRole("button", {
+          name: "导入题目",
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("orders sections todo → 资产概览 → 近期考试", async () => {
+      renderPage();
+      await screen.findByText("需要处理");
+      const todo = document.getElementById("admin-todo-heading");
+      const stats = document.getElementById("admin-stats-heading");
+      const shell = document.querySelector("[data-slot='admin-table-shell']");
+      expect(todo).not.toBeNull();
+      expect(stats).not.toBeNull();
+      expect(shell).not.toBeNull();
+      expect(
+        todo!.compareDocumentPosition(stats!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        stats!.compareDocumentPosition(shell!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getByText("资产概览")).toBeInTheDocument();
+    });
+  });
 });

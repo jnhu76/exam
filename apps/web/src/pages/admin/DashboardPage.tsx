@@ -174,30 +174,27 @@ export function DashboardPage() {
 
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-6">
-      <PageHeader title={t("admin.dashboard.title")} />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          label={t("admin.dashboard.stats.totalQuestions")}
-          value={data?.totalQuestions ?? 0}
-          icon={<AppIcon icon={BookOpen} size="metric" />}
-        />
-        <StatsCard
-          label={t("admin.dashboard.stats.activeExams")}
-          value={data?.activeExams ?? 0}
-          icon={<AppIcon icon={Activity} size="metric" />}
-        />
-        <StatsCard
-          label={t("admin.dashboard.stats.totalCandidates")}
-          value={data?.totalCandidates ?? 0}
-          icon={<AppIcon icon={Users} size="metric" />}
-        />
-        <StatsCard
-          label={t("admin.dashboard.stats.todayExams")}
-          value={data?.todayExams ?? 0}
-          icon={<AppIcon icon={CalendarCheck} size="metric" />}
-        />
-      </div>
+      {/* Quick actions live in the PageHeader actions slot — the same idiom
+          as the other admin pages — so the primary task anchor is the todo
+          section and the actions stay reachable at every scroll depth (#932). */}
+      <PageHeader
+        title={t("admin.dashboard.title")}
+        actions={
+          <>
+            <Button onClick={() => navigate("/admin/exams/new")}>
+              <AppIcon icon={PlusCircle} size="inline" />
+              {t("admin.dashboard.actions.createExam")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/admin/questions/import")}
+            >
+              <AppIcon icon={Upload} size="inline" />
+              {t("admin.dashboard.actions.importQuestions")}
+            </Button>
+          </>
+        }
+      />
 
       {/* Todo section: capability-gated like the sidebar entries (UX-only;
           backend authorization stays authoritative). Both cards are hidden
@@ -253,19 +250,38 @@ export function DashboardPage() {
         </section>
       )}
 
-      <div className="flex gap-3">
-        <Button onClick={() => navigate("/admin/exams/new")}>
-          <AppIcon icon={PlusCircle} size="inline" />
-          {t("admin.dashboard.actions.createExam")}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => navigate("/admin/questions/import")}
-        >
-          <AppIcon icon={Upload} size="inline" />
-          {t("admin.dashboard.actions.importQuestions")}
-        </Button>
-      </div>
+      {/* Reference band: asset KPIs sit below the actionable sections and
+          above the recent-exams table (todo → KPI → recent). */}
+      <section
+        aria-labelledby="admin-stats-heading"
+        className="flex flex-col gap-3"
+      >
+        <h2 id="admin-stats-heading" className="type-section-title">
+          {t("admin.dashboard.stats.sectionTitle")}
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatsCard
+            label={t("admin.dashboard.stats.totalQuestions")}
+            value={data?.totalQuestions ?? 0}
+            icon={<AppIcon icon={BookOpen} size="metric" />}
+          />
+          <StatsCard
+            label={t("admin.dashboard.stats.activeExams")}
+            value={data?.activeExams ?? 0}
+            icon={<AppIcon icon={Activity} size="metric" />}
+          />
+          <StatsCard
+            label={t("admin.dashboard.stats.totalCandidates")}
+            value={data?.totalCandidates ?? 0}
+            icon={<AppIcon icon={Users} size="metric" />}
+          />
+          <StatsCard
+            label={t("admin.dashboard.stats.todayExams")}
+            value={data?.todayExams ?? 0}
+            icon={<AppIcon icon={CalendarCheck} size="metric" />}
+          />
+        </div>
+      </section>
 
       <DataTableShell
         title={t("admin.dashboard.recent.title")}
@@ -310,14 +326,36 @@ export function DashboardPage() {
 function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <Skeleton className="h-8 w-32" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="surface-content flex flex-col gap-2 p-5">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-7 w-16" />
-          </div>
-        ))}
+      {/* Loading approximation mirrors the page's section order
+          (header+actions → todo → KPI → recent). */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <Skeleton className="h-8 w-32" />
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-28" />
+          <Skeleton className="h-9 w-28" />
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        <Skeleton className="h-5 w-20" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="surface-content flex flex-col gap-2 p-5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-12" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        <Skeleton className="h-5 w-20" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="surface-content flex flex-col gap-2 p-5">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
       </div>
       <div className="surface-content flex flex-col gap-4 p-4">
         <Skeleton className="h-6 w-24" />

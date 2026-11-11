@@ -2511,6 +2511,7 @@ const zhCN = {
         loadFailed: "加载仪表盘数据失败",
       },
       stats: {
+        sectionTitle: "资产概览",
         totalQuestions: "题目总数",
         activeExams: "考试进行中",
         totalCandidates: "考生总数",
