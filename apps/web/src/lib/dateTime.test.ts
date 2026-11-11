@@ -17,6 +17,20 @@ describe("product date/time authority", () => {
     );
   });
 
+  // Minute-precision variant for surfaces where seconds carry no exam-rule
+  // meaning; same authority, same tz rules.
+  it("formats minute-precision date-time without seconds", () => {
+    const formatter = createProductDateTimeFormatter("Asia/Shanghai");
+
+    expect(formatter.formatDateTimeMinute("2026-07-14T01:02:03.000Z")).toBe(
+      "2026-07-14 09:02",
+    );
+    // Second digits are dropped, not rounded: :59 keeps the same minute.
+    expect(formatter.formatDateTimeMinute("2026-12-31T16:00:59.000Z")).toBe(
+      "2027-01-01 00:00",
+    );
+  });
+
   it("produces the same output regardless of the host locale", () => {
     const instant = "2026-07-14T01:02:03.000Z";
     const enHost = createProductDateTimeFormatter("Asia/Shanghai", "en-US");

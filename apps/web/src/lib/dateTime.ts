@@ -7,6 +7,12 @@ export interface ProductDateTimeFormatter {
   formatDate: (value: DateTimeInput) => string;
   formatTime: (value: DateTimeInput) => string;
   formatDateTime: (value: DateTimeInput) => string;
+  /** Minute-precision datetime (yyyy-MM-dd HH:mm) for surfaces where the
+   * second digits carry no exam-rule meaning and only hurt narrow-viewport
+   * readability (e.g. candidate exam windows). The second-precision
+   * formatDateTime stays the default for surfaces that document exact
+   * ordering (proctor/recovery/audit timelines). */
+  formatDateTimeMinute: (value: DateTimeInput) => string;
   formatDateRange: (start: DateTimeInput, end: DateTimeInput) => string;
   formatDuration: typeof formatDuration;
 }
@@ -58,12 +64,22 @@ export function createProductDateTimeFormatter(
     });
     return `${result.hour}:${result.minute}:${result.second}`;
   };
+  const formatTimeMinute = (value: DateTimeInput) => {
+    const result = parts(value, timeZone, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    return `${result.hour}:${result.minute}`;
+  };
 
   return {
     timeZone,
     formatDate,
     formatTime,
     formatDateTime: (value) => `${formatDate(value)} ${formatTime(value)}`,
+    formatDateTimeMinute: (value) =>
+      `${formatDate(value)} ${formatTimeMinute(value)}`,
     formatDateRange: (start, end) =>
       `${formatDate(start)} — ${formatDate(end)}`,
     formatDuration,
