@@ -237,6 +237,20 @@ describe("Dockerfile build-line grammar", () => {
       "RUN pnpm --filter @exam/domain build \\\n  && cp x y",
       /multi-line RUN carrying a build command/,
     ],
+    [
+      // Shell wrapper forms hide the command text behind quoting; the guard
+      // does not parse shell semantics, so the line must fail closed (a
+      // silent skip here would let a workspace build escape the closure —
+      // observed live before the fail-closed tail existed, #939).
+      'RUN sh -c "pnpm --filter @exam/domain build"',
+      /unrecognized RUN form may execute a workspace build/,
+    ],
+    [
+      // Docker exec-form RUN: same fail-closed decision — the form is never
+      // attributed as a build, it is rejected as unverifiable.
+      'RUN ["pnpm", "--filter", "@exam/domain", "build"]',
+      /unrecognized RUN form may execute a workspace build/,
+    ],
   ])("unsupported form: %s", (line, reasonPattern) => {
     const parsed = policy.parseDockerfileBuilds(line);
     expect(parsed.builds).toEqual([]);
@@ -699,5 +713,39 @@ describe("real lint:arch entry rejects the counterfactuals (disposable worktree)
     await writeFile(dockerfilePath, original);
     expect(run.code, run.stderr).toBe(1);
     expect(run.stderr).toContain("BUILD_GRAPH_DOCKER_UNSUPPORTED");
+  }, 60_000);
+
+  // Both wrapper variants below append a workspace build that escapes the
+  // declared closure: @exam/e2e is a real workspace member with NO build
+  // script, so a recognized `--filter @exam/e2e build` line would be a
+  // STALE_ENTRY violation. If the checker silently ignored the wrapper form
+  // instead (the pre-#939 defect), the gate exited 0 with the workspace
+  // build unverifiable in the image.
+  it('a shell-wrapped workspace build (RUN sh -c "...") is rejected, not ignored', async () => {
+    const dockerfilePath = join(worktree, "Dockerfile");
+    const original = await readFile(dockerfilePath, "utf8");
+    await writeFile(
+      dockerfilePath,
+      `${original}RUN sh -c "pnpm --filter @exam/e2e build"\n`,
+    );
+    const run = runChecker();
+    await writeFile(dockerfilePath, original);
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_DOCKER_UNSUPPORTED");
+    expect(run.stderr).toContain("workspace build");
+  }, 60_000);
+
+  it('a JSON exec-form workspace build (RUN ["pnpm", ...]) is rejected, not ignored', async () => {
+    const dockerfilePath = join(worktree, "Dockerfile");
+    const original = await readFile(dockerfilePath, "utf8");
+    await writeFile(
+      dockerfilePath,
+      `${original}RUN ["pnpm", "--filter", "@exam/e2e", "build"]\n`,
+    );
+    const run = runChecker();
+    await writeFile(dockerfilePath, original);
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_DOCKER_UNSUPPORTED");
+    expect(run.stderr).toContain("workspace build");
   }, 60_000);
 });
