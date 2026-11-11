@@ -22,6 +22,12 @@ for repository releases from `v0.0.1` onward.
 - Security-audit evidence archive for the secure-observability remediation
   (SHA256-pinned, sanitized copies; `docs/research/…-remediation/`)
   (#800 evidence basis, PR #922).
+- Build-graph drift guards wired into `pnpm lint:arch` via the single policy
+  module `config/build-graph-policy.mjs`: the production Dockerfile build
+  manifest must equal the workspace buildable-package set, workspace build
+  helpers must be registered in turbo `globalDependencies`, and unsupported
+  Dockerfile `RUN` forms fail closed as named violations instead of being
+  silently skipped (#938, PR #939).
 
 ### Changed
 
@@ -37,6 +43,18 @@ for repository releases from `v0.0.1` onward.
   URL-logging default (#925, PR #926). The nginx `error_log` keeps the
   Owner-decided `error` level (native upstream diagnostics; the bounded
   raw-request-line risk is accepted and documented).
+- Dev rail: `pnpm dev` is now the canonical managed entry (`turbo watch
+  dev`) — the first run builds the full workspace dependency closure before
+  the API/web dev tasks start, and source changes rebuild only the affected
+  closure before managed tasks restart; new explicit `dev:once` (one-shot
+  full build) and `watch:dist` (unmanaged build watch with a documented
+  same-worktree concurrency boundary) entries. On the build rail
+  `noEmitOnError` now holds: a failed build emits no new artifacts, surfaces
+  loudly in the watch output, and the managed tasks stay down until the
+  failing source is fixed and a rebuild succeeds — a failed build is never
+  a silent partial release. Contract, failure semantics and execution
+  evidence are recorded in ADR-027 (ACCEPTED, with errata E1–E3) (#938,
+  PR #940).
 
 ### Fixed
 
@@ -48,6 +66,13 @@ for repository releases from `v0.0.1` onward.
   trigger → state-change → settle oracle; registration in
   `docs/standards/test-flakes.md` (CASE-2026-11-09-878-KEYSCROLL-ORACLE)
   (PR #923).
+- Silent stale-dist E2E boots: the E2E entry (`scripts/e2e/run.sh`
+  `build_assets()`) now rebuilds the complete workspace dependency closure
+  (`pnpm build`) instead of only the `web`/`api` package builds, so servers
+  can no longer start against stale internal-package `dist` — the
+  build-side face of the stale-dist mixed-runtime class reported in #920
+  (that issue's HTTP 500 causality remains under its own RESEARCH_FIRST
+  gate) (#938, PR #941).
 
 ## [0.0.12] - 2026-11-07
 
