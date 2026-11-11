@@ -55,11 +55,12 @@ pnpm db:migrate
 # 4. Seed test users (admin / candidate / candidate2)
 pnpm db:seed
 
-# 5. Start dev servers
+# 5. Start the managed dev loop (builds the workspace closure first)
 pnpm dev
 ```
 
-This starts:
+`pnpm dev` first builds every workspace package the dev servers consume,
+then starts:
 
 - **Web** (Vite): `http://localhost:5173`
 - **API** (Fastify): `http://localhost:3000`
@@ -110,11 +111,56 @@ Custom seed credentials can be set in `.env` before seeding (`SEED_ORG_NAME`,
 
 ## Running the Application
 
+`pnpm dev` is the canonical managed development entrypoint
+(`turbo watch dev`):
+
 ```bash
-pnpm dev          # API + Web with hot reload
-pnpm --filter web dev   # Web only
-pnpm --filter api dev   # API only
+pnpm dev          # managed dev loop (see contract below)
+pnpm --filter web dev   # Web only (unmanaged)
+pnpm --filter api dev   # API only (unmanaged)
 ```
+
+**Managed entry contract.** The first `pnpm dev` builds the full workspace
+dependency closure (`dev` depends on `^build`) before any managed API/Web
+process starts, so a dev server can never silently consume missing or stale
+`dist`. After that, upstream source changes rebuild the affected closure and
+Turbo restarts the managed `dev` tasks. The restart of each task is
+independent: there is a transient window in which the API and the Web app
+run different generations. There is no atomic cross-process generation
+switch and no cross-package atomic publication promise. A failed build
+emits no new artifacts of that run (the failing package's `dist` is cleaned
+before its rebuild, while non-failing upstream packages keep theirs), the
+failure surfaces loudly in the watch output, and the managed `dev` tasks
+stop: the stack stays down until the failing source is fixed and a rebuild
+succeeds, after which the tasks restart and serve the new version. A failed
+build is never a successful release.
+
+**One-shot entry.** `pnpm dev:once` (`turbo dev`) starts the dev servers
+once after building the dependency closure. It does not enable Turbo's
+cross-package incremental rebuild and managed restart: while it runs,
+changes to workspace-package sources (`packages/*/src`) do not trigger a
+closure rebuild. This is not "no hot reload" — Vite and tsx keep their own
+file watchers, so app-local source changes still hot-reload/restart
+normally. Use it for scripted or one-shot stacks.
+
+**Artifact-only watch.** `pnpm watch:dist` (`turbo watch build`) rebuilds
+build outputs and never restarts anything. It is the explicit complement
+for unmanaged tracks that execute built output directly:
+
+| Unmanaged entry | Executes |
+| --- | --- |
+| `pnpm --filter @exam/api start` (and production images) | `apps/api/dist` via `node dist/server.js` |
+| `pnpm --filter @exam/api worker:email` | `apps/api/dist` via `node dist/workers/emailDeliveryWorker.js` |
+| seed / admin / rollback CLIs (`db:seed`, `bootstrap:admin`, …) | `apps/api/src` via tsx (one-shot) |
+
+`worker:email:dev` runs the same worker from source via tsx; whether it
+joins the managed dev track is a separate evaluation tracked in #938.
+
+**Concurrent build watchers.** Both `pnpm dev` and `pnpm watch:dist` own
+`dist` builds. Turbo has no workspace-level build lock: do not casually run
+two dist-building watchers in the same worktree. If you need a managed dev
+loop and artifact rebuilds for a `pnpm start`/worker process at the same
+time, use separate worktrees or stop one watcher first.
 
 | Service | Dev port | Owner variable |
 | --- | --- | --- |
@@ -129,7 +175,9 @@ rules.
 
 | Command | Description |
 | --- | --- |
-| `pnpm dev` | Start all services in dev mode |
+| `pnpm dev` | Canonical managed dev loop: build closure, then watch and restart managed tasks |
+| `pnpm dev:once` | Start dev servers once after the closure build (no Turbo cross-package watch) |
+| `pnpm watch:dist` | Rebuild artifacts only — never restarts consumers (for start/worker/CLI) |
 | `pnpm build` | Build all packages |
 | `pnpm test` | Run all tests |
 | `pnpm coverage` | Run tests with coverage |

@@ -296,9 +296,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-024](ADR-024-tick-level-throw-escalation.md) | Tick-level Throw Escalation (`operability.tick_failure`) | ACCEPTED | none | none |
 | [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP Request Correlation Identity | ACCEPTED, amended (2026-11-08: x-request-id response header, #865) | none (adopts UUIDv4 over the #860 research recommendation `KEEP_DEFAULT_OPTION_B`, which was not an ADR) | none |
 | [ADR-026](ADR-026-client-event-temporal-evidence-boundary.md) | Client Event Temporal Evidence Boundary | ACCEPTED | none (adopts the #874 research recommendation `TIME_WINDOW_NO_GO` as binding policy) | none |
+| [ADR-027](ADR-027-build-first-dev-execution.md) | Build-first Development Execution (managed `pnpm dev` entrypoints and failed-build safety) | ACCEPTED (approved with errata E1–E3, 2026-11-11) | none (adopts the #937 architecture adjudication `ADOPT_BUILD_FIRST_DEV` as binding policy) | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-027**.
+ADR numbers are stable and never reused. The next free number is **ADR-028**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.
