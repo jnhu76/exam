@@ -607,6 +607,137 @@ function coversHelperEntry(entry, helperPath) {
 //     invoked in run.sh: the precondition exists but never runs.
 //   BUILD_GRAPH_E2E_RUNNER_BODY_NOT_FOUND — the function body cannot be
 //     delimited: the precondition must stay checkable.
+//   BUILD_GRAPH_E2E_RUNNER_ORDER — the invocation is duplicated, is not a
+//     bare top-level command, runs before the definition, or runs at/after
+//     the E2E_WORKERS branch or the first real launch_api invocation. A
+//     build that runs after a server boots no longer protects that server.
+//   BUILD_GRAPH_E2E_RUNNER_STRUCTURE_UNSUPPORTED — the top-level structure
+//     (column-0 function definitions and if/for/while blocks) cannot be
+//     classified, or the fixed E2E branch / launch_api anchor is missing:
+//     order cannot be proven, so the guard fails closed instead of guessing.
+//
+// Order is derived from structural anchors, NOT from the first textual
+// occurrence of `launch_api`: its definition precedes the call and comments
+// may repeat the text. The repo's fixed shape is column-0 top-level
+// statements, column-0 `name() {` … `}` function spans, and column-0
+// `if`/`for`/`while` openers with their `fi`/`done` closers. Anything outside
+// that shape is an unsupported structure, never a silent pass.
+
+const RUNNER_FUNCTION_DEFINITION =
+  /^(?:function\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{/;
+const RUNNER_CONTROL_OPEN = /^(if|for|while|until|select|case)\b/;
+const RUNNER_CONTROL_CLOSE = /^(fi|done|esac)\b/;
+// The repo's fixed serial/parallel split: both the serial branch and the
+// parallel path that follows it are after this anchor.
+const RUNNER_BRANCH_ANCHOR = /^if \[\[ "\$E2E_WORKERS" -le 1 \]\]; then\s*$/;
+// A real launch_api invocation (the definition line `launch_api() {` does
+// not match: `(` follows the name).
+const RUNNER_LAUNCH_INVOCATION = /^launch_api(?:\s|$)/;
+
+/**
+ * Function spans for every column-0 `name() {` definition. A one-line
+ * definition closes on its own line; a multiline one closes at the next
+ * column-0 `}`. An unterminated definition makes the structure unsupported
+ * (the caller treats null as fail-closed, never a vacuous pass).
+ */
+function runnerFunctionSpans(lines) {
+  const spans = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line !== line.trimStart()) continue;
+    if (!RUNNER_FUNCTION_DEFINITION.test(line)) continue;
+    const open = line.indexOf("{");
+    const inlineClose = line.indexOf("}", open + 1);
+    if (inlineClose !== -1) {
+      spans.push({ start: i, end: i });
+      continue;
+    }
+    let end = -1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      if (lines[j] === "}") {
+        end = j;
+        break;
+      }
+    }
+    if (end === -1) return null;
+    spans.push({ start: i, end });
+    i = end;
+  }
+  return spans;
+}
+
+/**
+ * Per-line "is this a top-level statement" flags, or null when the fixed
+ * top-level structure cannot be classified. Only column-0 lines participate:
+ * function bodies and indented block bodies are never top-level statements,
+ * and control depth is tracked from column-0 if/for/while/case openers and
+ * their closers. A one-line compound or an unbalanced block is unsupported.
+ */
+function runnerTopLevelLines(lines) {
+  const spans = runnerFunctionSpans(lines);
+  if (spans === null) return null;
+  const inFunction = new Array(lines.length).fill(false);
+  for (const span of spans) {
+    for (let i = span.start; i <= span.end; i += 1) inFunction[i] = true;
+  }
+  const topLevel = new Array(lines.length).fill(false);
+  let depth = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (inFunction[i]) continue;
+    const raw = lines[i];
+    const trimmed = raw.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
+    if (raw !== raw.trimStart()) continue;
+    topLevel[i] = depth === 0;
+    if (RUNNER_CONTROL_CLOSE.test(raw)) {
+      if (depth === 0) return null;
+      depth -= 1;
+      continue;
+    }
+    const opener = RUNNER_CONTROL_OPEN.exec(raw);
+    if (opener) {
+      const keyword = opener[1];
+      const required =
+        keyword === "if"
+          ? /\bthen\b/
+          : keyword === "case"
+            ? /\bin\b/
+            : /\bdo\b/;
+      const closer =
+        keyword === "if"
+          ? /\bfi\b/
+          : keyword === "case"
+            ? /\besac\b/
+            : /\bdone\b/;
+      // A one-line compound would need real shell parsing to attribute.
+      if (!required.test(raw) || closer.test(raw)) return null;
+      depth += 1;
+    }
+  }
+  return depth === 0 ? topLevel : null;
+}
+
+/**
+ * Locate the unique `name() {` definition and its closing `}`. Only the
+ * repo's real column-0 shape is recognized; duplicate or unterminated
+ * definitions fail closed.
+ */
+function locateRunnerFunction(lines, functionName) {
+  const escaped = functionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const definition = new RegExp(`^${escaped}\\s*\\(\\s*\\)\\s*\\{\\s*$`);
+  const starts = [];
+  lines.forEach((line, index) => {
+    if (definition.test(line)) starts.push(index);
+  });
+  if (starts.length !== 1) return null;
+  const start = starts[0];
+  const body = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === "}") return { start, end: i, body };
+    body.push(lines[i]);
+  }
+  return null;
+}
 
 /**
  * One shell function body as a line array, or null when the body cannot be
@@ -615,17 +746,8 @@ function coversHelperEntry(entry, helperPath) {
  * as a violation, never a vacuous pass.
  */
 export function extractRunnerFunctionBody(runShText, functionName) {
-  const lines = runShText.split(/\r?\n/);
-  const start = lines.findIndex((line) =>
-    line.trimStart().startsWith(`${functionName}() {`),
-  );
-  if (start === -1) return null;
-  const body = [];
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (lines[i].trim() === "}") return body;
-    body.push(lines[i]);
-  }
-  return null;
+  const located = locateRunnerFunction(runShText.split(/\r?\n/), functionName);
+  return located === null ? null : located.body;
 }
 
 // Canonical runner build: `pnpm build` with an optional simple redirect.
@@ -633,15 +755,16 @@ const RUNNER_CANONICAL_BUILD = /^pnpm\s+build(?:\s+>\s*\/dev\/null)?$/;
 
 export function e2eRunnerBuildFindings({ runShText, functionName }) {
   const findings = [];
-  const body = extractRunnerFunctionBody(runShText, functionName);
-  if (body === null) {
+  const lines = runShText.split(/\r?\n/);
+  const located = locateRunnerFunction(lines, functionName);
+  if (located === null) {
     findings.push(
       `${functionName}(): BUILD_GRAPH_E2E_RUNNER_BODY_NOT_FOUND — the ${functionName}() { … } body cannot be located or is unterminated; the E2E build precondition must stay checkable (fail closed)`,
     );
     return findings;
   }
   let canonicalCount = 0;
-  for (const raw of body) {
+  for (const raw of located.body) {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) continue;
     if (RUNNER_CANONICAL_BUILD.test(line)) {
@@ -665,14 +788,112 @@ export function e2eRunnerBuildFindings({ runShText, functionName }) {
       `BUILD_GRAPH_E2E_RUNNER_BUILD_MISSING — ${functionName}() contains no canonical workspace build (pnpm build); the E2E entry would consume whatever dist the host happens to hold (#920 class)`,
     );
   }
-  // The precondition must actually run: a bare invocation line outside the
-  // definition, before any server boot.
-  const hasCall = runShText
-    .split(/\r?\n/)
-    .some((line) => line.trim() === functionName);
-  if (!hasCall) {
+
+  // The precondition must actually run. "Run" is a structural claim, not a
+  // text occurrence: exactly one bare top-level invocation, after the
+  // definition, before the serial/parallel branch and before the first real
+  // API launch.
+  const invocations = [];
+  lines.forEach((raw, index) => {
+    if (index >= located.start && index <= located.end) return;
+    const trimmed = raw.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) return;
+    if (trimmed === functionName) {
+      invocations.push({ index, canonical: raw === raw.trimStart() });
+      return;
+    }
+    if (
+      trimmed.startsWith(`${functionName} `) ||
+      trimmed.startsWith(`${functionName}\t`)
+    ) {
+      invocations.push({ index, canonical: false });
+    }
+  });
+  if (invocations.length === 0) {
     findings.push(
       `BUILD_GRAPH_E2E_RUNNER_CALL_MISSING — ${functionName}() is defined but never invoked; the canonical build would never execute`,
+    );
+    return findings;
+  }
+  if (invocations.length > 1) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_ORDER — ${functionName}() is invoked ${invocations.length} times (lines ${invocations
+        .map((invocation) => invocation.index + 1)
+        .join(", ")}); exactly one top-level invocation is supported`,
+    );
+    return findings;
+  }
+
+  const invocation = invocations[0];
+  const topLevel = runnerTopLevelLines(lines);
+  if (topLevel === null) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_STRUCTURE_UNSUPPORTED — the top-level structure of run.sh cannot be classified (column-0 function definitions and if/for/while blocks expected); the ${functionName}() call order cannot be proven, so the guard fails closed`,
+    );
+    return findings;
+  }
+  if (!invocation.canonical) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_ORDER — the ${functionName}() invocation is not a bare top-level command line; a conditional or indented invocation does not guarantee the build ran before the E2E branch`,
+    );
+    return findings;
+  }
+  if (!topLevel[invocation.index]) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_ORDER — the ${functionName}() invocation is inside a control-flow block; it must run unconditionally before the E2E_WORKERS branch`,
+    );
+    return findings;
+  }
+  if (invocation.index <= located.end) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_ORDER — the ${functionName}() invocation precedes its definition (line ${
+        located.start + 1
+      }); it would fail with command-not-found instead of building the closure`,
+    );
+    return findings;
+  }
+
+  const branchIndex = lines.findIndex((line) =>
+    RUNNER_BRANCH_ANCHOR.test(line),
+  );
+  if (branchIndex === -1 || topLevel[branchIndex] !== true) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_STRUCTURE_UNSUPPORTED — the fixed E2E serial/parallel branch anchor (a top-level \`if [[ "$E2E_WORKERS" -le 1 ]]; then\`) was not found; the ${functionName}() call order cannot be proven against the branch boundary`,
+    );
+    return findings;
+  }
+  const launchIndex = lines.findIndex((line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed !== "" &&
+      !trimmed.startsWith("#") &&
+      !RUNNER_FUNCTION_DEFINITION.test(trimmed) &&
+      RUNNER_LAUNCH_INVOCATION.test(trimmed)
+    );
+  });
+  if (launchIndex === -1) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_STRUCTURE_UNSUPPORTED — no real launch_api invocation was found; the ${functionName}() call order cannot be proven against API startup (a definition or comment does not count)`,
+    );
+    return findings;
+  }
+  if (invocation.index > branchIndex) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_ORDER — the ${functionName}() invocation (line ${
+        invocation.index + 1
+      }) runs after the E2E_WORKERS branch (line ${
+        branchIndex + 1
+      }); the build must complete before either the serial or parallel branch starts`,
+    );
+    return findings;
+  }
+  if (invocation.index > launchIndex) {
+    findings.push(
+      `BUILD_GRAPH_E2E_RUNNER_ORDER — the ${functionName}() invocation (line ${
+        invocation.index + 1
+      }) runs after the first launch_api invocation (line ${
+        launchIndex + 1
+      }); a server would boot against stale or missing dist (#920 class)`,
     );
   }
   return findings;

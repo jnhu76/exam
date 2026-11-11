@@ -587,12 +587,19 @@ describe("C2 helper coverage", () => {
 });
 
 describe("E2E runner build precondition (#947)", () => {
-  // The repo's real build_assets() shape, compressed: comments/blank lines
-  // and non-build statements (log/rm/cp) must never masquerade as build
-  // claims; the canonical line is `pnpm build >/dev/null`; the invocation
-  // is a bare `build_assets` line outside the definition.
+  // The repo's real runner shape, compressed: comments/blank lines and
+  // non-build statements (log/rm/cp) must never masquerade as build claims;
+  // the canonical line is `pnpm build >/dev/null`; the invocation is a bare
+  // top-level `build_assets` line outside the definition, before the
+  // serial/parallel branch and before the first real launch_api call. The
+  // launch_api definition and a comment repeating its name come first on
+  // purpose — order must be derived from structural anchors, never from the
+  // first textual occurrence.
   const canonicalRunSh = [
     "set -euo pipefail",
+    "launch_api() {",
+    '  local db_url="$1"',
+    "}",
     "build_assets() {",
     "  # INVARIANT (#938): no stale internal dist before server boot",
     '  log "构建 workspace 全部包（canonical build）+ 同步 apps/api/public..."',
@@ -601,7 +608,12 @@ describe("E2E runner build precondition (#947)", () => {
     "  cp -r apps/web/dist apps/api/public",
     "}",
     "",
+    "# launch_api is defined above; this comment must not be mistaken for a call",
     "build_assets",
+    "",
+    'if [[ "$E2E_WORKERS" -le 1 ]]; then',
+    '  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log',
+    "fi",
   ].join("\n");
 
   const findingsFor = (runShText: string): string[] =>
@@ -675,10 +687,95 @@ describe("E2E runner build precondition (#947)", () => {
   });
 
   it("an uninvoked definition is CALL_MISSING", () => {
-    const uninvoked = canonicalRunSh.replace(/\nbuild_assets$/, "");
+    const uninvoked = canonicalRunSh.replace("\nbuild_assets\n", "\n");
     expect(findingsFor(uninvoked)).toEqual([
       expect.stringContaining("BUILD_GRAPH_E2E_RUNNER_CALL_MISSING"),
     ]);
+  });
+
+  it("a comment naming build_assets is not an invocation", () => {
+    const commented = canonicalRunSh.replace(
+      "\nbuild_assets\n",
+      "\n# build_assets\n",
+    );
+    expect(findingsFor(commented)).toEqual([
+      expect.stringContaining("BUILD_GRAPH_E2E_RUNNER_CALL_MISSING"),
+    ]);
+  });
+
+  it("a duplicated invocation is ORDER — exactly one top-level call is supported", () => {
+    const duplicated = `${canonicalRunSh}\n\nbuild_assets`;
+    const findings = findingsFor(duplicated);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    expect(findings[0]).toContain("2 times");
+  });
+
+  it("an invocation inside a control-flow block is ORDER — top-level means unconditional", () => {
+    const conditional = canonicalRunSh
+      .replace("\nbuild_assets\n", "\n")
+      .replace(
+        "set -euo pipefail\n",
+        'set -euo pipefail\nif [[ -n "$CI" ]]; then\nbuild_assets\nfi\n',
+      );
+    const findings = findingsFor(conditional);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    expect(findings[0]).toContain("control-flow block");
+  });
+
+  it("an invocation after the E2E_WORKERS branch is ORDER", () => {
+    const moved = canonicalRunSh
+      .replace("\nbuild_assets\n", "\n")
+      .replace("\nfi", "\nfi\n\nbuild_assets");
+    const findings = findingsFor(moved);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    expect(findings[0]).toContain("after the E2E_WORKERS branch");
+  });
+
+  it("an indented invocation inside the branch is ORDER", () => {
+    const moved = canonicalRunSh
+      .replace("\nbuild_assets\n", "\n")
+      .replace(
+        '  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log',
+        '  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log\n  build_assets',
+      );
+    const findings = findingsFor(moved);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    // Indented inside the branch: rejected as non-bare before the launch
+    // index is even consulted.
+    expect(findings[0]).toContain("bare top-level command line");
+  });
+
+  it("a top-level invocation after a real launch_api call is ORDER", () => {
+    // An early launch_api call before the branch isolates the launch anchor:
+    // the build call is still before the branch, so only the API-startup
+    // rule can reject it.
+    const moved = canonicalRunSh
+      .replace("\nbuild_assets\n", "\n")
+      .replace("set -euo pipefail\n", "set -euo pipefail\nlaunch_api early\n")
+      .replace(
+        'if [[ "$E2E_WORKERS" -le 1 ]]; then',
+        'build_assets\nif [[ "$E2E_WORKERS" -le 1 ]]; then',
+      );
+    const findings = findingsFor(moved);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    expect(findings[0]).toContain("after the first launch_api invocation");
+  });
+
+  it("a missing E2E branch anchor is STRUCTURE_UNSUPPORTED (fail closed)", () => {
+    const noBranch = canonicalRunSh.replace(
+      'if [[ "$E2E_WORKERS" -le 1 ]]; then\n  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log\nfi',
+      'launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log',
+    );
+    const findings = findingsFor(noBranch);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain(
+      "BUILD_GRAPH_E2E_RUNNER_STRUCTURE_UNSUPPORTED",
+    );
   });
 });
 
@@ -964,5 +1061,49 @@ describe("real lint:arch entry rejects the counterfactuals (disposable worktree)
     expect(run.code, run.stderr).toBe(1);
     expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_UNSUPPORTED");
     expect(run.stderr).toContain("pnpm run build");
+  }, 60_000);
+
+  it("F2: a commented-out call is not an invocation", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original.replace("\nbuild_assets\n", "\n# build_assets\n"),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_CALL_MISSING");
+  }, 60_000);
+
+  it("F2: a duplicated build_assets call is rejected as ORDER", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original.replace("\nbuild_assets\n", "\nbuild_assets\nbuild_assets\n"),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    expect(run.stderr).toContain("2 times");
+  }, 60_000);
+
+  it("F2: moving build_assets after the E2E_WORKERS branch is rejected as ORDER", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original
+        .replace("\nbuild_assets\n", "\n")
+        .replace(
+          "fi\n\n# ── 并行 shard 路径",
+          "fi\n\nbuild_assets\n\n# ── 并行 shard 路径",
+        ),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
+    expect(run.stderr).toContain("after the E2E_WORKERS branch");
+  }, 60_000);
+
+  it("F2: moving build_assets after the serial API launch is rejected as ORDER", async () => {
+    const run = await runWithMutatedRunSh((original) =>
+      original
+        .replace("\nbuild_assets\n", "\n")
+        .replace(
+          '  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log\n',
+          '  launch_api "${DB_BASE_URL_NO_NAME}/${E2E_DB_NAME}" "$DEV_API_PORT" /tmp/e2e-wsl-api.log\n  build_assets\n',
+        ),
+    );
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("BUILD_GRAPH_E2E_RUNNER_ORDER");
   }, 60_000);
 });
