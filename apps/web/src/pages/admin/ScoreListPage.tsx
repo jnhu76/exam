@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
@@ -89,9 +89,20 @@ export function ScoreListPage() {
     | "passed"
     | "failed";
 
+  // The latest-request guard (same contract as QuestionPage's list query,
+  // #958): the scores query is URL-driven, and a navigation this page did not
+  // author (Back/Forward, a link) can start a NEW request while the previous one is
+  // still on the wire — the page's own full-page loading state unmounts its
+  // controls, but nothing stops an external navigation. A response whose
+  // generation is no longer current must not mutate rows, stats, error, or
+  // the loading flag: the table would describe a query the URL no longer
+  // names.
+  const requestGenerationRef = useRef(0);
+
   /** Fetches the score list for the current exam with pagination and pass filter. */
   const loadScores = useCallback(async () => {
     if (!id) return;
+    const generation = ++requestGenerationRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -101,13 +112,19 @@ export function ScoreListPage() {
       const data = await api.get<ScoreListResponse>(
         `/api/exams/${id}/scores?${params.toString()}`,
       );
+      if (generation !== requestGenerationRef.current) return;
       setScores(data);
     } catch (err) {
+      if (generation !== requestGenerationRef.current) return;
       setError(
         getApiErrorMessage(err, t, t("admin.scoreList.errors.loadFailed")),
       );
     } finally {
-      setIsLoading(false);
+      // A superseded request must not end the CURRENT request's loading
+      // window either.
+      if (generation === requestGenerationRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [id, page, passFilter, t]);
 
