@@ -779,6 +779,134 @@ describe("E2E runner build precondition (#947)", () => {
   });
 });
 
+/**
+ * #947 — `@exam/db#build` dependsOn override pinning. turbo's `^build`
+ * schedules workspace devDependency edges too (#939 probe), so db#build was
+ * serial-gated on @exam/auth#build and @exam/source-fixture#build — both
+ * test-scope (db devDependencies), neither imported by the db build-scope
+ * compile set. The override in turbo.json narrows db#build dependsOn to the
+ * declared product dependency (@exam/domain#build), which is sound ONLY
+ * while that holds. This test scans the REAL tsconfig.build.json compile
+ * set (not a filename guess) and fails both drift directions:
+ *
+ *   - the build scope imports an @exam/* package outside db's declared
+ *     product dependencies → the override would let the build consume
+ *     stale (or absent) dist — extend the override deliberately;
+ *   - db declares a workspace product dependency the override does not
+ *     list → the narrowed dependsOn no longer covers the product graph.
+ *
+ * Exclusion patterns are translated from the repo's real tsconfig.build.json
+ * forms; an unrecognized pattern is a loud failure, never a silently
+ * narrowed scan.
+ */
+describe("#947 db build-scope dependency pinning", () => {
+  function isExcludedBuildPattern(pattern: string): boolean {
+    return (
+      pattern === "dist" ||
+      pattern === "src/**/__tests__/**" ||
+      /^src\/\*\*\/\*\.(?:test|spec|testHelpers)\.ts$/.test(pattern)
+    );
+  }
+
+  async function realBuildScopeFiles(): Promise<string[]> {
+    const buildConfig = JSON.parse(
+      await readFile(
+        join(REPO_ROOT, "packages/db/tsconfig.build.json"),
+        "utf8",
+      ),
+    ) as { exclude?: string[] };
+    const exclude = buildConfig.exclude ?? [];
+    const unhandled = exclude.filter((p) => !isExcludedBuildPattern(p));
+    expect(unhandled).toEqual([]);
+
+    const files: string[] = [];
+    const dbRoot = join(REPO_ROOT, "packages", "db");
+    async function walk(dir: string): Promise<void> {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const abs = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === "__tests__") continue;
+          await walk(abs);
+          continue;
+        }
+        if (
+          !entry.name.endsWith(".ts") ||
+          /\.(?:test|spec|testHelpers)\.ts$/.test(entry.name)
+        ) {
+          continue;
+        }
+        files.push(abs.slice(dbRoot.length + 1).replace(/[/\\]/g, "/"));
+      }
+    }
+    await walk(join(dbRoot, "src"));
+    return files;
+  }
+
+  it("db build-scope @exam/* imports stay within product dependencies and the turbo override", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(REPO_ROOT, "packages/db/package.json"), "utf8"),
+    ) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const productDeps = Object.keys(manifest.dependencies ?? {}).filter((d) =>
+      d.startsWith("@exam/"),
+    );
+    const testScopeDeps = Object.keys(manifest.devDependencies ?? {}).filter(
+      (d) => d.startsWith("@exam/"),
+    );
+    // The override only pays for itself while there ARE test-scope edges to
+    // drop; if that changes, revisit the override deliberately.
+    expect(testScopeDeps).toEqual(["@exam/auth", "@exam/source-fixture"]);
+
+    const turboConfig = JSON.parse(
+      await readFile(join(REPO_ROOT, "turbo.json"), "utf8"),
+    ) as {
+      tasks: Record<string, { dependsOn?: string[]; outputs?: string[] }>;
+    };
+    const override = turboConfig.tasks["@exam/db#build"];
+    if (!override) {
+      throw new Error(
+        "turbo.json: @exam/db#build override missing — restore dependsOn [@exam/domain#build] or re-prove the db build scope",
+      );
+    }
+    const overrideNames = (override.dependsOn ?? []).map((t) =>
+      t.replace(/#build$/, ""),
+    );
+
+    // A `#task` entry REPLACES the shared task config rather than merging
+    // (observed live: without an explicit outputs here, db#build lost
+    // `dist/**` and a cache hit stopped restoring dist). Pin the outputs so
+    // the narrowed dependsOn cannot silently disable dist caching.
+    expect(override.outputs).toEqual(["dist/**"]);
+
+    const consumed = new Set<string>();
+    for (const rel of await realBuildScopeFiles()) {
+      const text = await readFile(join(REPO_ROOT, "packages/db", rel), "utf8");
+      for (const m of text.matchAll(
+        /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*\(\s*|\bimport\s+)["'](@exam\/[^"']+)["']/g,
+      )) {
+        const specifier = m[1];
+        if (specifier !== undefined) consumed.add(specifier);
+      }
+    }
+
+    const undeclared = [...consumed].filter((p) => !productDeps.includes(p));
+    expect(
+      undeclared,
+      `db build scope consumes ${undeclared.join(", ")} outside declared product dependencies (${productDeps.join(", ")}) — a narrowed @exam/db#build dependsOn would serve stale or missing dist; extend the override deliberately`,
+    ).toEqual([]);
+
+    const uncovered = productDeps.filter((p) => !overrideNames.includes(p));
+    expect(
+      uncovered,
+      `db product dependencies (${uncovered.join(", ")}) are not listed in the turbo.json @exam/db#build dependsOn (${overrideNames.join(", ")}) — the override no longer covers the product graph`,
+    ).toEqual([]);
+
+    expect(consumed.size).toBeGreaterThan(0);
+  }, 30_000);
+});
+
 describe("real repo scans clean through the policy the checker uses", () => {
   async function collectMembers(): Promise<WorkspaceMember[]> {
     const yaml = await readFile(join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8");
