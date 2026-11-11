@@ -491,6 +491,11 @@ const zhCN = {
 
   /** ExamListPage (candidate-facing exam list) copy. */
   examList: {
+    // WHY (#932): a visible page title under the shell's top-bar nav link —
+    // the candidate pages (settings 账号设置, start, result) all render
+    // visible titles for the same nav link, and a visible heading is the
+    // strongest heading-semantic form.
+    pageTitle: "我的考试",
     actions: {
       start: "开始考试",
       resume: "继续考试",
@@ -503,6 +508,10 @@ const zhCN = {
       noDuration: "不限时",
       deadline: "截止时间制",
       noEnd: "不限时",
+      // The label names the number as the historical best (not the latest
+      // attempt, not the exam total), so a bare "0 分" can't be misread; the
+      // trophy icon renders only on a pass (#932).
+      bestScore: "历史最高 {{score}} 分",
       // R0-F5: one passing-requirement vocabulary across pages —
       // threshold/full-marks pair with an explicit unit; compact inline form.
       passingScore: "及格要求: {{score}}/{{total}} 分",
@@ -518,7 +527,10 @@ const zhCN = {
     },
     empty: {
       title: "暂无可参加的考试",
-      description: "当前没有可用的考试。",
+      // The empty state names the cause and the executable next step instead
+      // of restating emptiness (#932).
+      description:
+        "考试由管理员统一分配，分配后显示在这里；如有疑问请联系管理员。",
     },
     errors: {
       loadFailed: "加载考试列表失败",
