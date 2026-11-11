@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  UNSAFE_NavigationContext,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+  type Location,
+  type Navigator,
+} from "react-router";
 import { useTranslation } from "react-i18next";
 import { ApiError, api } from "@/lib/api";
 import { toast } from "sonner";
@@ -188,6 +202,15 @@ export function QuestionPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  // The declarative routers put the live history instance in the navigation
+  // context as `navigator`; the published `Navigator` type narrows it to the
+  // mutation surface, but the runtime object is a full history, so widen it
+  // once here to read `location` — the only channel that reflects a committed
+  // navigation synchronously, before React renders it.
+  const history = useContext(UNSAFE_NavigationContext)
+    .navigator as Navigator & {
+    location: Location;
+  };
 
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -257,6 +280,19 @@ export function QuestionPage() {
   const latestParams = useRef<URLSearchParams | null>(null);
   if (latestParams.current === null) {
     latestParams.current = new URLSearchParams(searchParams);
+  }
+  // The history entry this page last observed or wrote. Every page-side signal
+  // — render props, refs updated by render or by effects — still describes the
+  // PREVIOUS entry between a committed external navigation (Back/Forward, a
+  // link) and the flush of the render/effect chain that would cancel a pending
+  // draft. The debounce deadline can expire inside that gap (#953), so the
+  // commit boundary must compare against the history instance itself, and it
+  // must key on the ENTRY (location.key), not on the parameter string: two
+  // entries may carry identical params. Updated exactly where latestParams is,
+  // so "the params I know" and "the entry I am on" can never disagree.
+  const observedEntryKey = useRef<string | null>(null);
+  if (observedEntryKey.current === null) {
+    observedEntryKey.current = location.key;
   }
 
   const courseId = searchParams.get("courseId") ?? "";
@@ -356,26 +392,37 @@ export function QuestionPage() {
       if (current.toString() === next.toString()) return;
       latestParams.current = new URLSearchParams(next);
       setSearchParams(next, { replace: !options?.push });
+      // The write lands on the history instance synchronously and the pushed
+      // or replaced entry gets its own key: observe it now, so this page's own
+      // write is never mistaken for a foreign navigation by the commit
+      // boundary in handleSearchCommit.
+      observedEntryKey.current = history.location.key;
     },
-    [setSearchParams],
+    [setSearchParams, history],
   );
 
   useEffect(() => {
     const observed = new URLSearchParams(searchParams);
     if (
       latestParams.current !== null &&
-      latestParams.current.toString() !== observed.toString()
+      (latestParams.current.toString() !== observed.toString() ||
+        observedEntryKey.current !== location.key)
     ) {
       // External navigation: the query the user navigated to wins over any
       // draft that has not landed yet. Resetting the field also cancels the
       // pending debounced commit (useDataViewTextCommit cancels when the value
-      // moves away from the term it is about to commit).
+      // moves away from the term it is about to commit). Foreignness keys on
+      // the ENTRY, not only on the params: a Back to an entry carrying the
+      // same committed query is still a navigation away from the entry the
+      // draft belongs to. Page-authored writes are never foreign — writeParams
+      // re-observes both the params and the key in the same synchronous block.
       const committed = observed.get("search") ?? "";
       setSearchInput(committed);
       lastCommittedSearch.current = committed;
     }
     latestParams.current = observed;
-  }, [searchParams]);
+    observedEntryKey.current = location.key;
+  }, [searchParams, location]);
 
   /**
    * Folds the URL onto the server's spelling of a course id.
@@ -663,6 +710,15 @@ export function QuestionPage() {
   // Debounced commit: the settled term becomes the queried one and the page
   // returns to 1. This is the only path that commits `search`.
   function handleSearchCommit(term: string) {
+    // INVARIANT: a draft may only commit on the history entry it was typed on.
+    // The deadline can expire between a committed external navigation and the
+    // cancel chain flushing; committing then would write the departed draft
+    // onto the entry the user navigated TO (URL, reload query and all). The
+    // live entry key is the synchronous authority here — reject the draft at
+    // this boundary unless the page is still on the entry it last observed or
+    // wrote. Page-authored writes never trip this: writeParams re-observes the
+    // key in the same synchronous block.
+    if (history.location.key !== observedEntryKey.current) return;
     commitFilters({ search: term });
   }
 
