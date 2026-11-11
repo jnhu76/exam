@@ -808,6 +808,61 @@ describe("#947 db build-scope dependency pinning", () => {
     );
   }
 
+  // The tsconfig compile set, not a filename guess: every TypeScript source
+  // under src/ that survives the build exclude patterns. Test scope is not
+  // part of the build graph (turbo's ^build still schedules db devDependency
+  // edges for tests, which is why the narrowed override must NOT cover
+  // test-only imports).
+  function isBuildScopeSource(relPath: string): boolean {
+    if (relPath.split("/").includes("__tests__")) return false;
+    return (
+      /\.(?:ts|tsx|mts|cts)$/.test(relPath) &&
+      !/\.(?:test|spec|testHelpers)\.ts$/.test(relPath)
+    );
+  }
+
+  // package.json declares package NAMES, never subpaths. A specifier is an
+  // edge on its first two segments (`@scope/name`); the remainder is a
+  // package subpath. Normalization never invents a declaration: an
+  // undeclared or nonexistent package still fails the productDeps check.
+  function workspacePackageName(specifier: string): string {
+    const [scope, name] = specifier.split("/");
+    return scope !== undefined && name !== undefined
+      ? `${scope}/${name}`
+      : specifier;
+  }
+
+  // Import forms that can create a workspace dependency edge: static
+  // import/export-from, side-effect import, require/require.resolve, and
+  // dynamic import with a static (including template literal) specifier.
+  // `import type` is covered by the `from` branch. This is deliberately a
+  // small regex guard, not a TypeScript AST: the build scope is a closed
+  // file set and unrecognized dynamic forms fail closed below.
+  const WORKSPACE_IMPORT_SPECIFIER =
+    /(?:\bfrom\s+|\brequire(?:\.resolve)?\s*\(\s*|\bimport\s*\(\s*|\bimport\s+)["'`](@exam\/[^"'`]+)["'`]/g;
+
+  // A dynamic import whose argument is not a static string literal cannot
+  // be attributed to a workspace package. Fail closed instead of silently
+  // omitting a possible build dependency.
+  const NON_LITERAL_DYNAMIC_IMPORT = /\bimport\s*\(\s*(?!["'`])[^)]*\)/g;
+
+  function collectWorkspacePackageImports(text: string): string[] {
+    const packages = new Set<string>();
+    for (const match of text.matchAll(WORKSPACE_IMPORT_SPECIFIER)) {
+      const specifier = match[1];
+      if (specifier !== undefined) {
+        packages.add(workspacePackageName(specifier));
+      }
+    }
+    return [...packages];
+  }
+
+  function unresolvedDynamicImports(text: string): string[] {
+    return [...text.matchAll(NON_LITERAL_DYNAMIC_IMPORT)].map(
+      (match) => match[0],
+    );
+  }
+
   async function realBuildScopeFiles(): Promise<string[]> {
     const buildConfig = JSON.parse(
       await readFile(
@@ -829,18 +884,75 @@ describe("#947 db build-scope dependency pinning", () => {
           await walk(abs);
           continue;
         }
-        if (
-          !entry.name.endsWith(".ts") ||
-          /\.(?:test|spec|testHelpers)\.ts$/.test(entry.name)
-        ) {
-          continue;
-        }
-        files.push(abs.slice(dbRoot.length + 1).replace(/[/\\]/g, "/"));
+        const rel = abs.slice(dbRoot.length + 1).replace(/[/\\]/g, "/");
+        if (!isBuildScopeSource(rel)) continue;
+        files.push(rel);
       }
     }
     await walk(join(dbRoot, "src"));
     return files;
   }
+
+  it("classifies package and subpath specifiers as one dependency edge", () => {
+    const declared = ["@exam/domain"];
+    const undeclaredFor = (text: string) =>
+      collectWorkspacePackageImports(text).filter(
+        (pkg) => !declared.includes(pkg),
+      );
+
+    expect(undeclaredFor('import { x } from "@exam/domain";')).toEqual([]);
+    expect(
+      undeclaredFor('import type { X } from "@exam/domain/subpath";'),
+    ).toEqual([]);
+    expect(
+      undeclaredFor('const x = await import("@exam/domain/subpath");'),
+    ).toEqual([]);
+    expect(
+      undeclaredFor("const x = await import(`@exam/domain/subpath`);"),
+    ).toEqual([]);
+    expect(undeclaredFor('const x = require("@exam/domain/subpath");')).toEqual(
+      [],
+    );
+    expect(
+      undeclaredFor('const x = require.resolve("@exam/domain/subpath");'),
+    ).toEqual([]);
+    // A nonexistent workspace package and a real-but-undeclared workspace
+    // package are both dependency violations; normalization does not erase
+    // the distinction from a declared package.
+    expect(
+      undeclaredFor('import x from "@exam/no-such-workspace-package";'),
+    ).toEqual(["@exam/no-such-workspace-package"]);
+    expect(
+      undeclaredFor('import x from "@exam/no-such-workspace-package/sub";'),
+    ).toEqual(["@exam/no-such-workspace-package"]);
+    expect(undeclaredFor('import x from "@exam/auth";')).toEqual([
+      "@exam/auth",
+    ]);
+    expect(undeclaredFor('import x from "@exam/auth/password";')).toEqual([
+      "@exam/auth",
+    ]);
+  });
+
+  it("excludes test-scope files from the build-scope scan", () => {
+    expect(isBuildScopeSource("src/index.ts")).toBe(true);
+    expect(isBuildScopeSource("src/schema/pg.ts")).toBe(true);
+    expect(isBuildScopeSource("src/component.tsx")).toBe(true);
+    expect(isBuildScopeSource("src/module.mts")).toBe(true);
+    expect(isBuildScopeSource("src/index.test.ts")).toBe(false);
+    expect(isBuildScopeSource("src/index.spec.ts")).toBe(false);
+    expect(isBuildScopeSource("src/testHelpers/repo.testHelpers.ts")).toBe(
+      false,
+    );
+    expect(isBuildScopeSource("src/__tests__/index.ts")).toBe(false);
+  });
+
+  it("fails closed on a dynamic import without a static specifier", () => {
+    const text = "const mod = await import(modulePath);\n";
+    expect(unresolvedDynamicImports(text)).toEqual(["import(modulePath)"]);
+    expect(
+      unresolvedDynamicImports('const mod = await import("@exam/domain");\n'),
+    ).toEqual([]);
+  });
 
   it("db build-scope @exam/* imports stay within product dependencies and the turbo override", async () => {
     const manifest = JSON.parse(
@@ -883,12 +995,16 @@ describe("#947 db build-scope dependency pinning", () => {
     const consumed = new Set<string>();
     for (const rel of await realBuildScopeFiles()) {
       const text = await readFile(join(REPO_ROOT, "packages/db", rel), "utf8");
-      for (const m of text.matchAll(
-        /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*\(\s*|\bimport\s+)["'](@exam\/[^"']+)["']/g,
-      )) {
-        const specifier = m[1];
-        if (specifier !== undefined) consumed.add(specifier);
+      for (const pkg of collectWorkspacePackageImports(text)) {
+        consumed.add(pkg);
       }
+      const unresolved = unresolvedDynamicImports(text);
+      expect(
+        unresolved,
+        `${rel}: dynamic import(s) ${unresolved.join(
+          ", ",
+        )} have no static specifier — a possible workspace build dependency cannot be attributed; use a static @exam/* specifier or extend the guard deliberately`,
+      ).toEqual([]);
     }
 
     const undeclared = [...consumed].filter((p) => !productDeps.includes(p));
