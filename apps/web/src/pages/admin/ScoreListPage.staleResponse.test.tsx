@@ -197,7 +197,9 @@ describe("ScoreListPage stale-response ownership", () => {
 
     // Request B: Back to the bare entry (passFilter=all) — held; A is still
     // in flight, so two requests are on the wire at once.
-    screen.getByRole("button", { name: "后退" }).click();
+    await act(async () => {
+      screen.getByRole("button", { name: "后退" }).click();
+    });
     await act(async () => {});
     expect(scoreCalls().at(-1)).toContain("passFilter=all");
     expect(scoreCalls().length).toBe(3);
@@ -239,7 +241,9 @@ describe("ScoreListPage stale-response ownership", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: "及格" })); // A held
-    screen.getByRole("button", { name: "后退" }).click(); // B (current) held
+    await act(async () => {
+      screen.getByRole("button", { name: "后退" }).click(); // B (current) held
+    });
     await act(async () => {});
     expect(scoreCalls().length).toBe(3);
 
@@ -265,6 +269,46 @@ describe("ScoreListPage stale-response ownership", () => {
     ).toBeInTheDocument();
   });
 
+  it("a superseded request settling FIRST must not end the CURRENT request's loading window", async () => {
+    renderPage();
+    await act(async () => {
+      queue.shift()!.resolve(payload([row("初始考生", true, 1)], 1, 1));
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("table")).getByText("初始考生"),
+      ).toBeInTheDocument(),
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "及格" })); // A held
+    await act(async () => {
+      screen.getByRole("button", { name: "后退" }).click(); // B (current) held
+    });
+    expect(scoreCalls().length).toBe(3);
+
+    // The SUPERSEDED request A settles while the current request B is still
+    // on the wire. Its `finally` must not end B's loading window: the page
+    // would drop LoadingState and flash the PREVIOUS query's rows under a
+    // URL that names neither.
+    await act(async () => {
+      queue[0]!.resolve(payload([row("迟到及格考生甲", true, 1)], 1, 1));
+    });
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("迟到及格考生甲")).not.toBeInTheDocument();
+
+    // The current request still completes normally afterwards.
+    await act(async () => {
+      queue[1]!.resolve(payload([row("当前全部考生乙", false, 1)], 1, 1));
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("table")).getByText("当前全部考生乙"),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it("a superseded page-2 response landing after Back to page 1 must not overwrite the restored page", async () => {
     renderPage();
     await act(async () => {
@@ -282,7 +326,9 @@ describe("ScoreListPage stale-response ownership", () => {
     expect(scoreCalls().at(-1)).toContain("page=2");
 
     // Back to page 1 — held; the page-2 request is still in flight.
-    screen.getByRole("button", { name: "后退" }).click();
+    await act(async () => {
+      screen.getByRole("button", { name: "后退" }).click();
+    });
     await act(async () => {});
     expect(scoreCalls().at(-1)).toContain("page=1");
 
