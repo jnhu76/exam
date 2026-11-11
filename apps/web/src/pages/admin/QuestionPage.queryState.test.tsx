@@ -727,7 +727,6 @@ describe("QuestionPage URL query state (#784 A3)", () => {
 
   it("A12(c): an external Back cancels an unlanded debounce commit", async () => {
     mockPaginated(61);
-    const user = userEvent.setup();
     // Entry 1 is the bare list; entry 2 (current) carries the committed search.
     renderPage(["/admin/questions", "/admin/questions?search=abc"]);
     await waitFor(() =>
@@ -735,21 +734,42 @@ describe("QuestionPage URL query state (#784 A3)", () => {
     );
     expect(screen.getByLabelText("搜索题目")).toHaveValue("abc");
 
-    // Type, then navigate away BEFORE the debounce deadline. The draft belongs
-    // to an entry the user has left, so it must neither land nor survive.
-    fireEvent.change(screen.getByLabelText("搜索题目"), {
-      target: { value: "abcd" },
-    });
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: "后退" }));
-    });
-    // Past the debounce deadline: a stale draft landing here would write
-    // search=abcd into the entry the user just navigated to.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    });
-    expect(urlSearch()).not.toContain("search=");
-    expect(screen.getByLabelText("搜索题目")).toHaveValue("");
+    // Real timers made the Back-vs-deadline order depend on machine load: the
+    // click path measures ~240ms idle but crosses the 300ms deadline under CI
+    // contention, letting the deadline expire between the navigation and the
+    // cancel effect chain (run 43030066262: "?search=abcd" on the entry the
+    // user navigated TO). Fake timers pin the order this test verifies.
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      // Type, then navigate away BEFORE the debounce deadline. The draft
+      // belongs to an entry the user has left, so it must neither land nor
+      // survive.
+      fireEvent.change(screen.getByLabelText("搜索题目"), {
+        target: { value: "abcd" },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "后退" }));
+      });
+      // The cancel has landed before the deadline: the field already shows
+      // the entry the user is on now.
+      expect(screen.getByLabelText("搜索题目")).toHaveValue("");
+      // Past the debounce deadline: a stale draft landing here would write
+      // search=abcd into the entry the user just navigated to.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      expect(urlSearch()).not.toContain("search=");
+      expect(screen.getByLabelText("搜索题目")).toHaveValue("");
+      // The entry the user is on carries no search, so its reload query must
+      // not filter by one either — a stale commit would have re-queried with
+      // search=abcd here.
+      expect(questionsCalls().at(-1) ?? "").not.toContain("search=");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("A12(d): a page-authored write does NOT cancel the draft the user typed", async () => {

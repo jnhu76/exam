@@ -75,15 +75,21 @@ describe("useDataViewTextCommit", () => {
   it("cancels a pending commit when the host resets the value externally", () => {
     const { view, onCommit, setValue } = setup();
     act(() => view.result.current.change("stale"));
-    // The host clears the field behind the control (clear-all-filters).
+    // The host clears the field behind the control (clear-all-filters). The
+    // hook observes a new `value` only through a RERENDER: the first rerender
+    // delivers the typed value (it agrees with the pending term, so nothing
+    // cancels), and the reset then arrives as an actual prop CHANGE — the
+    // thing the cancel-on-reset rule keys on. Without the rerenders the
+    // external-reset effect never runs and a later clear() would cancel for
+    // unrelated reasons, leaving the rule unasserted.
+    act(() => view.rerender());
     setValue("");
-    act(() => view.result.current.change("stale"));
-    act(() => view.result.current.clear());
+    act(() => view.rerender());
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    // Only the clear's own commit landed; the stale term never did.
-    expect(onCommit.mock.calls.map(([v]) => v)).toEqual([""]);
+    // The stale term never lands: the reset itself cancelled the commit.
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it("keeps a pending term that the host has not moved (typing to empty commits)", () => {
