@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Repository code-quality gate: bans `console.log` / `console.error` calls in
- * application and package sources. Runs as the root `lint` script and as each
- * workspace package's `lint` script
- * (`node ../../scripts/check-code-quality.mjs`).
+ * application and package sources. Runs as the root `lint` script; the scan
+ * resolves everything from THIS file's location, so a direct invocation from
+ * any workspace package directory performs the same repository-wide scan
+ * (pinned by apps/web/src/codeQualityGate.test.ts).
  *
  * INVARIANT (root resolution): the scan roots are resolved from THIS FILE's
  * location, never from the caller's CWD. A package CWD (e.g. apps/api) runs

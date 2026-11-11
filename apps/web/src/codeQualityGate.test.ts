@@ -9,10 +9,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * Regression gate for #821 G1/G4 — `scripts/check-code-quality.mjs`.
  *
  * G1: the scanner resolved `["apps", "packages"]` against the CALLER's CWD, so
- * every workspace package's `lint` script
- * (`node ../../scripts/check-code-quality.mjs`) died with `ENOENT ... scandir
- * 'apps'` and was dead wiring. The real-CLI proof below is red before the fix
- * (apps/api CWD → exit 1 + ENOENT) and green after.
+ * any invocation from a package directory died with `ENOENT ... scandir
+ * 'apps'` and was dead wiring (#821; the per-package `lint` script wiring that
+ * exposed this was retired in #948 — direct invocation stays supported). The
+ * real-CLI proof below is red before the fix (apps/api CWD → exit 1 + ENOENT)
+ * and green after.
  *
  * G4: Playwright's gitignored report/test output under apps/e2e/ is generated
  * JavaScript that legitimately writes diagnostics through the banned console
