@@ -167,6 +167,15 @@ function HistoryNav() {
       <button type="button" onClick={() => void navigate(1)}>
         前进
       </button>
+      {/* A same-route navigation this page did not author (a link from
+          elsewhere in the app): the route stays mounted, so the unmount
+          cancellation never runs. */}
+      <button
+        type="button"
+        onClick={() => void navigate("/admin/questions?type=single_choice")}
+      >
+        外部导航
+      </button>
     </div>
   );
 }
@@ -767,6 +776,168 @@ describe("QuestionPage URL query state (#784 A3)", () => {
       // not filter by one either — a stale commit would have re-queried with
       // search=abcd here.
       expect(questionsCalls().at(-1) ?? "").not.toContain("search=");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // ── A12(c) race variant — the CANCEL CHAIN cannot help here ──
+  //
+  // A12(c) above lets the cancellation land BEFORE the deadline. This variant
+  // pins the other order CI run 43030066262 actually hit: the navigation is
+  // COMMITTED (the history entry has switched) but the three-stage cancel
+  // chain — navigation detector effect → setSearchInput → hook reset effect —
+  // has not flushed when the deadline expires. A bare dispatch commits the
+  // navigation without flushing effects, which is exactly that moment; the
+  // commit boundary itself, not the effect chain, must reject the draft.
+  it("A12(c-race): the deadline rejects a draft when Back has committed but the cancel chain has not flushed", async () => {
+    mockPaginated(61);
+    // Entry 1 is the bare list; entry 2 (current) carries the committed search.
+    renderPage(["/admin/questions", "/admin/questions?search=abc"]);
+    await waitFor(() =>
+      expect(within(desktopShell()).getByText("第1题")).toBeInTheDocument(),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      fireEvent.change(screen.getByLabelText("搜索题目"), {
+        target: { value: "abcd" },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299);
+      });
+      const callsBeforeNav = questionsCalls().length;
+      // Bare dispatch: navigate(-1) commits the history switch inside the click
+      // task, and the transition render + passive effects stay queued — the
+      // window a loaded machine lets the deadline expire into.
+      screen.getByRole("button", { name: "后退" }).click();
+      vi.advanceTimersByTime(1);
+      await act(async () => {});
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      // URL: the entry the user navigated TO stays the bare list.
+      expect(urlSearch()).not.toContain("search=");
+      // UI: the field describes the entry the user is on.
+      expect(screen.getByLabelText("搜索题目")).toHaveValue("");
+      // API: no request issued after the navigation may carry the stale draft —
+      // the whole post-navigation sequence, not just the last call.
+      const afterNav = questionsCalls().slice(callsBeforeNav);
+      expect(afterNav.length).toBeGreaterThan(0);
+      for (const call of afterNav) {
+        expect(call).not.toContain("search=");
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("A12(c-race): the rejection keys on the history ENTRY, not on its params", async () => {
+    mockPaginated(61);
+    // Both entries carry the same committed search, so a guard that compares
+    // parameter strings would see "no change" and let the stale draft through.
+    renderPage(["/admin/questions?search=abc", "/admin/questions?search=abc"]);
+    await waitFor(() =>
+      expect(within(desktopShell()).getByText("第1题")).toBeInTheDocument(),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      fireEvent.change(screen.getByLabelText("搜索题目"), {
+        target: { value: "abcd" },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299);
+      });
+      screen.getByRole("button", { name: "后退" }).click();
+      vi.advanceTimersByTime(1);
+      await act(async () => {});
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      expect(urlSearch()).toBe("?search=abc");
+      expect(screen.getByLabelText("搜索题目")).toHaveValue("abc");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("A12(c-race): a committed Forward is rejected the same way", async () => {
+    mockPaginated(61);
+    // On the bare entry (index 0), Forward re-enters the committed search.
+    renderPage(["/admin/questions", "/admin/questions?search=abc"], {
+      initialIndex: 0,
+    });
+    await waitFor(() =>
+      expect(within(desktopShell()).getByText("第1题")).toBeInTheDocument(),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      fireEvent.change(screen.getByLabelText("搜索题目"), {
+        target: { value: "abcd" },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299);
+      });
+      const callsBeforeNav = questionsCalls().length;
+      screen.getByRole("button", { name: "前进" }).click();
+      vi.advanceTimersByTime(1);
+      await act(async () => {});
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      // The forward entry keeps its own committed search; the draft typed on
+      // the entry the user left neither lands nor survives.
+      expect(urlSearch()).toBe("?search=abc");
+      expect(screen.getByLabelText("搜索题目")).toHaveValue("abc");
+      const afterNav = questionsCalls().slice(callsBeforeNav);
+      expect(afterNav.length).toBeGreaterThan(0);
+      for (const call of afterNav) {
+        expect(call).not.toContain("search=abcd");
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("A12(c-race): a same-route external navigation is rejected the same way", async () => {
+    mockPaginated(61);
+    renderPage("/admin/questions");
+    await waitFor(() =>
+      expect(within(desktopShell()).getByText("第1题")).toBeInTheDocument(),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      fireEvent.change(screen.getByLabelText("搜索题目"), {
+        target: { value: "abcd" },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299);
+      });
+      const callsBeforeNav = questionsCalls().length;
+      // A push from outside this page (a link elsewhere in the app): the route
+      // stays mounted, only the query changes.
+      screen.getByRole("button", { name: "外部导航" }).click();
+      vi.advanceTimersByTime(1);
+      await act(async () => {});
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      // The external entry keeps exactly what it named — the type filter, no
+      // search — and the draft from the departed entry never lands.
+      expect(urlSearch()).toBe("?type=single_choice");
+      expect(screen.getByLabelText("搜索题目")).toHaveValue("");
+      const afterNav = questionsCalls().slice(callsBeforeNav);
+      expect(afterNav.length).toBeGreaterThan(0);
+      for (const call of afterNav) {
+        expect(call).not.toContain("search=");
+      }
     } finally {
       vi.useRealTimers();
     }

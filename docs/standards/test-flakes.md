@@ -3449,6 +3449,47 @@ AGGREGATION_BASIS = 不与 CASE-2026-11-03-CI-COVERAGE-BUDGETS 聚合（coverage
 
 ---
 
+### OBS-2026-11-11-001 — CI Web lane `A12(c)` 断言 `'?search=abcd' not to contain 'search='` 失败（同 head 重跑通过）
+
+```text
+OBSERVED_AT = 2026-11-11T13:40:08Z（GitHub Actions 权威 run）
+GIT_SHA = 2830e6e0（release/v0.0.13 准备提交）
+BRANCH = release/v0.0.13
+COMMAND = CI Web tests lane
+FAILED_FILE = apps/web/src/pages/admin/QuestionPage.queryState.test.tsx
+FAILED_TEST = A12(c): an external Back cancels an unlanded debounce commit
+FAILURE_PHASE = 运行时断言（非 setup/teardown）
+FAILURE_CLASS = 时序依赖（真实 timer 与取消 effect 链的相对顺序随负载翻转）
+ERROR = expected '?search=abcd' not to contain 'search='
+AUTHORITATIVE_RUN_RESULT = FAILURE（run 43030066262 / job 130555764531 / attempt 1）
+RERUN_EVIDENCE = 同 head attempt 2 通过 → 非确定性成立，非确定性代码路径
+NONDETERMINISM_CONFIRMED = YES
+DIFF_RELATION = PROVEN_UNRELATED（release-only diff；受害测试与其依赖的产品代码先于该 run 存在）
+TRACE_AVAILABLE = YES（jsdom 确定性重放 R1，见 #953）
+ROOT_CAUSE_CONFIDENCE = CAUSALLY_PROVEN（两个独立根因，均已分别修复）
+```
+
+两个独立根因（相关但不可混为一谈）：
+
+1. **测试层**（#954 `e4ba23d3` 修复，已合并）：A12(c) 以真实 timer 驱动 Back（`userEvent.click` + 400ms sleep），300ms 防抖 deadline 与三段取消链（external-nav detector effect → `setSearchInput` → hook external-reset effect）的相对顺序随机器负载翻转；测试声称验证「取消已落定后旧 timer 不得提交」，实际可能落入「导航已 commit、取消链未 flush」的竞态窗口。修复：fake timers 固定顺序 299ms → Back → cancel-landed 断言 → 跨 deadline，URL/UI/API 三重 oracle；hook external-reset 测试改为真实宿主 rerender 触发。
+2. **产品层**（#953，本登记对应的修复 PR）：deadline 在上述窗口内到期时，旧草稿经 `handleSearchCommit` → `commitFilters` → `writeParams(replace)` 改写**用户导航到的** history entry 并以其发起列表请求。jsdom 确定性重放成功（Back / Forward / 同路由外部导航 / 同参数双 entry 四象限，修复前全 RED、删除提交边界保护后 4/4 RED）；CI attempt 1 即该窗口的实例。修复：提交边界按 history entry key（同步权威，`navigator.location.key`）拒绝离开 entry 的草稿；external-nav detector 的归属判别同步改为 entry key（参数相同的两条 entry 也是导航）。
+
+浏览器证据边界：真实 Chromium **未复现**——同文档 SPA 拓扑（in-app push 造第二 entry），CDP CPU throttle 1×/6× × back@270–297ms 共 8 次尝试全部 CLEAN（恢复后 URL 无 search、字段为空）。两次 `page.goto` 构成的跨文档拓扑结构性不可复现（departed document 的 timer 被冻结）。未复现 ≠ 风险不存在：产品缺陷由 jsdom 确定性重放与 CI attempt 1 证明。
+
+```text
+当前缓解 = RESOLVED（双层）：测试层 #954；产品层 fix PR（提交边界 entry-key 校验
+  + detector entry 归属判别；mutation RED/GREEN 4/4，web 全套件绿）
+关联 = #953（产品缺陷登记 + R1 重放）、#954（测试修复，run 43048399836 8/8）、
+  43030066262（原始失败）、修复 PR（编号见本条更新评论）
+AGGREGATION_BASIS = 不与 OBS-2026-11-02-CI-WEB 聚合：那是 coverage lane 固定预算族
+  （C1/A12(d)/Users/Course 多签名预算到期，CURRENT_INTERPRETATION =
+  CASE-2026-11-03-CI-COVERAGE-BUDGETS）；本条是单一用例的 deadline/cancel 顺序竞态 +
+  独立产品竞态，机制、受害面、修复面均不同。OBS-2026-11-02-CI-WEB 中 A12(d) 的单次
+  10s timeout（机制 UNKNOWN）不因本条获释，保持其原状态。
+```
+
+---
+
 ## Non-Flake / Misclassification Lessons（非 Flake / 误分类教训）
 
 > 以下是最终被证明为**确定性**产品/测试/环境缺陷或既定契约行为的记录。它们不属于活跃

@@ -650,4 +650,77 @@ test.describe.serial("admin list URL query state (#784 A3 BDD L3)", () => {
     await expect(page.getByText(/共 \d+ 条/)).toBeVisible();
     await expect(page.getByText("暂无题目")).toHaveCount(0);
   });
+
+  // ── #953 — a draft typed right before Back must not land on the restored
+  // entry. The deterministic interleaving (navigation committed, cancel chain
+  // not yet flushed, deadline expires inside that gap) is pinned by the jsdom
+  // A12(c-race) suite; this browser witness checks the user-visible contract
+  // at both possible orders — whichever of the cancel chain or the deadline
+  // wins the race, the restored entry, the field and the request sequence must
+  // describe the entry the user navigated TO, never the departed draft.
+  //
+  // Topology note: the two entries must live in ONE document's SPA history
+  // (in-app push). Two page.goto()s would be two documents, and Back between
+  // documents freezes the departed document's timers — structurally unable to
+  // reproduce this race.
+  test("A12c-B: a draft typed right before Back never lands on the restored entry", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const lists = trackListRequests(page, QUESTIONS_LIST);
+
+    // History: E0 = the bare list (document load), then an in-app PUSH (a page
+    // turn), then the committed search REPLACES that pushed entry — leaving
+    // E0 bare behind the current ?search entry.
+    await page.goto("/admin/questions");
+    await expect(page.getByRole("table")).toBeVisible();
+    await (async () => {
+      const pending = nextListResponse(page, QUESTIONS_LIST);
+      await page.getByRole("button", { name: "下一页" }).click();
+      await pending;
+    })();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === "/admin/questions" &&
+        url.searchParams.get("page") === "2",
+    );
+    const search = page.getByLabel("搜索题目");
+    await search.fill(KEYWORD);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === "/admin/questions" &&
+        url.searchParams.get("search") === KEYWORD &&
+        url.searchParams.get("page") === null,
+    );
+    const callsBeforeNav = lists.length;
+
+    // Type a draft, then leave for E0 inside the debounce window — a native,
+    // synchronous-in-page Back, not Playwright's slower pointer event chain.
+    await search.fill(`${KEYWORD}x`);
+    await page.evaluate(() => history.back());
+
+    // Settled state, in the settled order: URL first (the restored entry keeps
+    // exactly what it committed — no search), then the field, then requests.
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === "/admin/questions" &&
+        url.searchParams.get("search") === null,
+    );
+    await expect(search).toHaveValue("");
+    // No request issued from the Back onward may carry the departed draft.
+    for (const req of lists.slice(callsBeforeNav)) {
+      expect(req.url, req.url).not.toContain(`${KEYWORD}x`);
+    }
+    await test.info().attach("A12c-B-back-draft.txt", {
+      body: [
+        "PASS A12c-B",
+        "E0 = bare list, E1 = page-turn push then search REPLACE",
+        "draft typed on E1, native history.back() inside the debounce window",
+        `restored URL: ${new URL(page.url()).pathname}${new URL(page.url()).search}`,
+        `field: ${(await search.inputValue()) || "(empty)"}`,
+        `list requests after Back: ${lists.length - callsBeforeNav} (none carry the draft)`,
+      ].join("\n"),
+      contentType: "text/plain",
+    });
+  });
 });
