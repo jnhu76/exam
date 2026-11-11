@@ -142,6 +142,17 @@ export function expandWorkspaceGlobs(globs) {
  * member names — derived from the manifests, never hardcoded (#824 D2:
  * `dependencies` is the product graph; devDependencies are test scope).
  *
+ * Dependency-edge scope vs turbo (#939, turbo 2.9.16 probe 2026-11-11):
+ * turbo's `^build` schedules workspace devDependency edges too — in a
+ * scratch pnpm workspace with `build: { dependsOn: ["^build"] }`,
+ * `turbo build --dry-run=json` reports b#build.dependencies =
+ * ["a#build"] when b declares a solely in devDependencies. Turbo's task
+ * graph is therefore a superset of this model, and the narrowing here is
+ * deliberate: the Docker builder sequence builds product artifacts, which
+ * consume declared `dependencies` only, so the closure and order rules
+ * must not invent the turbo devDependency edge. Pinning tests live in
+ * apps/web/src/buildGraphGuard.test.ts (devDependency-only edge cases).
+ *
  * `members` is [{ dir, manifest }]; manifests must already carry a string
  * `name` (the checker fails closed on unnamed members before this call).
  */
