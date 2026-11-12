@@ -182,6 +182,46 @@ export interface StartAttemptResult {
   isNew: boolean;
 }
 
+/**
+ * OPEN gates for a candidate start, evaluated against ONE exam snapshot.
+ * Throws the established EXAM_NOT_OPEN contract on the pre-lock fast-path
+ * read and again on the new-attempt path's authoritative locked re-read;
+ * the messages are message-level distinctions only (same error type, same
+ * wire contract). Returns the timed_sync shared deadline so callers never
+ * derive it from a snapshot other than the one these gates validated.
+ */
+function assertExamOpenForStart(
+  exam: Exam,
+  now: Date,
+): { syncDeadline: Date | null } {
+  if (!OPEN_STATUSES.has(exam.status)) {
+    throw new ExamNotOpenError("Exam is not open");
+  }
+
+  // Admission window. openAt gates every mode; closeAt gates only when the
+  // exam carries one (untimed has no closeAt — canonical timing matrix).
+  if (now < exam.openAt || (exam.closeAt !== null && now >= exam.closeAt)) {
+    throw new ExamNotOpenError("Current time is outside exam open window");
+  }
+
+  // timed_sync entry is owned by the operator-triggered sitting (Model A
+  // freeze, docs/contracts/timed-sync-semantics.md). Before T0 there is no
+  // shared clock to join; after the global deadline a new attempt would be
+  // born expired. Both keep the EXAM_NOT_OPEN (409) contract — the distinction
+  // is message-level only.
+  let syncDeadline: Date | null = null;
+  if (exam.timingMode === "timed_sync") {
+    if (exam.syncStartedAt === null) {
+      throw new ExamNotOpenError("Synchronized exam has not been started");
+    }
+    syncDeadline = computeSyncDeadline(exam);
+    if (syncDeadline !== null && now.getTime() >= syncDeadline.getTime()) {
+      throw new ExamNotOpenError("Synchronized exam deadline has passed");
+    }
+  }
+  return { syncDeadline };
+}
+
 /** Options for customizing the un-assigned candidate error behavior. */
 export interface StartAttemptOptions {
   unassignedErrorFactory?: (message: string) => Error;
@@ -222,6 +262,17 @@ export interface StartAdmissionDependency {
  * validates eligibility and creates a new attempt with the interruption
  * timing policy snapshot.
  *
+ * NEW-attempt lifecycle authority (H-08): the new-attempt path re-reads the
+ * exam under the Exam row write lock (Enrollment → Attempt → Exam, the
+ * terminal Exam position shared with restore/operator-grant/scanner) and
+ * re-applies the OPEN gates before any state changes. The plain pre-seam
+ * read is a fast path only; close/cancel commits that raced the pre-lock
+ * read are observed by the locked re-read, so no attempt can be created
+ * from a stale OPEN snapshot. Resume/restore never take this extra lock
+ * (resume mutates nothing; restore locks the exam inside the composed
+ * restore command), and close/cancel cannot pass its unresolved-attempt
+ * guard while a committed in_progress/disrupted attempt exists.
+ *
  * All interruption and grading repos are REQUIRED — there is no valid
  * production or test invocation that omits them.
  */
@@ -241,31 +292,11 @@ export async function startOrRestoreAttempt(
     throw new ValidationError("Exam not found");
   }
 
-  if (!OPEN_STATUSES.has(exam.status)) {
-    throw new ExamNotOpenError("Exam is not open");
-  }
-
-  // Admission window. openAt gates every mode; closeAt gates only when the
-  // exam carries one (untimed has no closeAt — canonical timing matrix).
-  if (now < exam.openAt || (exam.closeAt !== null && now >= exam.closeAt)) {
-    throw new ExamNotOpenError("Current time is outside exam open window");
-  }
-
-  // timed_sync entry is owned by the operator-triggered sitting (Model A
-  // freeze, docs/contracts/timed-sync-semantics.md). Before T0 there is no
-  // shared clock to join; after the global deadline a new attempt would be
-  // born expired. Both keep the EXAM_NOT_OPEN (409) contract — the distinction
-  // is message-level only.
-  let syncDeadline: Date | null = null;
-  if (exam.timingMode === "timed_sync") {
-    if (exam.syncStartedAt === null) {
-      throw new ExamNotOpenError("Synchronized exam has not been started");
-    }
-    syncDeadline = computeSyncDeadline(exam);
-    if (syncDeadline !== null && now.getTime() >= syncDeadline.getTime()) {
-      throw new ExamNotOpenError("Synchronized exam deadline has passed");
-    }
-  }
+  // Fast-path gates on the plain read. Resume/restore take this read only;
+  // the NEW-attempt path re-applies the SAME gates below under the Exam row
+  // lock (H-08) — a start that read OPEN before a concurrent close/cancel
+  // committed must not decide from this stale snapshot.
+  assertExamOpenForStart(exam, now);
 
   // Use the canonical Enrollment→active-Attempt lock seam (R3).
   let lockResult: EnrollmentActiveAttemptLock;
@@ -316,14 +347,37 @@ export async function startOrRestoreAttempt(
   // The seam already locked the enrollment; use it directly.
   const enrollment = lockResult.enrollment;
 
+  // H-08: authoritative final-state recheck. LOCK ORDER: Enrollment →
+  // (Attempt) → Exam — the same terminal Exam position as the restore,
+  // operator-grant, and deadline-scanner paths. The lock is acquired BEFORE
+  // the attempt INSERT, so this transaction never holds the exam row's
+  // FK-induced FOR KEY SHARE while another transaction waits an Exam write
+  // lock on it (no start-vs-start 40P01 upgrade cycle). INVARIANT (I1): a
+  // start that read OPEN above, before a concurrent close/cancel committed,
+  // is serialized here behind that commit and re-decides on the locked,
+  // latest-committed row — under READ COMMITTED the locking read cannot
+  // return the stale pre-close snapshot. The same Exam write lock conflicts
+  // with the admin transition executor's first-statement FOR UPDATE, which
+  // (with that executor's READ COMMITTED snapshot) makes the close/cancel
+  // unresolved-attempt guard observe this attempt once it commits (I2).
+  // Every new-attempt decision below reads the authoritative row only.
+  const authoritativeExam = await examRepo.findByIdForUpdate(examId);
+  if (!authoritativeExam) {
+    throw new ValidationError("Exam not found");
+  }
+  const { syncDeadline: authoritativeSyncDeadline } = assertExamOpenForStart(
+    authoritativeExam,
+    now,
+  );
+
   if (
-    exam.retakePolicy === "max_attempts" &&
-    enrollment.attemptCount >= exam.maxAttempts
+    authoritativeExam.retakePolicy === "max_attempts" &&
+    enrollment.attemptCount >= authoritativeExam.maxAttempts
   ) {
     throw new MaxAttemptsReachedError("Maximum attempt count reached");
   }
 
-  if (exam.retakePolicy === "pass_then_stop") {
+  if (authoritativeExam.retakePolicy === "pass_then_stop") {
     // #324: the retake-defer decision is made UNDER the enrollment
     // lock — the SAME serialization boundary the grading finalizer uses when it
     // commits finalScore/finalPassed/finalAttemptId. A decision made from a
@@ -338,7 +392,9 @@ export async function startOrRestoreAttempt(
     const finalAttempt = enrollment.finalAttemptId
       ? await attemptRepo.findById(enrollment.finalAttemptId)
       : null;
-    if (isCandidateRetakeDeferred(exam, enrollment, finalAttempt)) {
+    if (
+      isCandidateRetakeDeferred(authoritativeExam, enrollment, finalAttempt)
+    ) {
       throw new RetakeDeferredError();
     }
     if (enrollment.finalPassed === true) {
@@ -354,7 +410,7 @@ export async function startOrRestoreAttempt(
   // duplicate-admission path.
   let admission: AdmissionDeps | null = null;
   let admissionRecord: ExamAdmissionRecord | null = null;
-  if (exam.controlFlags.requireQueue) {
+  if (authoritativeExam.controlFlags.requireQueue) {
     if (!options.admission) {
       throw new ValidationError(
         "Admission gate dependency is required when the exam requires queue admission",
@@ -363,7 +419,7 @@ export async function startOrRestoreAttempt(
     admission = options.admission;
     admissionRecord = await ensureStartAdmission(
       admission,
-      exam,
+      authoritativeExam,
       candidateId,
       now,
     );
@@ -374,12 +430,15 @@ export async function startOrRestoreAttempt(
   // triggered sitting start (T0), not at openAt — the buffer is relative to
   // when the sitting actually began. The null-anchor branch is unreachable
   // (the pre-T0 guard above already threw) but keeps the type honest.
-  if (exam.latestStartOffsetMinutes != null) {
+  if (authoritativeExam.latestStartOffsetMinutes != null) {
     const lateEntryAnchor =
-      exam.timingMode === "timed_sync" ? exam.syncStartedAt : exam.openAt;
+      authoritativeExam.timingMode === "timed_sync"
+        ? authoritativeExam.syncStartedAt
+        : authoritativeExam.openAt;
     if (lateEntryAnchor !== null) {
       const latestStartAt = new Date(
-        lateEntryAnchor.getTime() + exam.latestStartOffsetMinutes * 60_000,
+        lateEntryAnchor.getTime() +
+          authoritativeExam.latestStartOffsetMinutes * 60_000,
       );
       if (now.getTime() > latestStartAt.getTime()) {
         throw new AttemptLateEntryClosedError({ latestStartAt, now });
@@ -398,10 +457,11 @@ export async function startOrRestoreAttempt(
   // durationMinutes for reachable timed_window exams; the null guard keeps
   // that type-honest.
   const deadlineAt =
-    exam.timingMode === "timed_window" && exam.durationMinutes !== null
-      ? calculateDeadlineAt(now, exam.durationMinutes)
-      : exam.timingMode === "timed_sync"
-        ? syncDeadline
+    authoritativeExam.timingMode === "timed_window" &&
+    authoritativeExam.durationMinutes !== null
+      ? calculateDeadlineAt(now, authoritativeExam.durationMinutes)
+      : authoritativeExam.timingMode === "timed_sync"
+        ? authoritativeSyncDeadline
         : null;
 
   // A NEW attempt must retain a non-empty candidate manual-submit window:
@@ -412,12 +472,14 @@ export async function startOrRestoreAttempt(
   // and a rejection must precede both the attempt create and the enrollment
   // update. The effective deadline flows through the canonical kernel so
   // every timing mode shares one rule; a null deadline never rejects.
-  if (exam.minSubmitAfterStartMinutes != null) {
-    const effectiveDeadline = computeEffectiveDeadline(exam, { deadlineAt });
+  if (authoritativeExam.minSubmitAfterStartMinutes != null) {
+    const effectiveDeadline = computeEffectiveDeadline(authoritativeExam, {
+      deadlineAt,
+    });
     if (effectiveDeadline !== null) {
       const earliestSubmitAt = calculateDeadlineAt(
         now,
-        exam.minSubmitAfterStartMinutes,
+        authoritativeExam.minSubmitAfterStartMinutes,
       );
       if (earliestSubmitAt.getTime() >= effectiveDeadline.getTime()) {
         throw new AttemptStartSubmitInfeasibleError({
@@ -428,18 +490,19 @@ export async function startOrRestoreAttempt(
     }
   }
 
-  const snapshot = resolveAttemptTimingPolicySnapshotFromExam(exam);
+  const snapshot =
+    resolveAttemptTimingPolicySnapshotFromExam(authoritativeExam);
 
   const attempt = await attemptRepo.create({
-    organizationId: exam.organizationId,
+    organizationId: authoritativeExam.organizationId,
     examId,
     enrollmentId: enrollment.id,
     candidateId,
     attemptNo,
     status: "in_progress",
     questionSnapshot: materializeAttemptPresentation(
-      exam.questionSnapshot as QuestionSnapshot[],
-      exam.controlFlags,
+      authoritativeExam.questionSnapshot as QuestionSnapshot[],
+      authoritativeExam.controlFlags,
       options.rng,
     ),
     answers: [],
@@ -455,7 +518,7 @@ export async function startOrRestoreAttempt(
   // rows is a programming error and must abort the whole transaction.
   if (admission) {
     const consumed = await admission.repo.consumeActive(
-      exam.organizationId,
+      authoritativeExam.organizationId,
       examId,
       candidateId,
       now,
