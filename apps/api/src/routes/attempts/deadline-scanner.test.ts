@@ -638,15 +638,104 @@ describe("attempt routes", () => {
         );
         expect(after?.status).toBe("graded");
         expect(after?.submissionReason).toBe("deadline");
-        // The scanner path stamps submittedAt at the wall-clock reconciliation
-        // instant (only the lazy on-read path backdates to the effective
-        // deadline), so it can only be AT OR AFTER the closeAt cutoff.
+        // The scanner's deadline submission stamps submittedAt with the
+        // canonical effective deadline (H-04) — for a deadline-mode attempt
+        // that is exactly exam.closeAt, the same semantic as the lazy
+        // on-read reconciliation path (exam-runtime.md §5.4).
         const closedAt = await ctx.db
           .select({ closeAt: schema.exams.closeAt })
           .from(schema.exams)
           .where(eq(schema.exams.id, examId));
-        expect(after?.submittedAt?.getTime()).toBeGreaterThanOrEqual(
+        expect(after?.submittedAt?.getTime()).toBe(
           closedAt[0]!.closeAt!.getTime(),
+        );
+      });
+
+      // H-04 (#961) — scanner deadline submit stamps the BUSINESS valid
+      // submission instant. exam-runtime.md §5.4 defines the deadline
+      // reconciliation family's `submittedAt` as the effective deadline D;
+      // the scanner is the scheduled half of that family (same freeze+grade
+      // barrier), so its deadline submission must carry the same semantic as
+      // the lazy on-read path — not the scan tick's wall clock. The actual
+      // execution instant stays where it belongs: grading keeps the tick time.
+      it("stamps the scanner's deadline submit with the effective deadline D, while grading keeps the tick time (H-04)", async () => {
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
+        const { attemptId } = await createStartedAttemptWithQuestion(
+          t,
+          "Deadline Scanner SubmittedAt Effective Exam",
+        );
+        // Fix the authoritative effective deadline D at a known past instant;
+        // the scanner's tick clock is strictly later than D.
+        const effectiveDeadline = new Date(Date.now() - 60_000);
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ deadlineAt: effectiveDeadline, status: "in_progress" })
+          .where(eq(schema.examAttempts.id, attemptId));
+
+        const scanNow = new Date();
+        const result = await scanDatabaseForExpiredAttempts(ctx.app, scanNow);
+        expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          candidateRequestContext(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("graded");
+        expect(after?.submissionReason).toBe("deadline");
+        // Business valid time: submittedAt = D exactly (min(closeAt, D) = D —
+        // the seeded exam closeAt stays in the future).
+        expect(after?.submittedAt?.getTime()).toBe(effectiveDeadline.getTime());
+        // Actual execution time: grading runs at the tick instant, unmoved.
+        expect(after?.gradedAt?.getTime()).toBe(scanNow.getTime());
+      });
+
+      it("stamps a disrupted attempt's scanner deadline submit with the effective deadline D (H-04)", async () => {
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
+        const { attemptId } = await createStartedAttemptWithQuestion(
+          t,
+          "Deadline Scanner Disrupted SubmittedAt Exam",
+        );
+        const effectiveDeadline = new Date(Date.now() - 60_000);
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ deadlineAt: effectiveDeadline, status: "in_progress" })
+          .where(eq(schema.examAttempts.id, attemptId));
+        await disruptAttempt(ctx.db, t.orgId, attemptId);
+
+        const result = await scanDatabaseForExpiredAttempts(
+          ctx.app,
+          new Date(),
+        );
+        expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          candidateRequestContext(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("graded");
+        expect(after?.submissionReason).toBe("deadline");
+        expect(after?.submittedAt?.getTime()).toBe(effectiveDeadline.getTime());
+
+        // The interruption terminalization rides the same submit freeze, so
+        // its event carries the same business valid instant as the submit.
+        const terminalized = await ctx.db
+          .select({ occurredAt: schema.attemptInterruptionEvents.occurredAt })
+          .from(schema.attemptInterruptionEvents)
+          .where(
+            and(
+              eq(schema.attemptInterruptionEvents.attemptId, attemptId),
+              eq(schema.attemptInterruptionEvents.eventType, "terminalized"),
+            ),
+          );
+        expect(terminalized).toHaveLength(1);
+        expect(terminalized[0]!.occurredAt.getTime()).toBe(
+          effectiveDeadline.getTime(),
         );
       });
 

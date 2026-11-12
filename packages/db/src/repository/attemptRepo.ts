@@ -465,6 +465,13 @@ export function createAttemptRepo(db: Database) {
      * The caller-supplied `now` is the single ADR-006 business-time sample
      * for the heartbeat; `updated_at` uses the DB `now()` so the row's
      * storage stamp is independent of the business clock.
+     *
+     * INVARIANT: `last_activity_at` is monotone non-decreasing — the stored
+     * fact is the high-water mark of captured instants. Two heartbeats can
+     * commit out of capture order (a delayed request), and a backward host
+     * clock step must not regress the fact either; either regression would be
+     * read by the scanner's staleness decision (`markDisrupted`) as real
+     * inactivity and could disrupt a live client.
      */
     async refreshLastActivityIfInProgress(
       ctx: TenantContext | RequestContext,
@@ -475,7 +482,9 @@ export function createAttemptRepo(db: Database) {
       const rows = await db
         .update(examAttempts)
         .set({
-          lastActivityAt: now,
+          // Raw-SQL parameters bypass Drizzle's column Date mapping, so bind
+          // the instant as an explicit timestamptz text cast.
+          lastActivityAt: sql`greatest(${examAttempts.lastActivityAt}, ${now.toISOString()}::timestamptz)`,
           updatedAt: sql`now()`,
         })
         .where(

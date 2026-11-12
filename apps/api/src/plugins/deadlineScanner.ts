@@ -13,6 +13,7 @@ import {
   submitAttempt,
   gradeAttemptIdempotent,
   isAttemptDeadlineExpired,
+  computeEffectiveDeadline,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
 import type { SubmitInterruptionResolution } from "@exam/exam-engine";
@@ -170,6 +171,11 @@ function createSystemContext(organizationId: string): RequestContext {
  *    is the SOLE authority for "submit or skip". A candidate that was extended
  *    or reconciled between discovery and lock returns false here → no-op.
  *
+ * Time semantics (two distinct instants per submission): the deadline
+ * submission's business valid `submittedAt` is the canonical effective
+ * deadline D — the same semantic as the lazy on-read reconciliation path —
+ * while the tick `now` remains the actual-execution instant for grading.
+ *
  * @returns true iff the attempt was submitted+graded by this call.
  */
 export async function autoSubmitAndGrade(
@@ -234,6 +240,21 @@ export async function autoSubmitAndGrade(
       ctx,
     );
 
+    // The deadline submission's business valid submittedAt is the canonical
+    // effective deadline D, not the scan tick (same semantic as the lazy
+    // on-read reconciliation path; exam-runtime.md §5.4). A positive
+    // `isAttemptDeadlineExpired` above implies D is non-null (null never
+    // expires); the guard keeps that fact type-honest and fails safe as a
+    // no-op instead of freezing an attempt that has no deadline. The tick
+    // `now` stays the actual-execution instant for grading below.
+    const effectiveDeadline = computeEffectiveDeadline(
+      lockedExam as Exam,
+      locked as ExamAttempt,
+    );
+    if (effectiveDeadline === null) {
+      return false;
+    }
+
     // R1/R9: build the interruption resolution based on the locked attempt's
     // status. The deadline scanner handles both in_progress and disrupted
     // attempts. For disrupted attempts, the resolution terminalizes the active
@@ -275,11 +296,17 @@ export async function autoSubmitAndGrade(
       };
     }
 
-    await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
-      source: "deadline_scanner",
-      submissionReason: "deadline",
-      resolution,
-    });
+    await submitAttempt(
+      attempts,
+      gradingWorksetRepo,
+      attemptId,
+      effectiveDeadline,
+      {
+        source: "deadline_scanner",
+        submissionReason: "deadline",
+        resolution,
+      },
+    );
 
     // Grade in the same transaction from the workset entries submitAttempt just
     // materialized; `cap` is the EA (enrollment+attempt) protocol authority
