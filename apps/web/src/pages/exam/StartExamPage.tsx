@@ -55,18 +55,32 @@ export function StartExamPage() {
   // command, mutate the start/queue UI, nor navigate to an attempt the user
   // is no longer entering.
   const entryOperationRef = useRef<{ examId: string } | null>(null);
+  // Exam-detail request ownership: each loadExam invocation claims this slot
+  // with its own identity object; an examId param change or unmount nulls it.
+  // A superseded request must not write exam, error, loading, or telemetry —
+  // its detail belongs to a route the page no longer shows.
+  const detailRequestRef = useRef<{ examId: string } | null>(null);
 
   /** Fetches the candidate exam detail from the API. */
   const loadExam = useCallback(async () => {
     if (!examId) return;
+    const request = { examId };
+    detailRequestRef.current = request;
+    const ownsRequest = () => detailRequestRef.current === request;
     setIsLoading(true);
     setError(null);
     try {
       const data = await api.get<CandidateExamDetailResponse>(
         `/api/candidate/exams/${examId}`,
       );
+      // Ownership boundary: the detail returned, but the route may have moved
+      // to another exam while the request was on the wire.
+      if (!ownsRequest()) return;
       setExam(data);
     } catch (err) {
+      // A superseded request's failure belongs to nobody: it must not
+      // overwrite the current exam's error state or telemetry.
+      if (!ownsRequest()) return;
       // Candidate entry-point load failure: the toast/error state is
       // ephemeral, so record one warn with the stable error code (#800).
       trackExamEvent(
@@ -76,12 +90,19 @@ export function StartExamPage() {
       );
       setError(t("startExam.errors.loadFailed"));
     } finally {
-      setIsLoading(false);
+      // Ownership boundary: the request settled. A superseded request must
+      // not end the newer request's loading window.
+      if (ownsRequest()) setIsLoading(false);
     }
   }, [examId, t]);
 
   useEffect(() => {
     loadExam();
+    // The request claimed by this examId's load dies with the param value:
+    // a param change or unmount supersedes it before the next load claims.
+    return () => {
+      detailRequestRef.current = null;
+    };
   }, [loadExam]);
 
   /**
@@ -93,6 +114,10 @@ export function StartExamPage() {
    */
   const enterExam = useCallback(async () => {
     if (!examId) return;
+    // Entry decisions key on the route's current exam detail. A detail for a
+    // different exam (a route change whose new detail has not arrived) must
+    // neither choose the queue path nor fire the start command.
+    if (exam?.id !== examId) return;
     // Single-flight entry: a click landing while an entry operation is
     // already running (the double-click race, before the disabled state
     // commits) must not spawn a second competing queue/start flow.
@@ -179,15 +204,18 @@ export function StartExamPage() {
     }
   }, [examId, exam, navigate, t]);
 
-  // Entry-operation lifecycle (INVARIANT: no orphan poll loops, no
-  // cross-exam operation leakage). An examId param change re-uses this
-  // mounted page for a different exam: the previous exam's entry operation
-  // is dead, and its queue/starting UI must not leak into the new exam's
+  // Exam-scoped lifecycle (INVARIANT: no orphan poll loops, no cross-exam
+  // operation or detail leakage). An examId param change re-uses this mounted
+  // page for a different exam: the previous exam's entry operation is dead,
+  // and its queue/starting UI and detail must not leak into the new exam's
   // view. The cleanup supersedes the operation on unmount.
   useEffect(() => {
     entryOperationRef.current = null;
     setIsStarting(false);
     setQueueStatus(null);
+    // The route now names a different exam: the old detail is no longer this
+    // page's data, even for the render before the new request settles.
+    setExam(null);
     return () => {
       entryOperationRef.current = null;
     };
@@ -195,7 +223,8 @@ export function StartExamPage() {
 
   /** Handles the primary action: start a new attempt, resume an active one, or view results. */
   async function handleStart() {
-    if (!exam) return;
+    // The action may only derive from the detail of the route's current exam.
+    if (!exam || exam.id !== examId) return;
     switch (exam.primaryAction) {
       case "resume":
         if (exam.activeAttemptId) {
@@ -223,7 +252,12 @@ export function StartExamPage() {
     }
   }
 
-  if (isLoading) return <LoadingState />;
+  // Only the detail whose id matches the route's examId may render. A stale
+  // detail (route changed, new detail in flight) is transitional: keep
+  // loading rather than show another exam's title, status, or primary action.
+  if (isLoading || (exam !== null && exam.id !== examId)) {
+    return <LoadingState />;
+  }
   if (!exam) {
     return (
       <ErrorState
