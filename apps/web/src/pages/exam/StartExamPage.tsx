@@ -30,6 +30,10 @@ interface AttemptResponse {
   examId: string;
 }
 
+/** Client-side pacing between admission-queue polls; admission truth is
+ * re-derived server-side on every poll. */
+const QUEUE_POLL_INTERVAL_MS = 2_000;
+
 /** Pre-exam page that displays exam details and initiates or resumes an attempt. */
 export function StartExamPage() {
   const { t } = useTranslation();
@@ -43,7 +47,14 @@ export function StartExamPage() {
   const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(
     null,
   );
-  const cancelQueuePollRef = useRef(false);
+  // Start-entry operation ownership: at most one live entry operation per
+  // page lifecycle and exam id. Each enterExam invocation claims this slot
+  // with its own identity object; unmount or an examId param change nulls
+  // it, instantly superseding the in-flight operation. Every await boundary
+  // re-checks ownership, so a dead operation can neither fire the start
+  // command, mutate the start/queue UI, nor navigate to an attempt the user
+  // is no longer entering.
+  const entryOperationRef = useRef<{ examId: string } | null>(null);
 
   /** Fetches the candidate exam detail from the API. */
   const loadExam = useCallback(async () => {
@@ -82,34 +93,56 @@ export function StartExamPage() {
    */
   const enterExam = useCallback(async () => {
     if (!examId) return;
+    // Single-flight entry: a click landing while an entry operation is
+    // already running (the double-click race, before the disabled state
+    // commits) must not spawn a second competing queue/start flow.
+    if (entryOperationRef.current !== null) return;
+    const operation = { examId };
+    entryOperationRef.current = operation;
+    const ownsEntry = () => entryOperationRef.current === operation;
     setIsStarting(true);
     setError(null);
-    cancelQueuePollRef.current = false;
     try {
       if (exam?.controlFlags.requireQueue) {
         let status = await api.post<QueueStatusResponse>(
           `/api/attempts/${examId}/queue`,
         );
+        // Ownership boundary: the join returned, but the operation may have
+        // been superseded while the request was on the wire.
+        if (!ownsEntry()) return;
         while (status.status !== "ready") {
           setQueueStatus(status);
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          if (cancelQueuePollRef.current) {
-            setIsStarting(false);
-            return;
-          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, QUEUE_POLL_INTERVAL_MS),
+          );
+          // Ownership boundary: the poll sleep ended.
+          if (!ownsEntry()) return;
           status = await api.post<QueueStatusResponse>(
             `/api/attempts/${examId}/queue`,
           );
+          // Ownership boundary: the poll returned.
+          if (!ownsEntry()) return;
         }
         setQueueStatus(status);
       }
+      // Ownership boundary: admission is ready — only the owning operation
+      // may issue the start command.
+      if (!ownsEntry()) return;
       const attempt = await api.post<AttemptResponse>(
         `/api/attempts/${examId}/start`,
       );
+      // Ownership boundary: the start POST returned. The command may already
+      // have committed server-side — a superseded operation neither undoes
+      // it (no cancel, no re-start) nor claims the result: no navigation,
+      // no UI update.
+      if (!ownsEntry()) return;
       setQueueStatus(null);
       trackExamEvent("exam_started", {}, { examId, attemptId: attempt.id });
       navigate(routes.exam.take(attempt.id));
     } catch (err) {
+      // A superseded operation's failure belongs to nobody: it must not
+      // overwrite the error state or end the current loading window.
+      if (!ownsEntry()) return;
       trackExamEvent(
         "exam_start_failed",
         { errorCode: err instanceof ApiError ? err.code : "UNKNOWN" },
@@ -136,15 +169,29 @@ export function StartExamPage() {
       toast.error(message);
       setQueueStatus(null);
       setIsStarting(false);
+    } finally {
+      // Release the entry slot only when this operation still owns it — a
+      // superseded operation must not free the newer operation's slot.
+      if (ownsEntry()) {
+        entryOperationRef.current = null;
+        setIsStarting(false);
+      }
     }
   }, [examId, exam, navigate, t]);
 
-  // Stop polling when the page unmounts (INVARIANT: no orphan poll loops).
+  // Entry-operation lifecycle (INVARIANT: no orphan poll loops, no
+  // cross-exam operation leakage). An examId param change re-uses this
+  // mounted page for a different exam: the previous exam's entry operation
+  // is dead, and its queue/starting UI must not leak into the new exam's
+  // view. The cleanup supersedes the operation on unmount.
   useEffect(() => {
+    entryOperationRef.current = null;
+    setIsStarting(false);
+    setQueueStatus(null);
     return () => {
-      cancelQueuePollRef.current = true;
+      entryOperationRef.current = null;
     };
-  }, []);
+  }, [examId]);
 
   /** Handles the primary action: start a new attempt, resume an active one, or view results. */
   async function handleStart() {

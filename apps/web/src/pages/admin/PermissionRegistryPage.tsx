@@ -1,4 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PermissionCategory } from "@exam/authz";
@@ -70,6 +77,11 @@ export function PermissionRegistryPage() {
   );
   const [authorityLoading, setAuthorityLoading] = useState(false);
   const [authorityError, setAuthorityError] = useState<string | null>(null);
+  // Latest-issued-wins for the effective-authority inspector: selecting
+  // another user supersedes the in-flight request, and a superseded response
+  // may not land data, error, or the loading flag — the panel must keep
+  // describing the user the picker names.
+  const authorityGenerationRef = useRef(0);
 
   const loadRegistry = useCallback(async () => {
     setIsLoading(true);
@@ -109,6 +121,8 @@ export function PermissionRegistryPage() {
 
   const loadAuthority = useCallback(
     async (userId: string) => {
+      const generation = ++authorityGenerationRef.current;
+      const isStale = () => generation !== authorityGenerationRef.current;
       setAuthorityLoading(true);
       setAuthorityError(null);
       setAuthority(null);
@@ -116,11 +130,17 @@ export function PermissionRegistryPage() {
         const result = await api.get<EffectiveAuthorityResponse>(
           `/api/admin/users/${userId}/effective-authority`,
         );
+        if (isStale()) return;
         setAuthority(result);
       } catch {
+        if (isStale()) return;
         setAuthorityError(t("admin.permissions.loadAuthorityFailed"));
       } finally {
-        setAuthorityLoading(false);
+        // A superseded request must not end the CURRENT request's loading
+        // window either.
+        if (!isStale()) {
+          setAuthorityLoading(false);
+        }
       }
     },
     [t],
