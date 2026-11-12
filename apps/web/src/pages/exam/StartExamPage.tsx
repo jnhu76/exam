@@ -30,6 +30,10 @@ interface AttemptResponse {
   examId: string;
 }
 
+/** Client-side pacing between admission-queue polls; admission truth is
+ * re-derived server-side on every poll. */
+const QUEUE_POLL_INTERVAL_MS = 2_000;
+
 /** Pre-exam page that displays exam details and initiates or resumes an attempt. */
 export function StartExamPage() {
   const { t } = useTranslation();
@@ -43,19 +47,40 @@ export function StartExamPage() {
   const [queueStatus, setQueueStatus] = useState<QueueStatusResponse | null>(
     null,
   );
-  const cancelQueuePollRef = useRef(false);
+  // Start-entry operation ownership: at most one live entry operation per
+  // page lifecycle and exam id. Each enterExam invocation claims this slot
+  // with its own identity object; unmount or an examId param change nulls
+  // it, instantly superseding the in-flight operation. Every await boundary
+  // re-checks ownership, so a dead operation can neither fire the start
+  // command, mutate the start/queue UI, nor navigate to an attempt the user
+  // is no longer entering.
+  const entryOperationRef = useRef<{ examId: string } | null>(null);
+  // Exam-detail request ownership: each loadExam invocation claims this slot
+  // with its own identity object; an examId param change or unmount nulls it.
+  // A superseded request must not write exam, error, loading, or telemetry —
+  // its detail belongs to a route the page no longer shows.
+  const detailRequestRef = useRef<{ examId: string } | null>(null);
 
   /** Fetches the candidate exam detail from the API. */
   const loadExam = useCallback(async () => {
     if (!examId) return;
+    const request = { examId };
+    detailRequestRef.current = request;
+    const ownsRequest = () => detailRequestRef.current === request;
     setIsLoading(true);
     setError(null);
     try {
       const data = await api.get<CandidateExamDetailResponse>(
         `/api/candidate/exams/${examId}`,
       );
+      // Ownership boundary: the detail returned, but the route may have moved
+      // to another exam while the request was on the wire.
+      if (!ownsRequest()) return;
       setExam(data);
     } catch (err) {
+      // A superseded request's failure belongs to nobody: it must not
+      // overwrite the current exam's error state or telemetry.
+      if (!ownsRequest()) return;
       // Candidate entry-point load failure: the toast/error state is
       // ephemeral, so record one warn with the stable error code (#800).
       trackExamEvent(
@@ -65,12 +90,19 @@ export function StartExamPage() {
       );
       setError(t("startExam.errors.loadFailed"));
     } finally {
-      setIsLoading(false);
+      // Ownership boundary: the request settled. A superseded request must
+      // not end the newer request's loading window.
+      if (ownsRequest()) setIsLoading(false);
     }
   }, [examId, t]);
 
   useEffect(() => {
     loadExam();
+    // The request claimed by this examId's load dies with the param value:
+    // a param change or unmount supersedes it before the next load claims.
+    return () => {
+      detailRequestRef.current = null;
+    };
   }, [loadExam]);
 
   /**
@@ -82,34 +114,60 @@ export function StartExamPage() {
    */
   const enterExam = useCallback(async () => {
     if (!examId) return;
+    // Entry decisions key on the route's current exam detail. A detail for a
+    // different exam (a route change whose new detail has not arrived) must
+    // neither choose the queue path nor fire the start command.
+    if (exam?.id !== examId) return;
+    // Single-flight entry: a click landing while an entry operation is
+    // already running (the double-click race, before the disabled state
+    // commits) must not spawn a second competing queue/start flow.
+    if (entryOperationRef.current !== null) return;
+    const operation = { examId };
+    entryOperationRef.current = operation;
+    const ownsEntry = () => entryOperationRef.current === operation;
     setIsStarting(true);
     setError(null);
-    cancelQueuePollRef.current = false;
     try {
       if (exam?.controlFlags.requireQueue) {
         let status = await api.post<QueueStatusResponse>(
           `/api/attempts/${examId}/queue`,
         );
+        // Ownership boundary: the join returned, but the operation may have
+        // been superseded while the request was on the wire.
+        if (!ownsEntry()) return;
         while (status.status !== "ready") {
           setQueueStatus(status);
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          if (cancelQueuePollRef.current) {
-            setIsStarting(false);
-            return;
-          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, QUEUE_POLL_INTERVAL_MS),
+          );
+          // Ownership boundary: the poll sleep ended.
+          if (!ownsEntry()) return;
           status = await api.post<QueueStatusResponse>(
             `/api/attempts/${examId}/queue`,
           );
+          // Ownership boundary: the poll returned.
+          if (!ownsEntry()) return;
         }
         setQueueStatus(status);
       }
+      // Ownership boundary: admission is ready — only the owning operation
+      // may issue the start command.
+      if (!ownsEntry()) return;
       const attempt = await api.post<AttemptResponse>(
         `/api/attempts/${examId}/start`,
       );
+      // Ownership boundary: the start POST returned. The command may already
+      // have committed server-side — a superseded operation neither undoes
+      // it (no cancel, no re-start) nor claims the result: no navigation,
+      // no UI update.
+      if (!ownsEntry()) return;
       setQueueStatus(null);
       trackExamEvent("exam_started", {}, { examId, attemptId: attempt.id });
       navigate(routes.exam.take(attempt.id));
     } catch (err) {
+      // A superseded operation's failure belongs to nobody: it must not
+      // overwrite the error state or end the current loading window.
+      if (!ownsEntry()) return;
       trackExamEvent(
         "exam_start_failed",
         { errorCode: err instanceof ApiError ? err.code : "UNKNOWN" },
@@ -136,19 +194,37 @@ export function StartExamPage() {
       toast.error(message);
       setQueueStatus(null);
       setIsStarting(false);
+    } finally {
+      // Release the entry slot only when this operation still owns it — a
+      // superseded operation must not free the newer operation's slot.
+      if (ownsEntry()) {
+        entryOperationRef.current = null;
+        setIsStarting(false);
+      }
     }
   }, [examId, exam, navigate, t]);
 
-  // Stop polling when the page unmounts (INVARIANT: no orphan poll loops).
+  // Exam-scoped lifecycle (INVARIANT: no orphan poll loops, no cross-exam
+  // operation or detail leakage). An examId param change re-uses this mounted
+  // page for a different exam: the previous exam's entry operation is dead,
+  // and its queue/starting UI and detail must not leak into the new exam's
+  // view. The cleanup supersedes the operation on unmount.
   useEffect(() => {
+    entryOperationRef.current = null;
+    setIsStarting(false);
+    setQueueStatus(null);
+    // The route now names a different exam: the old detail is no longer this
+    // page's data, even for the render before the new request settles.
+    setExam(null);
     return () => {
-      cancelQueuePollRef.current = true;
+      entryOperationRef.current = null;
     };
-  }, []);
+  }, [examId]);
 
   /** Handles the primary action: start a new attempt, resume an active one, or view results. */
   async function handleStart() {
-    if (!exam) return;
+    // The action may only derive from the detail of the route's current exam.
+    if (!exam || exam.id !== examId) return;
     switch (exam.primaryAction) {
       case "resume":
         if (exam.activeAttemptId) {
@@ -176,7 +252,12 @@ export function StartExamPage() {
     }
   }
 
-  if (isLoading) return <LoadingState />;
+  // Only the detail whose id matches the route's examId may render. A stale
+  // detail (route changed, new detail in flight) is transitional: keep
+  // loading rather than show another exam's title, status, or primary action.
+  if (isLoading || (exam !== null && exam.id !== examId)) {
+    return <LoadingState />;
+  }
   if (!exam) {
     return (
       <ErrorState
