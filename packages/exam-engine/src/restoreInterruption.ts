@@ -31,8 +31,8 @@ import type { EvaluateInterruptionPolicyInput } from "./interruptionPolicy.js";
  *   caller has prepared the terminalization hint. The hint is the output of
  *   the policy evaluator, authored by `restoreInterruptedAttempt`.
  *
- * The union carries NO independent `now` (R9) — the submit function's own
- * `now` is reused.
+ * The union carries NO independent timestamp (R9) — the submit function owns
+ * the timestamps and decides which one the terminalization event records.
  */
 export type SubmitInterruptionResolution =
   | {
@@ -86,14 +86,23 @@ export interface RestoreInterruptionResult {
  *   - `in_progress + mode=active_interruption` → fail closed (no active
  *     interruption to terminalize).
  *
+ * TIME SEMANTICS: `terminalizationObservedAt` is the instant this caller
+ * actually processed the terminalization — the `terminalized` event's
+ * `occurredAt`. It is NOT the submission's business-effective instant
+ * (`attempt.submittedAt`): a deadline reconciliation submits with
+ * `submittedAt = D` (the effective deadline) but terminalizes at the later
+ * observation instant. Writing D here would backdate the episode outcome and
+ * can invert `detected.occurredAt <= terminalized.occurredAt`.
+ *
  * @param lockedAttempt - The attempt row, already locked FOR UPDATE.
  * @param resolution - The caller's interruption resolution.
- * @param now - The submit function's authoritative timestamp (R9).
+ * @param terminalizationObservedAt - Actual terminalization observation
+ *   instant; becomes `terminalized.occurredAt`.
  */
 export async function resolveActiveInterruptionOnTerminalization(
   lockedAttempt: ExamAttempt,
   resolution: SubmitInterruptionResolution,
-  now: Date,
+  terminalizationObservedAt: Date,
 ): Promise<void> {
   if (resolution.mode === "none") {
     if (lockedAttempt.status === "disrupted") {
@@ -168,11 +177,15 @@ export async function resolveActiveInterruptionOnTerminalization(
 
   // Append the terminalized event. The pointer is cleared by submitAttempt's
   // own update (currentInterruptionId=null, interruptedAt=null).
+  //
+  // INVARIANT: occurredAt is the observation instant supplied by the caller,
+  // never the submit's (possibly backdated) business-effective time. The
+  // episode's detected event precedes this outcome in observation order.
   await resolution.eventRepo.insert({
     attemptId: lockedAttempt.id,
     interruptionId,
     eventType: "terminalized",
-    occurredAt: now,
+    occurredAt: terminalizationObservedAt,
     observedLastActivityAt: null,
     detectionSource: null,
     timeoutSeconds: null,

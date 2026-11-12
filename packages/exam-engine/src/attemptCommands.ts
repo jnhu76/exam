@@ -539,6 +539,18 @@ export async function submitAttempt(
      * - `in_progress + mode=active_interruption` → fail closed.
      */
     resolution: SubmitInterruptionResolution;
+    /**
+     * Actual instant at which this caller observed/processed the
+     * terminalization. Used ONLY as the `terminalized` interruption event's
+     * `occurredAt`; never as `submittedAt`.
+     *
+     * Deadline submission callers pass `now` because their `submitAttempt`
+     * time argument is the business-effective deadline D (backdated), while
+     * the interruption outcome records when the terminalization was actually
+     * processed. Defaults to `now` for callers whose submit time already IS
+     * the observation instant (manual submit, admin force-submit).
+     */
+    terminalizationObservedAt?: Date;
   },
 ): Promise<ExamAttempt> {
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
@@ -552,7 +564,7 @@ export async function submitAttempt(
   await resolveActiveInterruptionOnTerminalization(
     attempt,
     opts.resolution,
-    now,
+    opts.terminalizationObservedAt ?? now,
   );
 
   const existingEntries = await gradingWorksetRepo.findByAttempt(attemptId);

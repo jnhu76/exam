@@ -415,7 +415,7 @@ transaction as the timestamp). Proof: `apps/api/src/routes/publishResults.concur
 |-------|---------|--------|-----------|
 | `exam.resultsPublishedAt` | First publish-results instant | `publishResults()` (row-lock serialized, P7-S2-A) | Write-once |
 | `attempt.startedAt` | When the attempt began | `startOrRestoreAttempt()` | Write-once |
-| `attempt.submittedAt` | When the attempt was submitted | `submitAttempt()` / deadline reconciliation | Write-once |
+| `attempt.submittedAt` | Business-effective submission instant (manual: request capture; deadline reconciliation: effective deadline D) | `submitAttempt()` / deadline reconciliation | Write-once |
 | `attempt.gradedAt` | When grading finalized | `finalizeTerminalGrading()` | Write-once |
 | `attempt.deadlineAt` | Effective deadline for the attempt | `startOrRestoreAttempt()` / `grantAttemptTime()` / `restoreInterruptedAttempt()` | Updated by operator grant/restore |
 | `attempt.lastActivityAt` | Heartbeat field | `saveAnswer()` / heartbeat route / `restoreInterruptedAttempt()` | Updated on activity |
@@ -438,10 +438,18 @@ not part of candidate restore.
 | `attempt.interruptedAt` | Server instant when disrupted transition committed | Heartbeat disrupted scanner | Cleared with active pointer |
 | `interruption.detected.occurredAt` | Durable detection instant | Heartbeat disrupted scanner | Append-only event |
 | `interruption.detected.observedLastActivityAt` | `lastActivityAt` observed by the scanner | Heartbeat disrupted scanner | Append-only event |
-| `interruption.outcome.occurredAt` | Restore or terminal resolution instant | `restoreInterruptedAttempt()` / `resolveActiveInterruptionOnTerminalization()` | Append-only event |
+| `interruption.outcome.occurredAt` | Actual restore or terminal-resolution observation instant (never the submit's backdated business-effective time) | `restoreInterruptedAttempt()` / `resolveActiveInterruptionOnTerminalization()` | Append-only event |
 | `adjustment.beforeDeadline` | Deadline before a positive grant | `grantAttemptTime()` / `restoreInterruptedAttempt()` (bounded_grace) | Write-once |
 | `adjustment.afterDeadline` | Deadline after a positive grant | `grantAttemptTime()` / `restoreInterruptedAttempt()` (bounded_grace) | Write-once |
 | `adjustment.createdAt` | Server adjustment decision instant | `grantAttemptTime()` / `restoreInterruptedAttempt()` (bounded_grace) | Write-once |
+
+`attempt.submittedAt` and `interruption.outcome.occurredAt` are different
+facts. Deadline reconciliation may submit an attempt with
+`submittedAt = D` (the business-effective deadline) while the terminalization
+is only observed later; the `terminalized` event must then record that actual
+observation instant. Implementations MUST preserve
+`detected.occurredAt <= terminalized.occurredAt` in observation order and MUST
+NOT derive `terminalized.occurredAt` from the submit's backdated time.
 
 ## 8. Interruption-Time Policy (implemented)
 

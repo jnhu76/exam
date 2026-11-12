@@ -692,26 +692,34 @@ describe("attempt routes", () => {
         expect(after?.gradedAt?.getTime()).toBe(scanNow.getTime());
       });
 
-      it("stamps a disrupted attempt's scanner deadline submit with the effective deadline D (H-04)", async () => {
+      // H-04 review: the submit's business effective instant and the
+      // interruption terminalization's observation instant are DIFFERENT
+      // facts. The attempt was detected at t1 (after the deadline D) and the
+      // scanner processes it at t2 > max(D, t1). The submit is backdated to D,
+      // but the terminalized event must record the observation instant t2 —
+      // never D, which would place the outcome before the detected event and
+      // invert the episode's event order.
+      it("stamps a disrupted attempt's scanner deadline submit with D but terminalizes at the scan observation instant (H-04 review)", async () => {
         const t = await createIsolatedAttemptOrg(ctx, {
           slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
           label: "DS",
         });
         const { attemptId } = await createStartedAttemptWithQuestion(
           t,
-          "Deadline Scanner Disrupted SubmittedAt Exam",
+          "Deadline Scanner Disrupted Terminalization Exam",
         );
-        const effectiveDeadline = new Date(Date.now() - 60_000);
+        const effectiveDeadline = new Date(Date.now() - 120_000);
+        const detectedAt = new Date(Date.now() - 60_000);
         await ctx.db
           .update(schema.examAttempts)
           .set({ deadlineAt: effectiveDeadline, status: "in_progress" })
           .where(eq(schema.examAttempts.id, attemptId));
-        await disruptAttempt(ctx.db, t.orgId, attemptId);
+        await disruptAttempt(ctx.db, t.orgId, attemptId, {
+          interruptedAt: detectedAt,
+        });
 
-        const result = await scanDatabaseForExpiredAttempts(
-          ctx.app,
-          new Date(),
-        );
+        const scanNow = new Date(Date.now() + 30_000);
+        const result = await scanDatabaseForExpiredAttempts(ctx.app, scanNow);
         expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
         const after = await createAttemptRepo(ctx.db).findById(
@@ -720,22 +728,34 @@ describe("attempt routes", () => {
         );
         expect(after?.status).toBe("graded");
         expect(after?.submissionReason).toBe("deadline");
+        // Business effective time: submittedAt = D, unchanged.
         expect(after?.submittedAt?.getTime()).toBe(effectiveDeadline.getTime());
+        // Actual execution time: grading keeps the scan tick.
+        expect(after?.gradedAt?.getTime()).toBe(scanNow.getTime());
 
-        // The interruption terminalization rides the same submit freeze, so
-        // its event carries the same business valid instant as the submit.
-        const terminalized = await ctx.db
-          .select({ occurredAt: schema.attemptInterruptionEvents.occurredAt })
+        const events = await ctx.db
+          .select()
           .from(schema.attemptInterruptionEvents)
-          .where(
-            and(
-              eq(schema.attemptInterruptionEvents.attemptId, attemptId),
-              eq(schema.attemptInterruptionEvents.eventType, "terminalized"),
-            ),
-          );
+          .where(eq(schema.attemptInterruptionEvents.attemptId, attemptId));
+        const detected = events.filter((e) => e.eventType === "detected");
+        const terminalized = events.filter(
+          (e) => e.eventType === "terminalized",
+        );
+        expect(detected).toHaveLength(1);
         expect(terminalized).toHaveLength(1);
-        expect(terminalized[0]!.occurredAt.getTime()).toBe(
-          effectiveDeadline.getTime(),
+        // Observation time: terminalization records when the scanner actually
+        // processed the disrupted attempt, not the business deadline.
+        expect(terminalized[0]!.occurredAt.getTime()).toBe(scanNow.getTime());
+        expect(detected[0]!.occurredAt.getTime()).toBe(detectedAt.getTime());
+        expect(detected[0]!.occurredAt.getTime()).toBeLessThanOrEqual(
+          terminalized[0]!.occurredAt.getTime(),
+        );
+        // Event contract fields are unchanged by the time separation.
+        expect(terminalized[0]!.reasonCode).toBe("deadline_terminalization");
+        expect(terminalized[0]!.detectionSource).toBeNull();
+        expect(terminalized[0]!.observedLastActivityAt).toBeNull();
+        expect(terminalized[0]!.interruptionId).toBe(
+          detected[0]!.interruptionId,
         );
       });
 

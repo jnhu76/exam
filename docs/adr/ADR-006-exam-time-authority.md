@@ -423,7 +423,9 @@ produced the submission:
 
 Actual-execution instants are recorded separately and are not rewritten:
 grading stamps (`gradedAt`) keep the tick/operation instant, and interruption
-terminalization events keep the resolution instant passed by the submit call.
+terminalization events record the terminalizing call's actual observation
+instant — for deadline reconciliation the request/tick instant, never the
+backdated `D`.
 `submissionReason` distinguishes only `manual` vs `deadline`; it cannot
 distinguish the execution path, and the source must not be inferred from a
 `submittedAt`-vs-`closeAt` difference. Historical rows written before this

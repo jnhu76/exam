@@ -174,7 +174,8 @@ function createSystemContext(organizationId: string): RequestContext {
  * Time semantics (two distinct instants per submission): the deadline
  * submission's business valid `submittedAt` is the canonical effective
  * deadline D — the same semantic as the lazy on-read reconciliation path —
- * while the tick `now` remains the actual-execution instant for grading.
+ * while the tick `now` remains the actual-execution instant for grading and
+ * for interruption terminalization (`terminalized.occurredAt`).
  *
  * @returns true iff the attempt was submitted+graded by this call.
  */
@@ -305,6 +306,12 @@ export async function autoSubmitAndGrade(
         source: "deadline_scanner",
         submissionReason: "deadline",
         resolution,
+        // Two distinct instants: the submit is backdated to the business
+        // effective deadline D, while an interruption terminalization must
+        // record when this tick actually observed/processed it. Passing D
+        // there could place `terminalized.occurredAt` before the episode's
+        // detected event.
+        terminalizationObservedAt: now,
       },
     );
 
