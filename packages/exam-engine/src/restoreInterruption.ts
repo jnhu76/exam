@@ -97,7 +97,9 @@ export interface RestoreInterruptionResult {
  * @param lockedAttempt - The attempt row, already locked FOR UPDATE.
  * @param resolution - The caller's interruption resolution.
  * @param terminalizationObservedAt - Actual terminalization observation
- *   instant; becomes `terminalized.occurredAt`.
+ *   instant; becomes `terminalized.occurredAt`, clamped up to
+ *   `detected.occurredAt` at the write point so the episode's event order
+ *   never inverts.
  */
 export async function resolveActiveInterruptionOnTerminalization(
   lockedAttempt: ExamAttempt,
@@ -181,11 +183,22 @@ export async function resolveActiveInterruptionOnTerminalization(
   // INVARIANT: occurredAt is the observation instant supplied by the caller,
   // never the submit's (possibly backdated) business-effective time. The
   // episode's detected event precedes this outcome in observation order.
+  //
+  // INVARIANT (write-point clamp): a disruption may commit AFTER the caller
+  // sampled its clock but BEFORE this attempt row lock (deadline scanner
+  // tick vs heartbeat scanner interleave), leaving
+  // terminalizationObservedAt < detected.occurredAt. Clamp at the write
+  // point so the documented MUST (detected.occurredAt <=
+  // terminalized.occurredAt, state-and-authority.md) holds unconditionally.
+  const terminalizedOccurredAt =
+    detected.occurredAt.getTime() > terminalizationObservedAt.getTime()
+      ? detected.occurredAt
+      : terminalizationObservedAt;
   await resolution.eventRepo.insert({
     attemptId: lockedAttempt.id,
     interruptionId,
     eventType: "terminalized",
-    occurredAt: terminalizationObservedAt,
+    occurredAt: terminalizedOccurredAt,
     observedLastActivityAt: null,
     detectionSource: null,
     timeoutSeconds: null,

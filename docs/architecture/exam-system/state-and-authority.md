@@ -449,7 +449,12 @@ facts. Deadline reconciliation may submit an attempt with
 is only observed later; the `terminalized` event must then record that actual
 observation instant. Implementations MUST preserve
 `detected.occurredAt <= terminalized.occurredAt` in observation order and MUST
-NOT derive `terminalized.occurredAt` from the submit's backdated time.
+NOT derive `terminalized.occurredAt` from the submit's backdated time. The
+write point (`resolveActiveInterruptionOnTerminalization()`) enforces this
+ordering invariant unconditionally: the event's `occurredAt` is
+`max(observation instant, detected.occurredAt)`, covering the window where a
+disruption commits after the observer sampled its clock but before the
+attempt row lock (e.g. deadline-scanner tick vs heartbeat scanner).
 
 ## 8. Interruption-Time Policy (implemented)
 

@@ -112,7 +112,17 @@ export const deadlineScannerMetrics = {
  * actually expired under lock — e.g. extended between discovery and lock) is
  * NOT counted as a submission.
  *
- * `now` is threaded through as the single time sample for the cycle.
+ * `now` is the discovery tick sample that selected the candidates; the
+ * per-attempt processing instant is owned by the `onCandidate` callback
+ * (see TIME OWNERSHIP below).
+ *
+ * TIME OWNERSHIP (H-04 review r1): the iterator itself is time-agnostic;
+ * the discovery tick that selected the candidates and the per-attempt
+ * processing instant are DIFFERENT samples. `scanDatabaseForExpiredAttempts`
+ * re-samples its injectable clock inside the `onCandidate` callback so each
+ * `autoSubmitAndGrade` observes the actual handling instant (expiry recheck,
+ * grading, terminalization) — never a whole-cycle tick that may predate a
+ * disruption committed mid-scan by the heartbeat scanner.
  */
 export async function scanDeadlineCandidates(
   candidates: DeadlineCandidate[],
@@ -174,8 +184,9 @@ function createSystemContext(organizationId: string): RequestContext {
  * Time semantics (two distinct instants per submission): the deadline
  * submission's business valid `submittedAt` is the canonical effective
  * deadline D — the same semantic as the lazy on-read reconciliation path —
- * while the tick `now` remains the actual-execution instant for grading and
- * for interruption terminalization (`terminalized.occurredAt`).
+ * while `now` (the PER-CANDIDATE processing sample, not the discovery tick)
+ * is the actual-execution instant for the expiry recheck, grading and
+ * interruption terminalization (`terminalized.occurredAt`).
  *
  * @returns true iff the attempt was submitted+graded by this call.
  */
@@ -337,8 +348,14 @@ export async function autoSubmitAndGrade(
 
 export async function scanDatabaseForExpiredAttempts(
   fastify: FastifyInstance,
-  now: Date = fastify.now(),
+  nowFn: () => Date = () => fastify.now(),
 ): Promise<ScanResult> {
+  // Whole-cycle discovery tick: one sample up front selects the candidate
+  // set (listDeadlineCandidates). Per-candidate processing re-samples
+  // nowFn() so the expiry recheck, grading and interruption terminalization
+  // observe the actual handling instant — never a tick that may predate a
+  // disruption committed mid-scan by the heartbeat scanner.
+  const now = nowFn();
   const db = fastify.db as Database;
   const organizationRepo = createOrganizationRepo(db);
   const organizations = await organizationRepo.list(
@@ -366,7 +383,7 @@ export async function scanDatabaseForExpiredAttempts(
       })),
       now,
       async (attemptId) => {
-        return autoSubmitAndGrade(db, ctx, attemptId, now);
+        return autoSubmitAndGrade(db, ctx, attemptId, nowFn());
       },
       {
         onError: (attemptId, err) => {
