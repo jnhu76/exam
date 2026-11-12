@@ -510,3 +510,239 @@ describe("deadline verification throttle is monotonic, not wall-clock bound", ()
     );
   });
 });
+
+/**
+ * In-flight manual submit racing the authoritative verification read (F16
+ * truthfulness): when the user confirms the submit dialog while the deadline
+ * episode is parked inside its /take verification GET, that manual POST owns
+ * `submittingRef` when the verdict lands. The episode's own handleSubmit
+ * would silently no-op behind the guard, so the episode must release the
+ * declaration — the manual submit's real outcome is the truth. Claiming
+ * `deadline_auto_submit_success` for a POST that never ran (and leaving the
+ * declaration armed) is a phantom success plus a lost retry path.
+ */
+describe("manual submit racing the authoritative verification read", () => {
+  /**
+   * Captures the discarded fire-and-forget rejections of dialog-invoked
+   * submits (the toast is the candidate feedback) so the discard is asserted,
+   * not silently suppressed — same discipline as the F16 suite.
+   */
+  function captureDiscardedSubmitRejections() {
+    const discarded: unknown[] = [];
+    const listener = (err: unknown) => {
+      discarded.push(err);
+    };
+    process.on("unhandledRejection", listener);
+    return {
+      discarded,
+      stop() {
+        process.off("unhandledRejection", listener);
+      },
+    };
+  }
+
+  interface Parked {
+    takeGate: ReturnType<typeof deferred<CandidateTakeSnapshot>>;
+    pendingSubmits: Array<ReturnType<typeof deferred<unknown>>>;
+  }
+
+  /**
+   * Loads the page, jumps the local clock past the deadline so the episode
+   * parks INSIDE the verification /take GET (call 2), then drives a user
+   * submit through the dialog so its POST is in flight when the verdict
+   * arrives.
+   */
+  async function parkEpisodeThenSubmitManually(): Promise<Parked> {
+    const takeGate = deferred<CandidateTakeSnapshot>();
+    let takeCalls = 0;
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        takeCalls += 1;
+        if (takeCalls === 1) return editableSnapshot();
+        // Every later read (verification, post-submit reload) waits on — or
+        // observes — the same parked server truth.
+        return takeGate.promise;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const pendingSubmits: Array<ReturnType<typeof deferred<unknown>>> = [];
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/submit")) {
+        const d = deferred<unknown>();
+        pendingSubmits.push(d);
+        return d.promise;
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+
+    renderPage();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0); // initial load (call 1)
+    });
+
+    // Local clock crosses the deadline: the episode parks at the
+    // verification read (call 2).
+    await act(async () => {
+      vi.setSystemTime(new Date(T0.getTime() + 3_100));
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(takeCalls).toBe(2);
+
+    // The candidate confirms the dialog while the episode is parked.
+    fireEvent.click(screen.getByTestId("take-submit-btn"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByTestId("confirm-submit-btn"),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(pendingSubmits).toHaveLength(1);
+
+    return { takeGate, pendingSubmits };
+  }
+
+  it("verdict lands while a manual submit is in flight: no phantom auto success, no duplicate POST", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      const { takeGate, pendingSubmits } =
+        await parkEpisodeThenSubmitManually();
+
+      // The authoritative verdict arrives while the manual POST owns the
+      // submit seam.
+      await act(async () => {
+        takeGate.resolve(deadlineFrozenSnapshot());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushTelemetry();
+      // The episode did NOT execute a submit here — it must not claim one…
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+      // …and must not fire a duplicate POST behind the manual one.
+      expect(pendingSubmits).toHaveLength(1);
+
+      // The manual POST settles successfully: navigation is its own outcome.
+      await act(async () => {
+        pendingSubmits[0]!.resolve({ ok: true });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(submitPostCount()).toBe(1);
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/result");
+    } finally {
+      capture.stop();
+    }
+  });
+
+  it("manual submit FAILS after a submit-capable frozen verdict: the released episode re-arms and the next tick really auto-submits", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      const { takeGate, pendingSubmits } =
+        await parkEpisodeThenSubmitManually();
+
+      // The verdict lands as frozen but submit stays the converging action
+      // (same server state shape as a terminal save-rejection reconcile:
+      // isEditable false, lockReason deadline, canSubmit retained), so the
+      // 1s deadline tick survives the applied snapshot.
+      await act(async () => {
+        takeGate.resolve(deadlineFrozenSnapshot({ canSubmit: true }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        pendingSubmits[0]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushTelemetry();
+      // The parked episode claimed nothing while the manual POST owned the
+      // seam — and its release means the failure is not terminal for it.
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+
+      // Next tick: the released declaration re-arms, the gate re-verifies
+      // (still frozen) and the REAL auto submit fires exactly once.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(pendingSubmits).toHaveLength(2);
+      await act(async () => {
+        pendingSubmits[1]!.resolve({ ok: true });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushTelemetry();
+
+      expect(submitPostCount()).toBe(2); // failed manual + real auto
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_started"),
+      ).toHaveLength(2);
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(1);
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/result");
+    } finally {
+      capture.stop();
+    }
+  });
+
+  it("manual submit FAILS after a submit-closing frozen verdict: no phantom success, no duplicate POST, page converges on the frozen truth", async () => {
+    const send = installRecordingBuffer();
+    const capture = captureDiscardedSubmitRejections();
+    try {
+      const { takeGate, pendingSubmits } =
+        await parkEpisodeThenSubmitManually();
+
+      // The verdict lands frozen with capabilities closed (the ordinary
+      // deadline reconciliation shape): applying it locks the page and the
+      // deadline tick retires — the submission already exists server-side.
+      await act(async () => {
+        takeGate.resolve(deadlineFrozenSnapshot());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        pendingSubmits[0]!.reject(new Error("network down"));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await flushTelemetry();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+
+      // Dismiss the still-open submit dialog so the locked overlay's
+      // accessibility subtree is queryable (Radix aria-hides the page while
+      // a dialog is open).
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "继续答题",
+        }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // The page converged on the frozen server truth: deadline-locked,
+      // honest next actions, no phantom retry state…
+      const overlay = screen.getByTestId("deadline-overlay");
+      expect(overlay).toHaveAttribute("data-lock-reason", "deadline");
+      expect(
+        within(overlay).queryByRole("button", { name: "重试提交" }),
+      ).toBeNull();
+      // …and no later tick manufactures a duplicate submit behind the
+      // failed manual one.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(submitPostCount()).toBe(1);
+      await flushTelemetry();
+      expect(
+        telemetryEvents(send, "deadline_auto_submit_success"),
+      ).toHaveLength(0);
+    } finally {
+      capture.stop();
+    }
+  });
+});

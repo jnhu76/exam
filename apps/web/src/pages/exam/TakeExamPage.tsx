@@ -1303,7 +1303,15 @@ export function TakeExamPage() {
         // render-time reset owns its refs and UI.
         return;
       }
-      if (verified && isDeadlineFrozenSnapshot(verified)) {
+      if (submittingRef.current) {
+        // A manual submit started while the verification read was in flight:
+        // this invocation's handleSubmit would silently no-op behind its
+        // guard, so that submit's outcome — not ours — is the real result
+        // (success navigates away; failure releases submittingRef). Release
+        // the declaration so the next tick can act on the settled truth.
+        // Never claim success for a POST this episode did not execute.
+        deadlineHandledRef.current = false;
+      } else if (verified && isDeadlineFrozenSnapshot(verified)) {
         deadlineDeferredAtMonotonicRef.current = null;
         try {
           await handleSubmit();
