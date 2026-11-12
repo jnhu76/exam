@@ -190,8 +190,8 @@ archived   → []  (terminal)
 | ---- | --------- | ---------- | ---- |
 | `publishExam` | draft → published | ≥1 题；passingScore>0；duration>0；timingMode=timed_window；questionSelectionMode=manual；retakePolicy 合法；openAt<closeAt；totalScore 匹配题分和；passingScore≤totalScore | 同时构建 QuestionSnapshot |
 | `openExam` | published → open | （无额外 guard，仅 transition 校验） | 手动开放 |
-| `closeExam` | open → closed | | **幂等**：已 closed 原样返回（不抛错）；未解决 attempt 的 guard 在 route 层 |
-| `cancelExam` | published\|open → canceled | | **不幂等**：canceled→canceled 被拒；不 void/force-submit attempt（guard 在 route 层，错误码 `EXAM_CANCEL_NOT_ALLOWED`/`UNRESOLVED_ATTEMPTS_EXIST`） |
+| `closeExam` | open → closed | | **幂等**：已 closed 原样返回（不抛错）；未解决 attempt 的 guard 在 route 层（`executeAdminExamTransition` 以 READ COMMITTED 评估，H-08：guard 语句在 Exam FOR UPDATE 锁等待之后运行，必须看到等待期间提交的 unresolved attempt，I2） |
+| `cancelExam` | published\|open → canceled | | **不幂等**：canceled→canceled 被拒；不 void/force-submit attempt（guard 在 route 层，错误码 `EXAM_CANCEL_NOT_ALLOWED`/`UNRESOLVED_ATTEMPTS_EXIST`，与 close 同一 H-08 快照契约） |
 | `unpublishExam` | published → draft | route 先 reconcile-by-now；published 但已过 openAt（逻辑上已 open）被拒（`EXAM_UNPUBLISH_NOT_ALLOWED`） | 永不接受 open→draft |
 | `extendExam` | open → open（仅改 closeAt） | extendMinutes 为正整数；新 closeAt = 旧 closeAt + extendMinutes（保留剩余窗口语义） | route 先 reconcile；已过 closeAt 的 open 被拒（`EXAM_EXTEND_NOT_ALLOWED`），不可复活 |
 | `archiveExam` | closed\|canceled → archived | | |
@@ -341,7 +341,7 @@ Deadline 触发：
 
 | 命令函数 | 允许的前置状态 | 事务行为 |
 | -------- | -------------- | -------- |
-| `startOrRestoreAttempt` | 无活跃 attempt（新建即 `in_progress`）；已有 active/disrupted attempt 则直接返回或恢复 | 锁 enrollment + attempt；新建分支物化 `attempt.questionSnapshot`；disrupted 分支内部组合 `restoreInterruptedAttempt`（见 `attemptCommands.ts`） |
+| `startOrRestoreAttempt` | 无活跃 attempt（新建即 `in_progress`）；已有 active/disrupted attempt 则直接返回或恢复 | 锁 enrollment + attempt；新建分支在 INSERT 之前以 Exam 行写锁复检 OPEN 门（锁序 Enrollment → Attempt → Exam，H-08：stale OPEN 读不得在 close/cancel 提交后仍创建 attempt）并据锁下权威快照做全部新建决策；disrupted 分支内部组合 `restoreInterruptedAttempt`（见 `attemptCommands.ts`） |
 | `restoreInterruptedAttempt`（内部生命周期步 `restoreAttemptState`：disrupted → in_progress） | disrupted | 锁内恢复；补偿与个人 deadline 效果按 ADR-013 策略评估（见 `restoreInterruption.ts`） |
 | `submitAttempt` | in_progress / disrupted | 锁 attempt，冻结 submitted_answers，物化 grading workset，设 submitted（见 §4.2） |
 | `saveAnswer`（`answerProtocol.ts`） | 非 `voided` / `submitted` / `graded` 且未过有效截止 | 经 EA 锁序 + mutation context 锁内更新 answers（draft；submit 后永不为评分真相）。服务端接受范围 ≠ 页面可编辑（见 §4.3） |
@@ -521,7 +521,7 @@ OR
 
 **关键区分**：本兜底是 recovery 行为——它使 legacy/schema-admissible NULL 行在考试窗口关闭后不会无限期保持 active，并在内联 reconciliation 与 scanner 之间保持一致。它**不**定义当前任何 timing mode 会正常产生 NULL `deadlineAt`。"runtime 可安全处理 NULL" 与 "NULL 是合法协议时序状态" 不是同一命题；P0-C 将二者混同，P0-C1 在此显式分离。
 
-**Save 变更的 deadline 串行化点（EXAM-543）**：save 变更的权威 deadline 判定消费 `prepareReconciledAttemptMutation` 冻结的 `effectiveDeadline`。该 seam 在 EA 锁序（Enrollment → Attempt）之后以共享 Exam 锁读（`FOR SHARE`，#668）读取 exam 行——与 scanner `autoSubmitAndGrade` 和 operator time grant 同一锁序，不新增反向边。作用：并发 exam 命令（如 `extendExam`）在本事务快照之后、锁获取之前提交的 `closeAt` 变更，使锁读在 REPEATABLE READ 下抛 40001，`executeInTransaction` 整体重试 save 事务并按新权威重跑 reconciliation；在本事务持锁之后才提交的 `closeAt` 变更则排队等在本事务之后（save-wins 线性化——请求在旧权威仍为当前真相时到达并完成）。两种交错都保证：save 的 deadline 判定不会被并发已提交的 `closeAt` 变更无声失效，也不存在第二个 deadline 判定权威。锁模式语义（#668）：同 exam 的 candidate deadline reader 相互共存（reader/reader 兼容），对 Exam 写者保持完全互斥；该共享读是事务内 terminal Exam 锁获取，其后不得再取 Exam 写锁（并发共享持有者升级会 40P01 死锁）。真实 Exam 写路径（lifecycle、extend、publish、scanner recheck、operator grant、restore）保留 `FOR UPDATE`；写者流经共享读时是同事务对已持有排他锁行的再读，无升级。
+**Save 变更的 deadline 串行化点（EXAM-543）**：save 变更的权威 deadline 判定消费 `prepareReconciledAttemptMutation` 冻结的 `effectiveDeadline`。该 seam 在 EA 锁序（Enrollment → Attempt）之后以共享 Exam 锁读（`FOR SHARE`，#668）读取 exam 行——与 scanner `autoSubmitAndGrade` 和 operator time grant 同一锁序，不新增反向边。作用：并发 exam 命令（如 `extendExam`）在本事务快照之后、锁获取之前提交的 `closeAt` 变更，使锁读在 REPEATABLE READ 下抛 40001，`executeInTransaction` 整体重试 save 事务并按新权威重跑 reconciliation；在本事务持锁之后才提交的 `closeAt` 变更则排队等在本事务之后（save-wins 线性化——请求在旧权威仍为当前真相时到达并完成）。两种交错都保证：save 的 deadline 判定不会被并发已提交的 `closeAt` 变更无声失效，也不存在第二个 deadline 判定权威。锁模式语义（#668）：同 exam 的 candidate deadline reader 相互共存（reader/reader 兼容），对 Exam 写者保持完全互斥；该共享读是事务内 terminal Exam 锁获取，其后不得再取 Exam 写锁（并发共享持有者升级会 40P01 死锁）。真实 Exam 写路径（lifecycle、extend、publish、scanner recheck、operator grant、restore、attempt-start 新建分支的权威 OPEN 复检）保留 `FOR UPDATE`；写者流经共享读时是同事务对已持有排他锁行的再读，无升级。
 
 ### 5.2 入口
 
