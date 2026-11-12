@@ -49,9 +49,11 @@ export interface ExamRepository {
    * Loads an exam under the caller's exclusive row lock (FOR UPDATE).
    * Required by every path that mutates the Exam authority (interruption
    * restore/bounded-grace evaluation, `publishResults`, exam lifecycle
-   * commands, scanner recheck, operator grants) to serialize the
-   * authoritative `closeAt` read against exam-window changes. Lock order
-   * Enrollment → Attempt → Exam must be preserved; no Exam → Attempt path.
+   * commands, scanner recheck, operator grants) and by the attempt-start
+   * NEW-attempt path (H-08: the authoritative OPEN re-check before any
+   * attempt INSERT) to serialize the authoritative `closeAt` read against
+   * exam-window changes. Lock order Enrollment → Attempt → Exam must be
+   * preserved; no Exam → Attempt path.
    */
   findByIdForUpdate(examId: string): Promise<Exam | null> | Exam | null;
   /**
