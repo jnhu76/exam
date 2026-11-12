@@ -112,6 +112,7 @@ Architecture decisions
 |   +-- ADR-003 async / queue classification
 |   +-- ADR-004 desktop runtime
 |   +-- ADR-025 HTTP request correlation identity
+|   +-- ADR-028 OpenTelemetry technical telemetry (default Off)
 |   `-- ADR-007 stateful-infrastructure test isolation
 |
 +-- B. Exam execution & correctness core
@@ -161,6 +162,7 @@ exam-domain truth.
 | [ADR-004](ADR-004-desktop-electron.md) | Optional Desktop/Electron runtime adoption | DEFERRED |
 | [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful infrastructure test isolation/lifecycle | ACCEPTED core; later work partly deferred |
 | [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP request correlation identity (server-generated UUIDv4 request id) | ACCEPTED, amended (2026-11-08: x-request-id response header, #865) |
+| [ADR-028](ADR-028-opentelemetry-technical-telemetry.md) | OpenTelemetry technical telemetry standard (default Off, bounded opt-in; prospective narrowing of the ADR-018 anti-goal window and the #921 NO_GO ruling for the #964 scope) | PROPOSED |
 
 ### B. Exam execution & correctness core
 
@@ -297,9 +299,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP Request Correlation Identity | ACCEPTED, amended (2026-11-08: x-request-id response header, #865) | none (adopts UUIDv4 over the #860 research recommendation `KEEP_DEFAULT_OPTION_B`, which was not an ADR) | none |
 | [ADR-026](ADR-026-client-event-temporal-evidence-boundary.md) | Client Event Temporal Evidence Boundary | ACCEPTED | none (adopts the #874 research recommendation `TIME_WINDOW_NO_GO` as binding policy) | none |
 | [ADR-027](ADR-027-build-first-dev-execution.md) | Build-first Development Execution (managed `pnpm dev` entrypoints and failed-build safety) | ACCEPTED (approved with errata E1–E3, 2026-11-11) | none (adopts the #937 architecture adjudication `ADOPT_BUILD_FIRST_DEV` as binding policy) | none |
+| [ADR-028](ADR-028-opentelemetry-technical-telemetry.md) | OpenTelemetry Technical Telemetry Standard (default Off, bounded opt-in) | PROPOSED | none (upon acceptance: prospectively narrows ADR-018's anti-goal window scope and the #921 NO_GO ruling for the #964 scope) | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-028**.
+ADR numbers are stable and never reused. The next free number is **ADR-029**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.
