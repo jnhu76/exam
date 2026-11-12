@@ -535,9 +535,11 @@ workerDbDescribe("process-restart deadline recovery (#326)", () => {
     expect(row.score).toBe(100);
     expect(row.passed).toBe(true);
     expect(row.submittedAnswers).not.toBeNull();
-    // submittedAt must be a server-side valid instant inside [effectiveDeadline, observation].
-    // Scanner-won races record the wall-clock submit moment (>closeAt); lazy-won
-    // races record exactly effectiveDeadline — both are inside the window.
+    // submittedAt must be the deadline path's business valid instant: exactly
+    // the effective deadline (= closeAt in these scenarios) for the lazy and
+    // the scanner deadline paths alike (#961 convergence); legacy rows written
+    // before the convergence may carry the scanner tick instead — both are
+    // inside the window.
     expect(row.submittedAt!.getTime()).toBeGreaterThanOrEqual(params.closeAtMs);
     expect(row.submittedAt!.getTime()).toBeLessThanOrEqual(observedAtMs);
 

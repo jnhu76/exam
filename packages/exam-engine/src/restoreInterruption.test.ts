@@ -22,7 +22,9 @@ import type {
 import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import {
   restoreInterruptedAttempt,
+  resolveActiveInterruptionOnTerminalization,
   type RestoreInterruptionResult,
+  type SubmitInterruptionResolution,
 } from "./restoreInterruption.js";
 
 const NOW = new Date("2026-01-01T01:00:00.000Z");
@@ -313,6 +315,66 @@ async function runRestore(
     now,
   );
 }
+
+describe("resolveActiveInterruptionOnTerminalization — detected/terminalized ordering", () => {
+  function activeResolution(ctx: MockContext): SubmitInterruptionResolution {
+    return {
+      mode: "active_interruption",
+      episodeRepo: ctx.episodeRepo,
+      eventRepo: ctx.eventRepo,
+      hint: {
+        policy: "strict",
+        eligibleSeconds: null,
+        adjustmentId: null,
+        reasonCode: "deadline_terminalization",
+      },
+    };
+  }
+
+  // Write-point ordering invariant (state-and-authority.md): a caller's
+  // observation sample can predate the detected event when a disruption
+  // commits AFTER the caller sampled its clock but BEFORE the attempt row
+  // lock (e.g. deadline scanner tick vs heartbeat scanner). The write point
+  // must clamp occurredAt to max(observed, detected.occurredAt) so the
+  // episode's event order never inverts.
+  it("clamps terminalized.occurredAt up to detected.occurredAt when the observation sample is earlier", async () => {
+    const ctx = setupMocks({});
+    // Observation sample strictly earlier than the detected event.
+    const earlyObservation = new Date(DETECTED_AT.getTime() - 60_000);
+
+    await resolveActiveInterruptionOnTerminalization(
+      makeAttempt(),
+      activeResolution(ctx),
+      earlyObservation,
+    );
+
+    expect(ctx.insertedEvents).toHaveLength(1);
+    const inserted = ctx.insertedEvents[0] as {
+      eventType: string;
+      occurredAt: Date;
+    };
+    expect(inserted.eventType).toBe("terminalized");
+    expect(inserted.occurredAt.getTime()).toBe(DETECTED_AT.getTime());
+  });
+
+  it("keeps the caller's observation instant when it is at or after detected.occurredAt", async () => {
+    const ctx = setupMocks({});
+
+    await resolveActiveInterruptionOnTerminalization(
+      makeAttempt(),
+      activeResolution(ctx),
+      NOW, // NOW > DETECTED_AT
+    );
+
+    expect(ctx.insertedEvents).toHaveLength(1);
+    const inserted = ctx.insertedEvents[0] as {
+      eventType: string;
+      occurredAt: Date;
+    };
+    expect(inserted.eventType).toBe("terminalized");
+    expect(inserted.occurredAt.getTime()).toBe(NOW.getTime());
+  });
+});
 
 describe("restoreInterruptedAttempt", () => {
   describe("strict restore", () => {

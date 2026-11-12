@@ -151,7 +151,10 @@ describe("attempt routes", () => {
       );
       await backdateDeadline(attemptId);
 
-      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      const result = await scanDatabaseForExpiredAttempts(
+        ctx.app,
+        () => new Date(),
+      );
 
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
@@ -225,7 +228,7 @@ describe("attempt routes", () => {
       );
       await backdateDeadline(attemptId);
 
-      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      await scanDatabaseForExpiredAttempts(ctx.app, () => new Date());
       const firstAttempt = await createAttemptRepo(ctx.db).findById(
         candidateRequestContext(t),
         attemptId,
@@ -237,7 +240,10 @@ describe("attempt routes", () => {
         .set({ deadlineAt: new Date(Date.now() - 60_000) })
         .where(eq(schema.examAttempts.id, attemptId));
 
-      const second = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      const second = await scanDatabaseForExpiredAttempts(
+        ctx.app,
+        () => new Date(),
+      );
 
       expect(second.submittedCount).toBe(0);
 
@@ -270,7 +276,10 @@ describe("attempt routes", () => {
       await backdateDeadline(attemptId);
       await disruptAttempt(ctx.db, t.orgId, attemptId);
 
-      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      const result = await scanDatabaseForExpiredAttempts(
+        ctx.app,
+        () => new Date(),
+      );
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
       const attempt = await createAttemptRepo(ctx.db).findById(
@@ -295,7 +304,10 @@ describe("attempt routes", () => {
         .set({ status: "voided" })
         .where(eq(schema.examAttempts.id, attemptId));
 
-      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      const result = await scanDatabaseForExpiredAttempts(
+        ctx.app,
+        () => new Date(),
+      );
 
       const attempt = await createAttemptRepo(ctx.db).findById(
         candidateRequestContext(t),
@@ -319,7 +331,7 @@ describe("attempt routes", () => {
         .set({ deadlineAt: new Date(Date.now() + 3600_000) })
         .where(eq(schema.examAttempts.id, attemptId));
 
-      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      await scanDatabaseForExpiredAttempts(ctx.app, () => new Date());
 
       const attempt = await createAttemptRepo(ctx.db).findById(
         candidateRequestContext(t),
@@ -470,7 +482,10 @@ describe("attempt routes", () => {
         .set({ closeAt: new Date(Date.now() - 60_000) })
         .where(eq(schema.exams.id, attempt!.examId));
 
-      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      const result = await scanDatabaseForExpiredAttempts(
+        ctx.app,
+        () => new Date(),
+      );
       expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
       const after = await createAttemptRepo(ctx.db).findById(
@@ -502,7 +517,7 @@ describe("attempt routes", () => {
         .where(eq(schema.examAttempts.id, attemptId));
       // Exam window stays in the future (default seeded closeAt is future).
 
-      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      await scanDatabaseForExpiredAttempts(ctx.app, () => new Date());
 
       const after = await createAttemptRepo(ctx.db).findById(
         candidateRequestContext(t),
@@ -628,7 +643,7 @@ describe("attempt routes", () => {
 
         const result = await scanDatabaseForExpiredAttempts(
           ctx.app,
-          new Date(),
+          () => new Date(),
         );
         expect(result.submittedCount).toBeGreaterThanOrEqual(1);
 
@@ -638,15 +653,210 @@ describe("attempt routes", () => {
         );
         expect(after?.status).toBe("graded");
         expect(after?.submissionReason).toBe("deadline");
-        // The scanner path stamps submittedAt at the wall-clock reconciliation
-        // instant (only the lazy on-read path backdates to the effective
-        // deadline), so it can only be AT OR AFTER the closeAt cutoff.
+        // The scanner's deadline submission stamps submittedAt with the
+        // canonical effective deadline (H-04) — for a deadline-mode attempt
+        // that is exactly exam.closeAt, the same semantic as the lazy
+        // on-read reconciliation path (exam-runtime.md §5.4).
         const closedAt = await ctx.db
           .select({ closeAt: schema.exams.closeAt })
           .from(schema.exams)
           .where(eq(schema.exams.id, examId));
-        expect(after?.submittedAt?.getTime()).toBeGreaterThanOrEqual(
+        expect(after?.submittedAt?.getTime()).toBe(
           closedAt[0]!.closeAt!.getTime(),
+        );
+      });
+
+      // H-04 (#961) — scanner deadline submit stamps the BUSINESS valid
+      // submission instant. exam-runtime.md §5.4 defines the deadline
+      // reconciliation family's `submittedAt` as the effective deadline D;
+      // the scanner is the scheduled half of that family (same freeze+grade
+      // barrier), so its deadline submission must carry the same semantic as
+      // the lazy on-read path — not the scan tick's wall clock. The actual
+      // execution instant stays where it belongs: grading keeps the tick time.
+      it("stamps the scanner's deadline submit with the effective deadline D, while grading keeps the tick time (H-04)", async () => {
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
+        const { attemptId } = await createStartedAttemptWithQuestion(
+          t,
+          "Deadline Scanner SubmittedAt Effective Exam",
+        );
+        // Fix the authoritative effective deadline D at a known past instant;
+        // the scanner's tick clock is strictly later than D.
+        const effectiveDeadline = new Date(Date.now() - 60_000);
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ deadlineAt: effectiveDeadline, status: "in_progress" })
+          .where(eq(schema.examAttempts.id, attemptId));
+
+        const scanNow = new Date();
+        const result = await scanDatabaseForExpiredAttempts(
+          ctx.app,
+          () => scanNow,
+        );
+        expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          candidateRequestContext(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("graded");
+        expect(after?.submissionReason).toBe("deadline");
+        // Business valid time: submittedAt = D exactly (min(closeAt, D) = D —
+        // the seeded exam closeAt stays in the future).
+        expect(after?.submittedAt?.getTime()).toBe(effectiveDeadline.getTime());
+        // Actual execution time: grading runs at the tick instant, unmoved.
+        expect(after?.gradedAt?.getTime()).toBe(scanNow.getTime());
+      });
+
+      // H-04 review: the submit's business effective instant and the
+      // interruption terminalization's observation instant are DIFFERENT
+      // facts. The attempt was detected at t1 (after the deadline D) and the
+      // scanner processes it at t2 > max(D, t1). The submit is backdated to D,
+      // but the terminalized event must record the observation instant t2 —
+      // never D, which would place the outcome before the detected event and
+      // invert the episode's event order.
+      it("stamps a disrupted attempt's scanner deadline submit with D but terminalizes at the scan observation instant (H-04 review)", async () => {
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
+        const { attemptId } = await createStartedAttemptWithQuestion(
+          t,
+          "Deadline Scanner Disrupted Terminalization Exam",
+        );
+        const effectiveDeadline = new Date(Date.now() - 120_000);
+        const detectedAt = new Date(Date.now() - 60_000);
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ deadlineAt: effectiveDeadline, status: "in_progress" })
+          .where(eq(schema.examAttempts.id, attemptId));
+        await disruptAttempt(ctx.db, t.orgId, attemptId, {
+          interruptedAt: detectedAt,
+        });
+
+        const scanNow = new Date(Date.now() + 30_000);
+        const result = await scanDatabaseForExpiredAttempts(
+          ctx.app,
+          () => scanNow,
+        );
+        expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          candidateRequestContext(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("graded");
+        expect(after?.submissionReason).toBe("deadline");
+        // Business effective time: submittedAt = D, unchanged.
+        expect(after?.submittedAt?.getTime()).toBe(effectiveDeadline.getTime());
+        // Actual execution time: grading keeps the scan tick.
+        expect(after?.gradedAt?.getTime()).toBe(scanNow.getTime());
+
+        const events = await ctx.db
+          .select()
+          .from(schema.attemptInterruptionEvents)
+          .where(eq(schema.attemptInterruptionEvents.attemptId, attemptId));
+        const detected = events.filter((e) => e.eventType === "detected");
+        const terminalized = events.filter(
+          (e) => e.eventType === "terminalized",
+        );
+        expect(detected).toHaveLength(1);
+        expect(terminalized).toHaveLength(1);
+        // Observation time: terminalization records when the scanner actually
+        // processed the disrupted attempt, not the business deadline.
+        expect(terminalized[0]!.occurredAt.getTime()).toBe(scanNow.getTime());
+        expect(detected[0]!.occurredAt.getTime()).toBe(detectedAt.getTime());
+        expect(detected[0]!.occurredAt.getTime()).toBeLessThanOrEqual(
+          terminalized[0]!.occurredAt.getTime(),
+        );
+        // Event contract fields are unchanged by the time separation.
+        expect(terminalized[0]!.reasonCode).toBe("deadline_terminalization");
+        expect(terminalized[0]!.detectionSource).toBeNull();
+        expect(terminalized[0]!.observedLastActivityAt).toBeNull();
+        expect(terminalized[0]!.interruptionId).toBe(
+          detected[0]!.interruptionId,
+        );
+      });
+
+      // H-04 review r1 (review 5870777213) — deadline-scanner tick vs
+      // heartbeat-scanner interleave. The scanner's discovery tick T0 is a
+      // whole-cycle sample; a disruption may commit AFTER T0 but BEFORE the
+      // attempt row lock (heartbeat scanner interleave — no clock jump
+      // needed). The terminalized event must record the PER-CANDIDATE
+      // processing instant (nowFn sample at handling time), never the
+      // discovery tick, or terminalized.occurredAt can land before the
+      // episode's detected event and invert the state-and-authority MUST.
+      //
+      // PROOF BOUNDARY: the disruption (detected T1, T0 < T1 < T2) is
+      // committed before the scan call rather than between discovery and the
+      // row lock; the DB state at the terminalization write is identical to
+      // the reachable interleave (disrupted attempt, detected event later
+      // than the scanner's time sample). The mid-flight window itself is
+      // covered at the engine write point by the clamp tests in
+      // restoreInterruption.test.ts.
+      it("terminalizes at the per-candidate processing instant, not the discovery tick, when a disruption commits after the tick (H-04 review r1)", async () => {
+        const t = await createIsolatedAttemptOrg(ctx, {
+          slugPrefix: DEADLINE_SCANNER_TEST_PREFIX,
+          label: "DS",
+        });
+        const { attemptId } = await createStartedAttemptWithQuestion(
+          t,
+          "Deadline Scanner Interleaved Terminalization Exam",
+        );
+        const base = Date.now();
+        const effectiveDeadline = new Date(base - 300_000); // D
+        const discoveryTick = new Date(base - 240_000); // T0
+        const detectedAt = new Date(base - 180_000); // T1 (heartbeat scanner)
+        const processedAt = new Date(base - 120_000); // T2 (per-candidate)
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ deadlineAt: effectiveDeadline, status: "in_progress" })
+          .where(eq(schema.examAttempts.id, attemptId));
+        // Heartbeat scanner commits the disruption after the deadline
+        // scanner sampled its tick: detected T1 with T0 < T1 < T2.
+        await disruptAttempt(ctx.db, t.orgId, attemptId, {
+          interruptedAt: detectedAt,
+        });
+
+        // First nowFn call = whole-cycle discovery tick T0; subsequent calls
+        // = per-candidate processing samples (T2).
+        let timeCall = 0;
+        const result = await scanDatabaseForExpiredAttempts(ctx.app, () =>
+          timeCall++ === 0 ? discoveryTick : processedAt,
+        );
+        expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+        const after = await createAttemptRepo(ctx.db).findById(
+          candidateRequestContext(t),
+          attemptId,
+        );
+        expect(after?.status).toBe("graded");
+        expect(after?.submissionReason).toBe("deadline");
+        // Business effective time: submittedAt = D, unchanged.
+        expect(after?.submittedAt?.getTime()).toBe(effectiveDeadline.getTime());
+        // Actual execution time: grading runs at the per-candidate sample.
+        expect(after?.gradedAt?.getTime()).toBe(processedAt.getTime());
+
+        const events = await ctx.db
+          .select()
+          .from(schema.attemptInterruptionEvents)
+          .where(eq(schema.attemptInterruptionEvents.attemptId, attemptId));
+        const detected = events.filter((e) => e.eventType === "detected");
+        const terminalized = events.filter(
+          (e) => e.eventType === "terminalized",
+        );
+        expect(detected).toHaveLength(1);
+        expect(terminalized).toHaveLength(1);
+        expect(detected[0]!.occurredAt.getTime()).toBe(detectedAt.getTime());
+        // Observation time: terminalization records the processing instant,
+        // never the discovery tick T0 < T1.
+        expect(terminalized[0]!.occurredAt.getTime()).toBe(
+          processedAt.getTime(),
+        );
+        expect(detected[0]!.occurredAt.getTime()).toBeLessThanOrEqual(
+          terminalized[0]!.occurredAt.getTime(),
         );
       });
 
@@ -697,7 +907,7 @@ describe("attempt routes", () => {
         // A full day "passes" (simulated wall-clock sample for the scan cycle).
         await scanDatabaseForExpiredAttempts(
           ctx.app,
-          new Date(Date.now() + 86_400_000),
+          () => new Date(Date.now() + 86_400_000),
         );
 
         const after = await createAttemptRepo(ctx.db).findById(

@@ -13,6 +13,7 @@ import {
   submitAttempt,
   gradeAttemptIdempotent,
   isAttemptDeadlineExpired,
+  computeEffectiveDeadline,
   lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
 import type { SubmitInterruptionResolution } from "@exam/exam-engine";
@@ -111,7 +112,17 @@ export const deadlineScannerMetrics = {
  * actually expired under lock — e.g. extended between discovery and lock) is
  * NOT counted as a submission.
  *
- * `now` is threaded through as the single time sample for the cycle.
+ * `now` is the discovery tick sample that selected the candidates; the
+ * per-attempt processing instant is owned by the `onCandidate` callback
+ * (see TIME OWNERSHIP below).
+ *
+ * TIME OWNERSHIP (H-04 review r1): the iterator itself is time-agnostic;
+ * the discovery tick that selected the candidates and the per-attempt
+ * processing instant are DIFFERENT samples. `scanDatabaseForExpiredAttempts`
+ * re-samples its injectable clock inside the `onCandidate` callback so each
+ * `autoSubmitAndGrade` observes the actual handling instant (expiry recheck,
+ * grading, terminalization) — never a whole-cycle tick that may predate a
+ * disruption committed mid-scan by the heartbeat scanner.
  */
 export async function scanDeadlineCandidates(
   candidates: DeadlineCandidate[],
@@ -169,6 +180,13 @@ function createSystemContext(organizationId: string): RequestContext {
  * 5. The canonical `isAttemptDeadlineExpired(exam, lockedAttempt, now)` seam
  *    is the SOLE authority for "submit or skip". A candidate that was extended
  *    or reconciled between discovery and lock returns false here → no-op.
+ *
+ * Time semantics (two distinct instants per submission): the deadline
+ * submission's business valid `submittedAt` is the canonical effective
+ * deadline D — the same semantic as the lazy on-read reconciliation path —
+ * while `now` (the PER-CANDIDATE processing sample, not the discovery tick)
+ * is the actual-execution instant for the expiry recheck, grading and
+ * interruption terminalization (`terminalized.occurredAt`).
  *
  * @returns true iff the attempt was submitted+graded by this call.
  */
@@ -234,6 +252,21 @@ export async function autoSubmitAndGrade(
       ctx,
     );
 
+    // The deadline submission's business valid submittedAt is the canonical
+    // effective deadline D, not the scan tick (same semantic as the lazy
+    // on-read reconciliation path; exam-runtime.md §5.4). A positive
+    // `isAttemptDeadlineExpired` above implies D is non-null (null never
+    // expires); the guard keeps that fact type-honest and fails safe as a
+    // no-op instead of freezing an attempt that has no deadline. The tick
+    // `now` stays the actual-execution instant for grading below.
+    const effectiveDeadline = computeEffectiveDeadline(
+      lockedExam as Exam,
+      locked as ExamAttempt,
+    );
+    if (effectiveDeadline === null) {
+      return false;
+    }
+
     // R1/R9: build the interruption resolution based on the locked attempt's
     // status. The deadline scanner handles both in_progress and disrupted
     // attempts. For disrupted attempts, the resolution terminalizes the active
@@ -275,11 +308,23 @@ export async function autoSubmitAndGrade(
       };
     }
 
-    await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
-      source: "deadline_scanner",
-      submissionReason: "deadline",
-      resolution,
-    });
+    await submitAttempt(
+      attempts,
+      gradingWorksetRepo,
+      attemptId,
+      effectiveDeadline,
+      {
+        source: "deadline_scanner",
+        submissionReason: "deadline",
+        resolution,
+        // Two distinct instants: the submit is backdated to the business
+        // effective deadline D, while an interruption terminalization must
+        // record when this tick actually observed/processed it. Passing D
+        // there could place `terminalized.occurredAt` before the episode's
+        // detected event.
+        terminalizationObservedAt: now,
+      },
+    );
 
     // Grade in the same transaction from the workset entries submitAttempt just
     // materialized; `cap` is the EA (enrollment+attempt) protocol authority
@@ -303,8 +348,14 @@ export async function autoSubmitAndGrade(
 
 export async function scanDatabaseForExpiredAttempts(
   fastify: FastifyInstance,
-  now: Date = fastify.now(),
+  nowFn: () => Date = () => fastify.now(),
 ): Promise<ScanResult> {
+  // Whole-cycle discovery tick: one sample up front selects the candidate
+  // set (listDeadlineCandidates). Per-candidate processing re-samples
+  // nowFn() so the expiry recheck, grading and interruption terminalization
+  // observe the actual handling instant — never a tick that may predate a
+  // disruption committed mid-scan by the heartbeat scanner.
+  const now = nowFn();
   const db = fastify.db as Database;
   const organizationRepo = createOrganizationRepo(db);
   const organizations = await organizationRepo.list(
@@ -332,7 +383,7 @@ export async function scanDatabaseForExpiredAttempts(
       })),
       now,
       async (attemptId) => {
-        return autoSubmitAndGrade(db, ctx, attemptId, now);
+        return autoSubmitAndGrade(db, ctx, attemptId, nowFn());
       },
       {
         onError: (attemptId, err) => {

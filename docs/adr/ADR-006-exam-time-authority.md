@@ -2,7 +2,8 @@
 
 ## Status
 
-**Accepted — amended by the audit atomicity corrective (2026-07-21).** The
+**Accepted — amended by the audit atomicity corrective (2026-07-21) and the
+temporal timestamp semantics amendment (2026-11-12, #961).** The
 canonical time authority plugin (`apps/api/src/plugins/now.ts`) already exists
 and is in use; this ADR records that decision as binding and adds the
 structural rules that prevent regression.
@@ -346,6 +347,115 @@ accepted for best-effort observations.
 
 No message bus, Kafka, Redis stream, workflow engine, or general-purpose
 outbox is introduced.
+
+## Temporal timestamp semantics amendment (2026-11-12, #961)
+
+This amendment freezes how the captured operation instant relates to the
+effective deadline and how timestamp identity is recorded. It does not change
+the deadline domain, the strict expiry comparison, or any exam fairness
+policy; it names the semantics the runtime already implements and pins the
+boundaries that were previously implicit.
+
+### Operation capture instant `C(o)`
+
+`C(o)` is the instant an operation obtains from `fastify.now()` when it
+performs time-sensitive business logic, threaded explicitly through
+command/policy/repo (the per-request/tick capture above). It is:
+
+- **not** the physical arrival time of the request at the host;
+- **not** a durable admission reservation, admission token, or any other
+  retainable entitlement;
+- **not** a revocable terminal fact.
+
+Same-operation internal retries keep `C(o)`: a 40001/40P01 failure is retried
+by `executeInTransaction` with the operation's established capture, while the
+retried transaction re-executes against the latest authoritative committed
+state (fresh snapshot, row locks, re-read authority). Retaining `C(o)` never
+waives re-validation: every retry must re-check the current authoritative
+state before deciding.
+
+As-built scope note (current state): start / save / submit / restore capture
+`C(o)` once at handler entry, outside the transaction, so retries reuse it;
+the deadline scanner captures once per tick and threads it through every
+candidate transaction. `GET /candidate/attempts/:attemptId/take` is a
+command-style GET that currently samples the reconciliation instant INSIDE its
+transaction callback (re-sampled on retry) and samples a second time for the
+snapshot's `serverNow`. That deviation from the capture-once rule is an OPEN
+decision recorded as a blocked decision in the #961 fix PR: no accepted
+contract determines whether a command-style GET's observation instant
+(`serverNow`) must equal its command instant, and either unification direction
+changes candidate-visible timing, so it must not be resolved by
+implementation drift.
+
+### Deadline eligibility (`C(o)` vs `D`)
+
+`D` is the canonical effective deadline (`computeEffectiveDeadline`:
+`min(closeAt, deadlineAt)` with the documented null/defensive rules).
+
+- `C(o) < D` is a **necessary** condition for time eligibility, **not a
+  sufficient** one. Final legality additionally requires: the Attempt is
+  still writable at the authoritative check (not already frozen/terminal),
+  the Exam authority configuration is legal at that check, the
+  question/answer is legal, the version/receipt protocol is satisfied, and no
+  irreversible freeze has already occurred.
+- `C(o) = D` is **expired**. The canonical comparison is strict
+  (`isAttemptDeadlineExpired`: `C(o) >= D`); equality never grants extra
+  time.
+- A request initiated before `D` is **not guaranteed to win**. Lock and
+  commit order decide outcomes (the ADR-008 documented legal semantics); a
+  pre-deadline request can be rejected when another operation froze the
+  attempt first or when a concurrent authority change invalidated its
+  premise.
+- No persistent admission reservation is derived from `C(o)`. Creating one
+  would be a separate product decision.
+
+### Timestamp identity of `submittedAt`
+
+`submittedAt` is the business-valid submission instant for the source that
+produced the submission:
+
+| Source | `submittedAt` |
+| --- | --- |
+| Candidate manual submit | `C(o)` of the submit request |
+| Deadline reconciliation — lazy on-read (`ensureAttemptDeadlineReconciled`) | effective deadline `D` |
+| Deadline reconciliation — scheduled scanner (`autoSubmitAndGrade`) | effective deadline `D` (converged with the lazy path; the scan tick is not the business submission instant) |
+| Admin force submit | its own applied instant (independent source) |
+
+Actual-execution instants are recorded separately and are not rewritten:
+grading stamps (`gradedAt`) keep the tick/operation instant, and interruption
+terminalization events record the terminalizing call's actual observation
+instant — for deadline reconciliation the request/tick instant, never the
+backdated `D`.
+`submissionReason` distinguishes only `manual` vs `deadline`; it cannot
+distinguish the execution path, and the source must not be inferred from a
+`submittedAt`-vs-`closeAt` difference. Historical rows written before this
+convergence may carry mixed semantics; they are never backfilled or rewritten.
+
+### Clock anomaly boundaries
+
+The runtime authority is the host wall clock behind `fastify.now()`, sampled
+per request/tick. It is not a monotonic clock and no distributed time service
+exists (single-instance by design; no cross-instance logical clock, no scanner
+leader election).
+
+- **Forward wall-clock jump**: `C(o) >= D` becomes true earlier, so deadline
+  freeze/submission happens earlier; heartbeat staleness
+  (`tickNow - lastActivityAt`) grows and can disrupt a live attempt if the
+  jump exceeds the timeout and no heartbeat lands first; interruption
+  compensation elapsed-second formulas can shift. Convergence remains
+  idempotent: reconciliation and scanner ticks are safe to repeat, and an
+  operator time grant is the recovery tool.
+- **Backward wall-clock jump**: `C(o) >= D` stays false until the clock
+  catches up, so effective windows extend and freeze timing is delayed;
+  elapsed/compensated seconds can shrink (never negative — bounded by
+  the policy formulas). `last_activity_at` is protected independently: the
+  heartbeat write is a high-water mark (`GREATEST(last_activity_at, C(o))`),
+  so neither a delayed older request nor a backward clock step can regress
+  the stored activity fact.
+- **Not in scope / not implemented**: distributed time service, cross-instance
+  monotonic clock, NTP management, scanner leader election. Multi-instance
+  deployment remains a future architecture risk; today's single instance is
+  the documented deployment contract.
 
 ## Alternatives considered
 

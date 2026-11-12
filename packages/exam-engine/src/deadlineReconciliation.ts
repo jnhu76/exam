@@ -242,6 +242,11 @@ export async function ensureAttemptDeadlineReconciled(
   // wall-clock reconciliation instant. submissionReason='deadline' marks the
   // freeze as deadline-triggered.
   //
+  // Two distinct instants: the submit time is the business-effective deadline
+  // D, while the interruption terminalization records the observation instant
+  // `now` (this reconciliation pass), so `terminalized.occurredAt` is never
+  // backdated before the episode's detected event.
+  //
   // submitAttempt owns the grading workset materialization. The
   // gradingWorksetRepo is passed through — no caller-level materialize call.
   const submittedAttempt = await submitAttempt(
@@ -253,6 +258,7 @@ export async function ensureAttemptDeadlineReconciled(
       source: "deadline_scanner",
       submissionReason: "deadline",
       resolution,
+      terminalizationObservedAt: now,
     },
   );
 
