@@ -93,6 +93,13 @@ type TimingDim = {
   timingMode: "untimed" | "timed_window" | "deadline";
   durationMinutes: number | null;
   closeAtOffsetMs: number | null;
+  /**
+   * Explicit business configuration, NOT derivable from `name`. The
+   * `timed_window/no-queue` label contains the substring "queue", so any
+   * name-based inference silently enables the admission gate and invalidates
+   * the queue-off coverage this matrix claims.
+   */
+  requireQueue: boolean;
 };
 
 const DIM_UNTIMED_QUEUE: TimingDim = {
@@ -100,18 +107,21 @@ const DIM_UNTIMED_QUEUE: TimingDim = {
   timingMode: "untimed",
   durationMinutes: null,
   closeAtOffsetMs: null,
+  requireQueue: true,
 };
 const DIM_TIMED_WINDOW_NO_QUEUE: TimingDim = {
   name: "timed_window/no-queue",
   timingMode: "timed_window",
   durationMinutes: 60,
   closeAtOffsetMs: 86_400_000,
+  requireQueue: false,
 };
 const DIM_DEADLINE_QUEUE: TimingDim = {
   name: "deadline+queue",
   timingMode: "deadline",
   durationMinutes: null,
   closeAtOffsetMs: 86_400_000,
+  requireQueue: true,
 };
 
 interface StartCloseFixture {
@@ -174,7 +184,6 @@ async function buildFixture(
   const profileId = crypto.randomUUID();
   const examId = crypto.randomUUID();
   const enrollmentId = crypto.randomUUID();
-  const requireQueue = dim.name.includes("queue");
 
   await db.insert(schema.organizations).values({
     id: organizationId,
@@ -242,7 +251,7 @@ async function buildFixture(
     shuffleOptions: false,
     detectTabSwitch: false,
     disableCopyPaste: false,
-    requireQueue,
+    requireQueue: dim.requireQueue,
     batchSize: 10,
     batchInterval: 3,
     restrictIp: false,
@@ -308,6 +317,15 @@ async function buildFixture(
     updatedAt: now,
   });
 
+  // Durable configuration oracle: the matrix dimension is only meaningful if
+  // the stored exam row actually carries the expected queue gate.
+  const examRows = await db
+    .select({ controlFlags: schema.exams.controlFlags })
+    .from(schema.exams)
+    .where(eq(schema.exams.id, examId));
+  expect(examRows).toHaveLength(1);
+  expect(examRows[0]!.controlFlags.requireQueue).toBe(dim.requireQueue);
+
   await db.insert(schema.examEnrollments).values({
     id: enrollmentId,
     organizationId,
@@ -323,7 +341,7 @@ async function buildFixture(
   });
 
   let admissionId: string | null = null;
-  if (requireQueue) {
+  if (dim.requireQueue) {
     // Pre-admitted active membership: the start gate reads admittedAt != null
     // and passes; consumeActive is the consumption under test.
     admissionId = crypto.randomUUID();
@@ -339,6 +357,20 @@ async function buildFixture(
       createdAt: now,
       updatedAt: now,
     });
+  }
+
+  // Same oracle for the admission dimension: queue-on fixtures must own
+  // exactly the seeded membership; queue-off fixtures must own none.
+  const admissionRows = await db
+    .select({ id: schema.examAdmissions.id })
+    .from(schema.examAdmissions)
+    .where(eq(schema.examAdmissions.examId, examId));
+  if (dim.requireQueue) {
+    expect(admissionId).not.toBeNull();
+    expect(admissionRows.map((row) => row.id)).toEqual([admissionId]);
+  } else {
+    expect(admissionId).toBeNull();
+    expect(admissionRows).toEqual([]);
   }
 
   return {
@@ -358,6 +390,7 @@ interface FinalState {
   attemptCount: number;
   attempts: Array<{ id: string; status: string; attemptNo: number }>;
   enrollmentStatus: string;
+  admissionCount: number;
   admissionConsumedAt: Date | null;
   admissionConsumedAttemptId: string | null;
   auditActions: string[];
@@ -379,15 +412,14 @@ async function readFinalState(
     "SELECT status::text AS status, attempt_count FROM exam_enrollments WHERE organization_id = $1 AND id = $2",
     [f.organizationId, f.enrollmentId],
   )) as Array<{ status: string; attempt_count: number }>;
-  const admissionRows = f.admissionId
-    ? ((await observer.unsafe(
-        "SELECT consumed_at, consumed_attempt_id FROM exam_admissions WHERE id = $1",
-        [f.admissionId],
-      )) as Array<{
-        consumed_at: Date | null;
-        consumed_attempt_id: string | null;
-      }>)
-    : [];
+  const admissionRows = (await observer.unsafe(
+    "SELECT id, consumed_at, consumed_attempt_id FROM exam_admissions WHERE organization_id = $1 AND exam_id = $2 AND candidate_id = $3 ORDER BY created_at",
+    [f.organizationId, f.examId, f.candidateId],
+  )) as Array<{
+    id: string;
+    consumed_at: Date | null;
+    consumed_attempt_id: string | null;
+  }>;
   const auditRows = (await observer.unsafe(
     "SELECT action FROM audit_logs WHERE organization_id = $1 AND target_id = $2 ORDER BY created_at",
     [f.organizationId, f.examId],
@@ -401,6 +433,7 @@ async function readFinalState(
       attemptNo: Number(r.attempt_no),
     })),
     enrollmentStatus: enrollmentRows[0]!.status,
+    admissionCount: admissionRows.length,
     admissionConsumedAt: admissionRows[0]?.consumed_at ?? null,
     admissionConsumedAttemptId: admissionRows[0]?.consumed_attempt_id ?? null,
     auditActions: auditRows.map((r) => r.action),
@@ -770,6 +803,7 @@ describe("attempt start vs exam close/cancel lifecycle consistency (H-08)", () =
       expect(finalState.attempts).toEqual([]);
       expect(finalState.attemptCount).toBe(0);
       expect(finalState.enrollmentStatus).toBe("assigned");
+      expect(finalState.admissionCount).toBe(dim.requireQueue ? 1 : 0);
       expect(finalState.admissionConsumedAt).toBeNull();
       expect(finalState.admissionConsumedAttemptId).toBeNull();
       // Only the truthful transition audit exists — no attempt lifecycle lie.
@@ -871,11 +905,17 @@ describe("attempt start vs exam close/cancel lifecycle consistency (H-08)", () =
       expect(finalState.attempts[0]!.status).toBe("in_progress");
       expect(finalState.attemptCount).toBe(1);
       expect(finalState.enrollmentStatus).toBe("started");
+      expect(finalState.admissionCount).toBe(dim.requireQueue ? 1 : 0);
       if (f.admissionId) {
         expect(finalState.admissionConsumedAt).not.toBeNull();
         expect(finalState.admissionConsumedAttemptId).toBe(
           finalState.attempts[0]!.id,
         );
+      } else {
+        // Queue-off: no admission row exists at all, so there is nothing the
+        // start could have consumed.
+        expect(finalState.admissionConsumedAt).toBeNull();
+        expect(finalState.admissionConsumedAttemptId).toBeNull();
       }
       // The rejected transition must not have written its audit.
       expect(finalState.auditActions).toEqual([]);
