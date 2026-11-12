@@ -581,7 +581,7 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
 
 - `submittedAt` = `effectiveDeadline`（业务生效时间）
 - `submissionReason` = `'deadline'`（区分考生手动提交）
-- 该时间语义对 deadline reconciliation 的两条触发路径一致：lazy on-read reconciliation 与 deadline scanner 的 deadline 提交都以 effective deadline 作为 `submittedAt`；扫描 tick 时刻只是实际执行时间，用于评分（`gradedAt`）与中断 terminalization 事件，不是业务提交时间。
+- 该时间语义对 deadline reconciliation 的两条触发路径一致：lazy on-read reconciliation 与 deadline scanner 的 deadline 提交都以 effective deadline 作为 `submittedAt`；扫描侧的实际执行时间（见下一条：每个 candidate 处理时的采样时刻，而非整轮 tick）只用于评分（`gradedAt`）与中断 terminalization 事件，不是业务提交时间。
 - scanner 的实际执行/terminalization 时刻是**每次处理的采样时刻**，不再是整轮单一 tick：discovery（`listDeadlineCandidates`）使用整轮 tick 采样；对每个 candidate 的 expiry 复检、评分与 terminalization 观察时刻在处理该 attempt 时重新采样（scanner 入口可注入 `nowFn`）。这覆盖 heartbeat scanner 在 tick 采样之后、attempt 行锁之前提交 disruption 的交错，避免 `terminalized.occurredAt` 早于 `detected.occurredAt`。
 - reconciliation 无独立审计事件（§11）；`occurredAt` 语义仅在手动 submit 的 `attempt.submit` 审计上存在
 - 历史数据不回填、不重写：早期由 scanner 写入的行可能带扫描 tick 时刻（混合语义），不得据 `submittedAt` 与 `closeAt` 的差值推断提交来源
