@@ -110,17 +110,30 @@ export function ExamMonitoringPage() {
   const [tick, setTick] = useState(0);
   const attemptsRef = useRef(attempts);
   attemptsRef.current = attempts;
+  // Latest-issued-wins for the attempts poll: the interval tick, a
+  // visibility-change refetch, and the manual refresh button can overlap on
+  // the wire; only the most recently ISSUED request may land rows, refresh
+  // the timestamp, warn, or end the loading window.
+  const attemptsGenerationRef = useRef(0);
+  // Timeline ownership: a response belongs to its selection only while its
+  // request is the latest timeline request. Selecting another attempt — or
+  // closing the dialog — supersedes it.
+  const timelineGenerationRef = useRef(0);
 
   const loadAttempts = useCallback(async () => {
     if (!examId) return;
+    const generation = ++attemptsGenerationRef.current;
+    const isStale = () => generation !== attemptsGenerationRef.current;
     try {
       const data = await api.get<ProctorAttemptListResponse>(
         `/api/admin/exams/${examId}/proctor/attempts`,
       );
+      if (isStale()) return;
       setAttempts(data.items);
       setStaleWarning(null);
       setLastRefreshedAt(Date.now());
     } catch {
+      if (isStale()) return;
       if (attemptsRef.current.length === 0) {
         setLoadError(t("admin.examMonitoring.loadDataFailed"));
       } else {
@@ -128,26 +141,39 @@ export function ExamMonitoringPage() {
         logger.warn("monitoring.poll_failed", { examId });
       }
     } finally {
-      setIsLoading(false);
+      // A superseded request must not end the CURRENT request's loading
+      // window either.
+      if (!isStale()) {
+        setIsLoading(false);
+      }
     }
   }, [examId]);
 
-  const loadTimeline = useCallback(async (attemptId: string) => {
-    setTimelineLoading(true);
-    setTimeline(null);
-    setTimelineError(null);
-    try {
-      const data = await api.get<ProctorAttemptEventListResponse>(
-        `/api/admin/attempts/${attemptId}/proctor-events?limit=50`,
-      );
-      setTimeline(data);
-    } catch {
-      setTimelineError(t("admin.examMonitoring.timelineLoadFailed"));
-      logger.warn("monitoring.timeline_load_failed", { attemptId });
-    } finally {
-      setTimelineLoading(false);
-    }
-  }, []);
+  const loadTimeline = useCallback(
+    async (attemptId: string) => {
+      const generation = ++timelineGenerationRef.current;
+      const isStale = () => generation !== timelineGenerationRef.current;
+      setTimelineLoading(true);
+      setTimeline(null);
+      setTimelineError(null);
+      try {
+        const data = await api.get<ProctorAttemptEventListResponse>(
+          `/api/admin/attempts/${attemptId}/proctor-events?limit=50`,
+        );
+        if (isStale()) return;
+        setTimeline(data);
+      } catch {
+        if (isStale()) return;
+        setTimelineError(t("admin.examMonitoring.timelineLoadFailed"));
+        logger.warn("monitoring.timeline_load_failed", { attemptId });
+      } finally {
+        if (!isStale()) {
+          setTimelineLoading(false);
+        }
+      }
+    },
+    [t],
+  );
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -387,7 +413,13 @@ export function ExamMonitoringPage() {
       <Dialog
         open={!!selectedAttemptId}
         onOpenChange={(open) => {
-          if (!open) setSelectedAttemptId(null);
+          if (!open) {
+            // Closing the dialog invalidates any in-flight timeline request:
+            // its response belongs to a selection that no longer exists, so
+            // it may not write rows, error, or the loading flag afterwards.
+            timelineGenerationRef.current++;
+            setSelectedAttemptId(null);
+          }
         }}
       >
         <DialogContent size="lg">
