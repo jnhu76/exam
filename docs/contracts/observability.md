@@ -23,6 +23,37 @@ dependency is introduced.
   captures it). Operators retain logs per their deployment policy.
 - No PII or answer content in logs (see Redaction policy).
 
+> **V1 boundary note (PROPOSED ADR-028, 2026-11-13).** The three non-goals
+> above are the **current, binding Phase 2 contract**: as of this writing the
+> repository has no OpenTelemetry dependency, no collector, and no log
+> shipping (W0.1 baseline, `out/otel-w0/w0.1/baseline.md`). [ADR-028](../adr/ADR-028-opentelemetry-technical-telemetry.md)
+> (PROPOSED) would, **only upon acceptance and per-deployment opt-in**, add a
+> bounded OpenTelemetry technical-telemetry track (traces/metrics, optional
+> OTLP export, one remote log-ingestion path per deployment mode) for the
+> #964 scope. Nothing on this page changes until that ADR is ACCEPTED, the
+> #964 W1–W7 implementation and acceptance evidence land, and the Owner
+> separately approves production enablement. See "V1 transition (PROPOSED)"
+> below.
+
+## V1 transition (PROPOSED — not in force)
+
+This section records the planned Phase 2 → V1 change so the two states cannot
+be confused. Everything here is **prospective and non-binding** until
+ADR-028 is ACCEPTED; runtime behavior described below does not exist yet
+(all "unknown until measured" items are tracked in ADR-028 §3/§4 and
+`out/otel-w0/w0.2/`).
+
+| Aspect | Phase 2 (current, binding) | V1 (planned, gated by ADR-028 acceptance + Owner enablement) |
+| --- | --- | --- |
+| Traces / metrics | None (stdout logs + `/system/*` projections only) | OTel SDK behind a default-Off switch; On requires per-deployment opt-in |
+| HTTP correlation id | Server UUIDv4 `request.id` + `x-request-id` (ADR-025) — authoritative, unchanged | Same id remains authoritative; trace/span ids are additive technical correlation only |
+| Logs | Pino → stdout, single path | Pino remains the only server logging API; when remote ingestion is enabled, exactly ONE remote path per deployment mode (stdout collection or OTLP Logs); default stdout contract stays available |
+| Remote log ingestion | None | Not yet supported; selection and single-path proof are W1/W6 acceptance items |
+| Readiness / alerts | `probeApplicationReadiness` + `operability.*` stdout events | Unchanged; telemetry (collector/exporter) failure must never alter readiness, transactions, retries, or shutdown semantics |
+| DB observability | `transactionRetryLogger` + `CAPACITY_RESEARCH` research wrapper | Independent workspace plugin (W2) behind the same Off default; retry semantics unchanged |
+| Enablement | — | Order: ADR-028 ACCEPTED → #964 W1–W7 reviewed → W7.2 three-state acceptance (Off / On-no-export / On-full-export, CPU & p99 overhead budgets ≤5% each, unknown until measured) → Owner production-enable decision (separate from ADR acceptance) |
+| Rollback | — | Configuration-level return to Off; no business-schema change; audit/receipt/client-event behavior untouched |
+
 ## Request trace fields
 
 Every request has a correlation id. The minimum traceable shape:
@@ -309,5 +340,5 @@ Diagnostics snapshot (background + redis):
 | Redis diagnostics | Done (`redisStatus` in diagnostics, Phase C) | — | — |
 | Pino redaction (creds/tokens/cookies/auth/standardAnswer) | Done | — | — |
 | No answer-content / full-body logging | Policy (manual discipline) | Add a lint/test guard if abuse appears | DEFER |
-| Distributed tracing (OTel) | Not present | Out of Phase 2 scope | PHASE 3+ |
+| Distributed tracing (OTel) | Not present | Out of Phase 2 scope (PROPOSED ADR-028 would gate V1 adoption behind default-Off + Owner enablement) | PHASE 3+ |
 | Centralized metrics (Prometheus) | Not present | Out of Phase 2 scope | PHASE 3+ |
