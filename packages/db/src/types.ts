@@ -164,7 +164,11 @@ function isRetryableError(err: unknown): boolean {
  * even after commit, which breaks the double-click idempotency pattern
  * (the second transaction must find the existing attempt). In READ COMMITTED,
  * each query sees the latest committed data, so `FOR UPDATE` on the attempt
- * table finds the row created by the concurrent transaction.
+ * table finds the row created by the concurrent transaction. The same
+ * snapshot-freshness physics drives the admin exam transition executor
+ * (H-08): its unresolved-attempt guard runs after the first-statement Exam
+ * row lock WAIT, and only a READ COMMITTED statement observes attempts
+ * committed by the transaction it waited on.
  *
  * Retries automatically when the transaction fails with:
  * - 40001: serialization_failure (REPEATABLE READ concurrent update)

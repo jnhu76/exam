@@ -56,25 +56,45 @@ export async function executeAdminExamTransition<T>(
     data: T,
   ) => AuditTarget<ActiveAuditActionForDurability<"atomic">>[],
 ): Promise<TransitionResult<T>> {
-  return executeInTransaction(db, async (tx) => {
-    const repo = createExamRepo(tx);
+  return executeInTransaction(
+    db,
+    async (tx) => {
+      const repo = createExamRepo(tx);
 
-    // 1. Lock the exam row so no concurrent admin op / scanner races it.
-    const locked = (await repo.findByIdForUpdate(ctx, examId)) as Exam | null;
-    if (!locked) return null;
+      // 1. Lock the exam row so no concurrent admin op / scanner races it.
+      const locked = (await repo.findByIdForUpdate(ctx, examId)) as Exam | null;
+      if (!locked) return null;
 
-    // 2. Reconcile status by now (published->open / open->closed lazily).
-    const adapter = createExamRepoAdapter(repo, ctx);
-    const reconciled = await reconcileExamForMutation(adapter, examId, now);
-    const exam = reconciled?.exam ?? locked;
+      // 2. Reconcile status by now (published->open / open->closed lazily).
+      const adapter = createExamRepoAdapter(repo, ctx);
+      const reconciled = await reconcileExamForMutation(adapter, examId, now);
+      const exam = reconciled?.exam ?? locked;
 
-    // 3. Route-specific guard + command.
-    const data = await run({ tx, repo: adapter, exam });
+      // 3. Route-specific guard + command.
+      const data = await run({ tx, repo: adapter, exam });
 
-    for (const target of auditTargets(data)) {
-      await recordAtomicHttpAudit(tx, request, ctx, target);
-    }
+      for (const target of auditTargets(data)) {
+        await recordAtomicHttpAudit(tx, request, ctx, target);
+      }
 
-    return { data };
-  });
+      return { data };
+    },
+    // PROTOCOL (H-08, #961): READ COMMITTED is REQUIRED here, not the
+    // default REPEATABLE READ. The Exam row is held exclusively by the
+    // first statement's FOR UPDATE, so no concurrent exam writer can
+    // interleave — but the route guards count UNRESOLVED ATTEMPTS with a
+    // plain MVCC read, and an in-flight attempt start CONFLICTS with that
+    // first locking read (the attempt INSERT holds an FK-induced FOR KEY
+    // SHARE on the exam row, which FOR UPDATE must wait for). Under
+    // REPEATABLE READ the transaction snapshot is taken while that first
+    // read is still WAITING, so after the wait the guard would count on a
+    // pre-commit snapshot, miss the just-committed unresolved attempt, and
+    // close/cancel would succeed over it (the I2 start-vs-close race).
+    // Under READ COMMITTED every statement sees the latest committed facts,
+    // so a guard evaluated after the lock wait observes the attempt. This
+    // applies to every transition sharing this executor; their exam-side
+    // reads stay serialized by the row lock itself, so RC can only make
+    // attempt-row predicates (the unresolved guards) fresher, never stale.
+    "read committed",
+  );
 }
