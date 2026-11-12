@@ -8,6 +8,52 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-11-13
+
+### Changed
+
+- Temporal timestamp semantics (#961 H-04/R-04, PR #966): scanner
+  terminalization now records `submittedAt` at the canonical effective
+  deadline — the same semantics as lazy on-read reconciliation — instead of
+  the scan tick, separates the submission effective time from the
+  terminalization observation, and samples terminalization processing time
+  per candidate instead of once per scan round; heartbeat
+  `lastActivityAt` writes are monotonic so a late-arriving older heartbeat
+  can no longer rewind a candidate's activity.
+- ADR-006, `exam-runtime` and `state-and-authority` documentation aligned
+  with the as-built temporal semantics (#961 H-05 partial, PRs #966/#968).
+
+### Fixed
+
+- Attempt start is serialized against exam close/cancel (#961 H-08, PR
+  #963): the start path takes the Exam row write lock and re-checks the
+  OPEN gates on the locked authoritative snapshot before creating the
+  attempt, and the admin transition executor runs READ COMMITTED so the
+  unresolved-attempt guard observes attempts committed while it waited —
+  the two non-serializable schedules (attempt created on a closed exam,
+  close misreading the unresolved count) are closed by deterministic
+  real-PostgreSQL concurrency tests.
+- Front-end stale-response and stale-commit family (PRs #955/#957/#959/
+  #965): superseded responses and stale debounced commits can no longer
+  overwrite the current view or rewrite the history entry the user
+  navigated to — QuestionPage search (#953), RecoveryQueuePage filters
+  (#956), ScoreListPage (#958), ExamMonitoringPage timeline and attempt
+  polling (#961 H-02), PermissionRegistryPage authority (#961 H-03), and
+  StartExamPage single-flight entry ownership with route-identity guards
+  (#961 H-07).
+- Deadline auto-submit no longer trusts client display rounding (#961
+  R-02, PR #967): expiry is judged on the un-rounded server-adjusted time,
+  and the deadline episode submits only after a server-side frozen-snapshot
+  verification, deferring with telemetry when the server deadline has not
+  been reached — a client clock forward-jump can no longer freeze a
+  candidate's remaining time as a manual submit.
+- The real-PostgreSQL 40P01 deadlock coverage fixture is victim-agnostic —
+  it no longer assumes the first-queued waiter always gets blame, which
+  PostgreSQL does not guarantee (#960, PR #962).
+- The A12(c) Back-debounce and hook external-reset tests are deterministic
+  under CI load and fail when the rule they pin is removed (#953 test
+  defects, PR #954).
+
 ## [0.0.13] - 2026-11-11
 
 ### Added
@@ -940,7 +986,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.13...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.14...HEAD
+[0.0.14]: https://github.com/jnhu76/exam/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/jnhu76/exam/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/jnhu76/exam/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/jnhu76/exam/compare/v0.0.10...v0.0.11
