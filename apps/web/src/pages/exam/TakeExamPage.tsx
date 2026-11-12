@@ -453,12 +453,17 @@ export function TakeExamPage() {
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
   const deadlineHandledRef = useRef(false);
-  // Wall-clock instant (ms) of the last deferred deadline verification. A
-  // deferral re-arms the episode, but the sibling trigger's interval
-  // callback can land in the SAME tick window (both triggers tick at 1s);
-  // this cooldown keeps one verification attempt per tick window instead of
-  // letting the two triggers immediately re-declare back-to-back.
-  const deadlineDeferredAtRef = useRef<number | null>(null);
+  // Monotonic instant (performance.now(), ms) of the last deferred deadline
+  // verification. A deferral re-arms the episode, but the sibling trigger's
+  // interval callback can land in the SAME tick window (both triggers tick at
+  // 1s); this cooldown keeps one verification attempt per tick window instead
+  // of letting the two triggers immediately re-declare back-to-back. It MUST
+  // be monotonic, never the wall clock: a wall-clock rollback (NTP/manual
+  // correction) would make the delta negative and suppress every retry even
+  // after the heartbeat re-bases the server offset and the server-adjusted
+  // expiry tick fires again — breaking page convergence until the wall clock
+  // catches back up.
+  const deadlineDeferredAtMonotonicRef = useRef<number | null>(null);
   const serverOffsetRef = useRef(0);
   const submitOpenerRef = useRef<HTMLElement | null>(null);
   // Latest view, kept in a ref so async save callbacks can read the current
@@ -778,7 +783,7 @@ export function TakeExamPage() {
     clientSeqsRef.current = new Map();
     submittingRef.current = false;
     deadlineHandledRef.current = false;
-    deadlineDeferredAtRef.current = null;
+    deadlineDeferredAtMonotonicRef.current = null;
     heartbeatFailureRef.current = 0;
     heartbeatFailureReportedRef.current = false;
     // Drop any in-flight reconciliation from the PREVIOUS attempt.
@@ -1228,10 +1233,12 @@ export function TakeExamPage() {
     if (submittingRef.current) return;
     // One verification episode per tick window: a deferral (server has not
     // confirmed expiry) re-arms the episode, and the sibling trigger's
-    // queued callback in the same window must wait for the next tick.
+    // queued callback in the same window must wait for the next tick. The
+    // cooldown runs on the monotonic clock; a wall-clock rollback must never
+    // stretch it.
     if (
-      deadlineDeferredAtRef.current !== null &&
-      Date.now() - deadlineDeferredAtRef.current < 1000
+      deadlineDeferredAtMonotonicRef.current !== null &&
+      performance.now() - deadlineDeferredAtMonotonicRef.current < 1000
     ) {
       return;
     }
@@ -1297,7 +1304,7 @@ export function TakeExamPage() {
         return;
       }
       if (verified && isDeadlineFrozenSnapshot(verified)) {
-        deadlineDeferredAtRef.current = null;
+        deadlineDeferredAtMonotonicRef.current = null;
         try {
           await handleSubmit();
           trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
@@ -1323,7 +1330,7 @@ export function TakeExamPage() {
         // snapshot. The server's own deadline scanner remains the
         // authoritative freeze path if the client never re-verifies.
         deadlineHandledRef.current = false;
-        deadlineDeferredAtRef.current = Date.now();
+        deadlineDeferredAtMonotonicRef.current = performance.now();
         trackExamEvent(
           "deadline_auto_submit_deferred",
           {
@@ -1547,7 +1554,7 @@ export function TakeExamPage() {
 
     if (nowByServerClock() < new Date(view.effectiveDeadline).getTime()) {
       deadlineHandledRef.current = false;
-      deadlineDeferredAtRef.current = null;
+      deadlineDeferredAtMonotonicRef.current = null;
       setAutoSubmitFailed(false);
     }
 

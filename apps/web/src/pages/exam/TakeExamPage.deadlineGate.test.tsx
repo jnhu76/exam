@@ -32,6 +32,11 @@ import {
  *   - verification read unavailable → fail-closed, retry on the next tick.
  * Manual submits (submit dialog → handleSubmit) bypass this gate entirely and
  * keep their existing semantics, including the earliest-submit-time rule.
+ *
+ * The retry throttle between episodes is measured on the MONOTONIC clock
+ * (performance.now), never the wall clock: an NTP/manual wall-clock rollback
+ * after a failed verification must not suppress retries until the wall clock
+ * catches back up to the old deferral instant.
  */
 
 const T0 = new Date("2026-07-04T10:00:00.000Z");
@@ -120,6 +125,16 @@ function submitPostCount(): number {
   return apiPost.mock.calls.filter(
     ([p]) => typeof p === "string" && p.includes("/submit"),
   ).length;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 async function flushTelemetry(): Promise<void> {
@@ -331,5 +346,167 @@ describe("deadline auto-submit server-authority gate", () => {
 
     expect(submitPostCount()).toBe(1);
     expect(screen.getByTestId("current-path")).toHaveTextContent("/result");
+  });
+});
+
+/**
+ * Regression for the external review of PR #967: the retry throttle MUST be
+ * monotonic. A wall-clock rollback after a deferred verification made
+ * `Date.now() - deferredAt` negative for as long as the rollback lasted, so
+ * the page stopped re-verifying even after the heartbeat re-based the server
+ * offset and the server-adjusted clock (the trigger authority) was past the
+ * deadline. The server scanner still freezes the attempt, but the page's
+ * retry/convergence promise breaks.
+ */
+describe("deadline verification throttle is monotonic, not wall-clock bound", () => {
+  /** Heartbeat re-bases the offset onto a server clock already past the deadline. */
+  function mockRuntimeApi(
+    take: (calls: number) => Promise<CandidateTakeSnapshot>,
+  ) {
+    let takeCalls = 0;
+    apiGet.mockImplementation((path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        takeCalls += 1;
+        return take(takeCalls);
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/heartbeat")) {
+        return {
+          ok: true,
+          serverNow: new Date(T0.getTime() + 4_000).toISOString(),
+        };
+      }
+      if (typeof path === "string" && path.includes("/submit")) {
+        return { ok: true, attemptId: "att-1", status: "submitted" };
+      }
+      return { ok: true, serverNow: T0_ISO };
+    });
+    return () => takeCalls;
+  }
+
+  async function loadAndDeferOnce(): Promise<void> {
+    renderPage();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0); // initial load
+    });
+    // The client clock jumps past the deadline: the deadline triggers fire,
+    // but the first verification read fails (server state unavailable).
+    await act(async () => {
+      vi.setSystemTime(new Date(T0.getTime() + 3_100));
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+  }
+
+  it("wall clock rolled back 1h: heartbeat offset re-calibration re-arms expiry and the next tick retries verification", async () => {
+    installRecordingBuffer();
+    const retry = deferred<CandidateTakeSnapshot>();
+    const takeCalls = mockRuntimeApi((calls) => {
+      if (calls === 1) return Promise.resolve(editableSnapshot());
+      if (calls === 2) {
+        return Promise.reject(new Error("verification read unavailable"));
+      }
+      return retry.promise;
+    });
+
+    await loadAndDeferOnce();
+    // Load + one failed verification; the episode deferred.
+    expect(takeCalls()).toBe(2);
+
+    // Wall clock is rolled back one hour (NTP/manual correction). The old
+    // wall-clock throttle compared against the pre-rollback instant, so the
+    // difference stayed ~-1h and every retry was suppressed.
+    await act(async () => {
+      vi.setSystemTime(new Date(T0.getTime() + 3_100 - 3_600_000));
+    });
+
+    // 30s heartbeat re-bases the offset onto the server clock, which is past
+    // the deadline, so the 1s expiry tick fires again. Monotonic elapsed is
+    // ~30s: the next tick MUST retry verification.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(32_000);
+    });
+    expect(takeCalls()).toBe(3);
+
+    // The retry is a real re-read, not a submit: settle it as editable truth.
+    await act(async () => {
+      retry.resolve(editableSnapshot());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(submitPostCount()).toBe(0);
+  });
+
+  it("a second expiry trigger less than 1000ms (monotonic) after the deferral is still throttled", async () => {
+    installRecordingBuffer();
+    const takeCalls = mockRuntimeApi((calls) => {
+      if (calls === 1) return Promise.resolve(editableSnapshot());
+      if (calls === 2) {
+        // Slow transport: the verification read fails 500ms after the tick.
+        return new Promise<CandidateTakeSnapshot>((_resolve, reject) => {
+          setTimeout(
+            () => reject(new Error("verification read unavailable")),
+            500,
+          );
+        });
+      }
+      return Promise.resolve(editableSnapshot());
+    });
+
+    await loadAndDeferOnce();
+    expect(takeCalls()).toBe(2);
+
+    // Let the in-flight verification fail: the deferral is recorded at
+    // monotonic t≈1500ms.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    // Next expiry tick at t=2000ms: only 500ms of monotonic time since the
+    // deferral — the same-window guard keeps it to one verification attempt.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(takeCalls()).toBe(2);
+
+    // t=3000ms is 1500ms after the deferral: the retry is allowed again.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(takeCalls()).toBe(3);
+  });
+
+  it("after the rollback and offset re-calibration, a deadline-frozen server snapshot converges through handleSubmit", async () => {
+    const send = installRecordingBuffer();
+    const takeCalls = mockRuntimeApi((calls) => {
+      if (calls === 1) return Promise.resolve(editableSnapshot());
+      if (calls === 2) {
+        return Promise.reject(new Error("verification read unavailable"));
+      }
+      // The retry (call 3) and the post-submit reload (call 4) both observe
+      // the server's frozen truth.
+      return Promise.resolve(deadlineFrozenSnapshot());
+    });
+
+    await loadAndDeferOnce();
+    expect(takeCalls()).toBe(2);
+    expect(submitPostCount()).toBe(0);
+
+    await act(async () => {
+      vi.setSystemTime(new Date(T0.getTime() + 3_100 - 3_600_000));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(32_000);
+    });
+
+    // The retried verification confirms deadline-frozen → the ordinary submit
+    // runs exactly once and the page converges on the result route.
+    expect(takeCalls()).toBeGreaterThanOrEqual(3);
+    expect(submitPostCount()).toBe(1);
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/result");
+    await flushTelemetry();
+    expect(telemetryEvents(send, "deadline_auto_submit_success")).toHaveLength(
+      1,
+    );
   });
 });
