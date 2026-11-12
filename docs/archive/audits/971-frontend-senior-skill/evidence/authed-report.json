@@ -1,0 +1,647 @@
+{
+  "base": "http://localhost:5173",
+  "landingUrl": "http://localhost:5173/admin/dashboard",
+  "loginConsoleErrors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "widths": {
+    "375": {
+      "admin-dashboard": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/admin-dashboard-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": []
+      },
+      "users": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/users-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "candidates": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/candidates-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "exams": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/exams-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "exams-nomatch": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/exams-nomatch-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "permissions": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/permissions-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "grading-queue": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/grading-queue-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "audit-logs": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/audit-logs-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      },
+      "candidate-exam-list": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+          "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+        ],
+        "screenshot": "/tmp/ui-check/candidate-exam-list-375.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "0 <h1> elements on the page (expected 1)"
+        ]
+      }
+    },
+    "1280": {
+      "admin-dashboard": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/admin-dashboard-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [],
+        "axe": [],
+        "focusWalk": {
+          "stops": [
+            {
+              "el": "button",
+              "name": "折叠侧栏",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "仪表盘",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "运维总览",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "系统监控",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "课程管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "题目管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "题目导入",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "考试管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "策略模板",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "待评分",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "成绩查询",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "监考工作台",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "恢复审查",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "监考处置",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "用户管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "考生管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "导入日志",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "审计日志",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "权限注册表",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "平台设置",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "考生字段",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "退出登录",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "创建考试",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "导入题目",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "待人工评分11份答卷前往评分队列",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "待处理异常>20条事件前往恢复审查",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 安全培训考核 A",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 安全培训草稿考试",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 安全培训已发布未开始",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 技能认证历史考试",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 FAM932-AVA 可开始考试 1794332159108",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 FAM932-UPC 未开放考试 1794332159108",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 FAM932-EXP 已结束考试 1794332159108",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 FAM932-RES 进行中考试 1794332159108",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 FAM932-EXP 已结束考试 1794332217370",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "查看考试 审计草稿考试-forms-1794332472083",
+              "visibleFocus": true
+            }
+          ],
+          "withoutVisibleFocus": []
+        }
+      },
+      "users": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/users-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "17 controls share the name \"编辑用户\" (say which item each one acts on)",
+          "11 controls share the name \"禁用\" (say which item each one acts on)",
+          "6 controls share the name \"更多操作\" (say which item each one acts on)"
+        ],
+        "axe": []
+      },
+      "candidates": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/candidates-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "20 controls share the name \"编辑考生\" (say which item each one acts on)",
+          "20 controls share the name \"更多操作\" (say which item each one acts on)"
+        ],
+        "axe": []
+      },
+      "exams": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/exams-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "20 controls share the name \"查看详情\" (say which item each one acts on)",
+          "20 controls share the name \"删除考试\" (say which item each one acts on)"
+        ],
+        "axe": []
+      },
+      "exams-nomatch": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/exams-nomatch-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "20 controls share the name \"查看详情\" (say which item each one acts on)",
+          "20 controls share the name \"删除考试\" (say which item each one acts on)"
+        ],
+        "axe": []
+      },
+      "permissions": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        ],
+        "screenshot": "/tmp/ui-check/permissions-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [],
+        "axe": []
+      },
+      "grading-queue": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/grading-queue-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"取证考生B取证考试-17943327485212026-11-11 01:45:\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证考生B\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证考试-1794332748521\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 01:45:56\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"取证考生C取证考试-17943327485212026-11-11 01:45:\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证考生C\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证考试-1794332748521\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 01:45:56\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"1\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"取证考生 uiamwazv7s2a mwazv7s2uiamwazv7s2-a \"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证考生 uiamwazv7s2a mwazv7s2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"uiamwazv7s2-a 双论述取证考试\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:00:26\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"取证考生 uiamwazv7s2b mwazv7s2uiamwazv7s2-b \"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证考生 uiamwazv7s2b mwazv7s2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"uiamwazv7s2-b 单论述取证考试\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:00:37\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"1\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"取证待评考生 105212待评分考试 4094832026-11-11 02:0\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"取证待评考生 105212\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待评分考试 409483\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:08:32\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"1\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"RT Runtime 1794332875272E2E-rt-179433287\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"RT Runtime 1794332875272\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"E2E-rt-1794332875272-C-autosubmit\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:47:46\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"RT Runtime 1794332875272E2E-rt-179433287\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"RT Runtime 1794332875272\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"E2E-rt-1794332875272-D-autosubmit2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:55:17\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"RT Runtime 1794332875272E2E-rt-179433287\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"RT Runtime 1794332875272\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"E2E-rt-1794332875272-A-main\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:57:55\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"待手动评分\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"RT Runtime 1794332875272E2E-rt-179433287\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"RT Runtime 1794332875272\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"E2E-rt-1794332875272-B-lowtimer\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 02:59:46\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2\""
+        ],
+        "axe": [],
+        "focusWalk": {
+          "stops": [
+            {
+              "el": "button",
+              "name": "折叠侧栏",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "仪表盘",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "运维总览",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "系统监控",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "课程管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "题目管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "题目导入",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "考试管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "策略模板",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "待评分",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "成绩查询",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "监考工作台",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "恢复审查",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "监考处置",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "用户管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "考生管理",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "导入日志",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "审计日志",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "权限注册表",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "平台设置",
+              "visibleFocus": true
+            },
+            {
+              "el": "a",
+              "name": "考生字段",
+              "visibleFocus": true
+            },
+            {
+              "el": "button",
+              "name": "退出登录",
+              "visibleFocus": true
+            }
+          ],
+          "withoutVisibleFocus": []
+        }
+      },
+      "audit-logs": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/audit-logs-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [
+          "input outside a <form> (Enter will not submit): <input.h-9.w-full>",
+          "input outside a <form> (Enter will not submit): <input.h-9.w-full>",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-13 03:59:55Admin登录成功userba56c…e3\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-13 03:59:55\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"Admin\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"ba56c…e340\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-13 03:59:09Admin登录成功userba56c…e3\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-13 03:59:09\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"Admin\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"ba56c…e340\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 13:21:53Admin登录成功userba56c…e3\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 13:21:53\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"Admin\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"ba56c…e340\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 13:21:48Admin登录成功userba56c…e3\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 13:21:48\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"Admin\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"ba56c…e340\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 13:15:00P3取证考生 p3fam-17943686\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 13:15:00\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"P3取证考生 p3fam-1794368628454\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"3f394…571b\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 13:14:55P3取证考生 p3fam-17943686\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 13:14:55\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"P3取证考生 p3fam-1794368628454\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"3f394…571b\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 13:14:51P3取证考生 p3fam-17943686\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 13:14:51\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"P3取证考生 p3fam-1794368628454\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"3f394…571b\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 12:26:36Admin登录成功userba56c…e3\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 12:26:36\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"Admin\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <span.inline-flex.items-center> \"登录成功\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"user\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"ba56c…e340\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <tr.border-b.transition-colors> \"2026-11-11 12:26:21Admin登录成功userba56c…e3\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"2026-11-11 12:26:21\"",
+          "clickable-looking non-interactive element (use <button> or <a>): <td.h-13.px-4> \"Admin\""
+        ],
+        "axe": []
+      },
+      "candidate-exam-list": {
+        "consoleErrors": [],
+        "screenshot": "/tmp/ui-check/candidate-exam-list-1280.png",
+        "overflowPx": 0,
+        "overflowingElements": [],
+        "issues": [],
+        "axe": []
+      }
+    }
+  }
+}

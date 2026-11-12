@@ -1,0 +1,56 @@
+{
+  "url": "http://localhost:5173/login",
+  "outDir": "/tmp/ui-check/login",
+  "widths": {
+    "375": {
+      "screenshot": "/tmp/ui-check/login/page-375.png",
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "overflowPx": 0,
+      "overflowingElements": [],
+      "issues": [
+        "0 <h1> elements on the page (expected 1)"
+      ]
+    },
+    "1280": {
+      "screenshot": "/tmp/ui-check/login/page-1280.png",
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "overflowPx": 0,
+      "overflowingElements": [],
+      "issues": [
+        "0 <h1> elements on the page (expected 1)"
+      ]
+    }
+  },
+  "focusWalk": {
+    "stops": [
+      {
+        "el": "input",
+        "name": "请输入用户名",
+        "visibleFocus": true
+      },
+      {
+        "el": "input",
+        "name": "请输入密码",
+        "visibleFocus": true
+      },
+      {
+        "el": "button",
+        "name": "登录",
+        "visibleFocus": true
+      },
+      {
+        "el": "a",
+        "name": "忘记密码？",
+        "visibleFocus": true
+      }
+    ],
+    "withoutVisibleFocus": []
+  },
+  "axe": "axe-core not installed (optional)"
+}
