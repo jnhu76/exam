@@ -4,7 +4,7 @@
 
 - Status: **PROPOSED**（按 #964 W0.3 起草，提交 Owner 评审；**未接受前不构成施工授权，也不改变任何现行契约**。#964 范围内的探针与实现工作按 #964/#800 已有授权进行，本 ADR 接受与否不追认已施工内容。）
 - Date: 2026-11-13（proposed）
-- 基线：`2d38f69881d622661e0bbfbaab7874aacda8b01b`（origin/master，W0.1 冻结值，见 `out/otel-w0/w0.1/baseline.md`）
+- 基线：[W0.1 冻结的 origin/master](https://github.com/jnhu76/exam/commit/2d38f69881d622661e0bbfbaab7874aacda8b01b)（`2d38f69881d622661e0bbfbaab7874aacda8b01b`）
 - Decision owners: project Owner（接受、生产启用分别裁决）
 - Supersedes: none（本 ADR 不整体取代任何 ADR）
 - 对既有权威的**限缩（prospective，仅在本 ADR 被 ACCEPTED 时生效）**：
@@ -14,17 +14,17 @@
 
 ---
 
-## 1. Context（现有观察，全部来自 W0.1 实测）
+## 1. Context（W0.1 基线观察）
 
-以下为 as-built 事实（证据：`out/otel-w0/w0.1/baseline.md`、`out/otel-w0/w0.1/telemetry-inventory.md`，均含仓库路径与行号）：
+以下事实以本 ADR 记录的基线为准。
 
-1. **当前无任何 OTel 依赖、配置或注入点**。`pnpm-lock.yaml` 中 `@opentelemetry/api` 仅作为 drizzle-orm 与 vitest 的 optional peer 出现；生产入口 `docker-entrypoint.sh:45-48` 直接 `exec node dist/server.js`，无 `NODE_OPTIONS`/loader 注入。
+1. **生产入口尚无 OTel SDK、配置或注入点**。`@opentelemetry/api` 在锁文件中作为可选 peer 出现。`docker-entrypoint.sh` 第 43 行直接执行 `exec node dist/server.js`。[锁文件](https://github.com/jnhu76/exam/blob/2d38f69881d622661e0bbfbaab7874aacda8b01b/pnpm-lock.yaml) · [生产入口](https://github.com/jnhu76/exam/blob/2d38f69881d622661e0bbfbaab7874aacda8b01b/docker-entrypoint.sh#L39-L43)
 2. **请求关联身份已由 ADR-025 冻结**：`genReqId: randomUUID` + `requestIdHeader: false`（`apps/api/src/server.ts:117-119`），`x-request-id` root-scope hook（`apps/api/src/plugins/requestIdHeader.ts:33-38`）。
 3. **技术日志出口唯一**：Pino → stdout JSON，`REDACT_CONFIG` remove 策略 + err/req 白名单序列化（`apps/api/src/lib/logRedaction.ts:13-31,102-223`）；无远端导出。
-4. **数据库**：`drizzle-orm@0.45.2` 经 `drizzle-orm/postgres-js` 接 `postgres@3.4.9`（`packages/db/src/postgres.ts:41-65`）；事务重试 `executeInTransaction`（`packages/db/src/types.ts:186` 起，40001/40P01，退避 20/40/80ms）经进程级 `transactionRetryLogger` 输出（无请求级关联，`apps/api/src/plugins/db.ts:32-35` 注释明示）；`CAPACITY_RESEARCH=1` 的研究性 wrapper（`apps/api/src/lib/capacityResearch.ts:43-61`）只统计 arrival，per-statement 时长显式 `NOT_DIRECTLY_OBSERVABLE`（:152-162），无生产消费者。
+4. **数据库**：`drizzle-orm@0.45.2` 经 `drizzle-orm/postgres-js` 接 `postgres@3.4.9`（`packages/db/src/postgres.ts:41-65`）；事务重试 `executeInTransaction`（`packages/db/src/types.ts:186` 起，40001/40P01，退避 20/40/80ms）经进程级 `transactionRetryLogger` 输出（无请求级关联，`apps/api/src/plugins/db.ts:32-35` 注释明示）；`CAPACITY_RESEARCH=1` 的研究性 wrapper（`apps/api/src/lib/capacityResearch.ts:43-61`）只统计 arrival，per-statement 时长显式 `NOT_DIRECTLY_OBSERVABLE`（:152-162），默认关闭。W7 清理前核对它的实际消费者。
 5. **后台循环与告警**：heartbeat / deadlineScanner / clientEventRetention / emailOutboxLoop 四类 loop + operabilityMonitor（15s tick）以 `setInterval` 运行，结构化 stdout 告警（`operability.*` 四族事件）是现有运维告警契约（`docs/operations/active-alerting.md`）；readiness 判定源 `probeApplicationReadiness`。
 6. **业务证据独立于技术观测**：`audit_logs`（append-only，`metadata.requestId`/`operationId` 注入规则见 observability 契约）、业务收据/attempt version、`client_events`（ADR-026 时间边界）各有权威。
-7. **关机预算**：约 30s 契约（audit drain 10s + DB end 10s + 2s exit assist，`apps/api/src/server.ts:44,52-66`）< Compose `stop_grace_period: 45s`。
+7. **关机预算**：现有契约为 loop 8s、audit drain 10s、DB end 10s、exit assist 2s，合计 30s。Compose `stop_grace_period` 为 45s。遥测 flush 必须服从原有关闭顺序和预算。[关机预算](https://github.com/jnhu76/exam/blob/2d38f69881d622661e0bbfbaab7874aacda8b01b/apps/api/src/server.ts#L73-L85) · [Compose](https://github.com/jnhu76/exam/blob/2d38f69881d622661e0bbfbaab7874aacda8b01b/docker-compose.yml#L97-L100)
 
 ## 2. Decision
 
@@ -39,7 +39,7 @@
 ### D2. 身份与业务事实权威不转移
 
 - Fastify 继续生成 server-owned UUIDv4 `requestId` 并回传 `x-request-id`（ADR-025 不变）。Trace ID / Span ID 是新增的**技术关联**信号，不取代 requestId，也不取得任何身份权威。
-- 客户端传入的 trace headers 不取得服务端默认父上下文或身份权威（默认 server root 策略，W1.1 实测验证）。
+- 默认入站边界从服务端创建 trace root。来自浏览器或其他不受信客户端的 `traceparent`、`tracestate` 和 `baggage` 不参与父上下文或 baggage 采信。W1.1 验证入站策略及请求内上下文传播。若后续需要可信远端父上下文，另行裁决信任边界。
 - `operationId`、`clientSeq`、receipt、attempt version、`occurredAt/receivedAt`（ADR-026）各守自己的契约；Domain 与 Exam Engine 不引入 OTel SDK 依赖。
 - Audit、Receipt、Client Event、Operability 继续拥有业务事实、保留、权限与失败行为；Trace 时间不是业务时间权威（ADR-006/#961）。
 - 后台任务 trace 从 loop 自身 root 启动，禁止用 HTTP requestId 伪造关联（observability 契约 §Background work 既有规则）。
@@ -48,19 +48,19 @@
 
 - Traces / Metrics：OTel（HTTP 语义按 W1.1 实测选定的唯一 server span owner；HTTP/DB 指标优先采用确认过的 SemConv 词汇，自研同义指标按 W7 清单收敛）。
 - Logs：Pino 仍是唯一服务端技术日志调用入口；每个部署模式**只选择一条**远端日志摄入路径（stdout 收集 或 应用侧 OTLP Logs，二选一，W1/W6 实测后定）；默认 stdout 运维合同保持可用。
-- DB 插桩：独立 workspace 包（拟名 `@exam/otel-drizzle-postgresjs`），`@exam/db` 对 OTel SDK 保持独立。官方 `@opentelemetry/instrumentation-pg` 插桩目标为 `pg`/`pg-pool` 模块，与本项目驱动 `postgres`（postgres.js）结构性不匹配，**淘汰不引入**（证据：`out/otel-w0/w0.2/upstream-evidence.md` §5.3，源码 L177/L195 实测）。
+- DB 插桩：独立 workspace 包（拟名 `@exam/otel-drizzle-postgresjs`），`@exam/db` 对 OTel SDK 保持独立。官方 `@opentelemetry/instrumentation-pg` 插桩目标为 `pg`/`pg-pool` 模块，与本项目驱动 `postgres`（postgres.js）结构性不匹配，**淘汰不引入**。[pg 插桩上游源码](https://github.com/open-telemetry/opentelemetry-js-contrib/blob/main/packages/instrumentation-pg/src/instrumentation.ts)
 
 ### D4. 隐私与脱敏
 
-- ADR-018 D2/D4 约束全部适用：遥测字段默认排除原始 SQL、绑定参数、URL query、凭据与业务 payload；Span 属性与 Pino 日志是**两个独立出口**，分别在 exporter 出口验证脱敏。
+- ADR-018 D2/D4 约束全部适用：遥测字段默认排除原始 SQL、绑定参数、原始 URL/路径及 query、凭据与业务 payload；Span 属性与 Pino 日志是**两个独立出口**，分别在 exporter 出口验证脱敏。
 - 指标 labels 仅用低基数字段（route 模板、稳定操作名、SQLSTATE/固定结果类别）。
 
 ### D5. 启用与回滚条件
 
-- **启用顺序**：本 ADR 被 Owner 接受 → W1–W7 按 #964 完成并通过各阶段独立审查 → W7.2 在同一候选上完成 Off / On-无导出 / On-完整导出三态对照与故障注入验收（预算见 §4 表三）→ 生产启用由 Owner 单独裁决（与 ADR 接受是两个独立决定）。
+- **启用条件**：#964 已授权范围内的探针与实施按项目契约推进。生产启用须满足三项条件：本 ADR 获 Owner 接受、W1–W7 完成独立评审及 W7.2 同一候选上的三态对照与故障验收（见 §3 表三）、Owner 单独批准部署启用。
 - **回滚**：遥测整体可通过配置回退到 Off（早返回路径）；回滚不要求业务 Schema 变更，audit、receipt、client event 行为保持原状。Collector 侧（W6 opt-in compose profile）独立启停，不影响默认 Compose。
 
-### D6. 范围排除（与 #964 §1 一致）
+### D6. 范围排除（与 #964 §8 一致）
 
 业务事件新表、产品内日志库、原始日志查询 API、调查 UI、告警投递或 ACK 平台、外网 SaaS、分布式业务架构、timed_sync 激活、独立 npm 发布——均不在本 ADR 范围。#921 历史记录保留。
 
@@ -73,7 +73,7 @@
 | 信号 | 权威载体 | OTel 的新角色 | 禁止事项 |
 | --- | --- | --- | --- |
 | HTTP 请求身份 | `request.id` UUIDv4 + `x-request-id`（ADR-025） | Trace 关联字段（W1 关联不替换） | Trace ID 取代 requestId；client trace header 取得身份权威 |
-| 保存/提交凭证 | receipt / attempt domain state（EXSEM） | 无 | 以 2xx/trace 存在推断保存成功（#924 契约） |
+| 保存/提交凭证 | receipt / attempt domain state（EXSEM） | 无 | 仅凭 trace 或通用 HTTP 状态推断保存成功（见 #800 T09 裁决） |
 | 业务时间 | 服务端时间权威（ADR-006/#961） | 无（span 时间仅诊断） | 用 span timestamp 裁决业务时序 |
 | 客户端事件时间 | `receivedAt` 服务端权威（ADR-026） | 无 | 用 trace 时间核对 occurredAt |
 | 业务审计事实 | `audit_logs`（append-only） | 诊断关联（requestId↔trace_id 并存） | 以 trace 缺失否定审计事实 |
@@ -85,16 +85,16 @@
 
 | 决策点 | 候选 | 选择条件 | 当前状态 |
 | --- | --- | --- | --- |
-| Pino 日志远端摄入 | ① stdout → 部署方/Collector filelog 收集；② `instrumentation-pino` log sending / `pino-opentelemetry-transport` → OTLP Logs | 每部署模式**唯一**一条远端路径；默认 stdout 合同不破坏；同一条日志不得双路摄入；脱敏路径（REDACT_CONFIG/serializers）在所选路径出口实测有效 | 第一轮只验证 correlation（`disableLogSending: true` 已核实的开关，出处 `out/otel-w0/w0.2/upstream-evidence.md` §3），摄入方式 W1/W6 实测后定；**当前未支持任何远端摄入** |
-| HTTP SERVER span owner | ① `@fastify/otel`（request/handler/hook span）；② `@opentelemetry/instrumentation-http`（Node 层） | 每请求**恰好一个** server span（上游已知双插桩会重复，README 声明）；覆盖路由/hook/404；传播（client span→server 提取）完整 | W1.1 强制产出，实测前**未知**；禁止双 owner 上生产 |
-| DB 插桩层级 | A：API/Drizzle 逻辑事务边界（事务、重试、SQLSTATE 分类）；B：A + postgres.js 语句执行点（经真实 PG 验证惰性/事务子连接/异常行为保持） | B 仅在能区分实际执行、覆盖 `sql.begin` 保留连接的 scoped sql、不破坏 Query 惰性（arrival≠发送≠settle，`out/otel-w0/w0.2/upstream-evidence.md` §5.1）、属性安全且单一计量时才启用；否则收缩为 A | W2.1 真实 PG 探针裁决，**当前未知** |
-| DB 插桩实现 | 官方 `instrumentation-pg` vs 独立包 | 官方包目标模块 `pg`/`pg-pool` ≠ `postgres`，结构性不匹配 → 独立 workspace 包 | 已淘汰官方包（N 级证据，upstream-evidence §5.3） |
+| Pino 日志远端摄入 | ① stdout → 部署方/Collector filelog 收集；② `instrumentation-pino` log sending / `pino-opentelemetry-transport` → OTLP Logs | 每部署模式**唯一**一条远端路径；默认 stdout 合同不破坏；同一条日志不得双路摄入；脱敏路径（REDACT_CONFIG/serializers）在所选路径出口实测有效 | 第一轮只验证 correlation（[`disableLogSending: true`](https://github.com/open-telemetry/opentelemetry-js-contrib/blob/main/packages/instrumentation-pino/README.md)），摄入方式 W1/W6 实测后定；**当前未支持任何远端摄入** |
+| HTTP SERVER span owner | ① `@fastify/otel`（request/handler/hook span）；② `@opentelemetry/instrumentation-http`（Node 层） | 对纳入插桩且已采样的请求，验证**恰好一个** SERVER span。覆盖正常路由、hook 与 404。核对服务端 root、请求内上下文与 Pino 关联，并验证不受信入站头无法成为父上下文 | W1.1 强制产出，实测前**未知**；禁止双 owner 上生产 |
+| DB 插桩层级 | A：API/Drizzle 逻辑事务边界（事务、重试、SQLSTATE 分类）；B：A + postgres.js 语句执行点（经真实 PG 验证惰性/事务子连接/异常行为保持） | B 仅在能区分实际执行、覆盖 `sql.begin` 保留连接的 scoped sql、不破坏 Query 惰性（arrival、执行和 settle 分别验证，见 [Postgres.js upstream](https://github.com/porsager/postgres)）、属性安全且单一计量时才启用；否则收缩为 A | W2.1 真实 PG 探针裁决，**当前未知** |
+| DB 插桩实现 | 官方 `instrumentation-pg` vs 独立包 | 官方包目标模块 `pg`/`pg-pool` ≠ `postgres`，结构性不匹配 → 独立 workspace 包 | 已淘汰官方包（见 D3 的上游模块证据） |
 
 ### 表三 · 三态验收与预算（W7.2 执行；实测前全部标未知）
 
 | 维度 | Off | On / 无导出 | On / 完整导出 |
 | --- | --- | --- | --- |
-| 遥测网络请求 / 后台导出任务 | 必须为零（实测证明） | 无网络（exporter=none 或等效），SDK 已初始化 | 仅向配置的 Collector 端点 |
+| 遥测网络请求 / 后台导出任务 | 必须为零（实测证明） | SDK 和目标信号已启用。显式禁用各信号的远端导出和自动配置，并以受控进程内观测确认信号实际产生 | 仅向配置的 Collector 端点 |
 | 业务行为（Save/Submit/Deadline/Restore/审计 drain/关机 30s 预算） | 与基线一致 | 与基线一致 | 与基线一致 |
 | CPU 额外开销（vs Off 基线） | 基线 | ≤5%（未知，待测） | ≤5%（未知，待测） |
 | p99 额外开销（vs Off 基线） | 基线 | ≤5%（未知，待测） | ≤5%（未知，待测） |
@@ -107,11 +107,14 @@
 
 ## 4. 候选版本与外部出处
 
-全部外部版本/API 事实引自 `out/otel-w0/w0.2/upstream-evidence.md` 与 `compatibility-matrix.md`（npm registry 实测 + 官方 README/spec 原文，含 primary_url 与 tag）。摘要：
+W0 候选为 `@opentelemetry/api@1.10.0`、`sdk-node@0.301.2`、`instrumentation-http@0.301.2`、`@fastify/otel@1.0.1` 和 `instrumentation-pino@0.71.0`。Collector 发行版与组件版本由 W6 验证后确定。
 
-- 候选代次：`@opentelemetry/api@1.10.0` + `sdk-node@0.301.2`（experimental 线，整组同步升级）+ `@fastify/otel@1.0.1`（Node ≥22.15.0，生产镜像 24.22.1 满足）+ `instrumentation-pino@0.71.0`（pino ≥5.14 <11，本项目 10.3.1 在区间内）；Collector 候选 `otelcol-contrib 0.165.0`（W6 opt-in）。
-- ESM 启动约束：ESM 需 `--import` + loader hook，注入点唯一可行位置为 `docker-entrypoint.sh` exec 行 / `NODE_OPTIONS`（upstream-evidence §1.2）。
-- **以上均为「npm 已发布 / 上游声明」级证据；本仓库的编译通过与运行通过均未发生（W1.1/W1.2 范围）。任何运行时行为（span 数、env 支持面、correlation 字段、Off 零导出）在实测前一律视为未知，不得写成已支持。**
+- `@fastify/otel@1.0.1` 声明 Node ≥22.15.0，API peer 为 `>=1.10.0 <1.11.0`。其 `@opentelemetry/instrumentation` 依赖为 `^0.300.0`，该区间不含 `0.301.2`。这个组合可能解析出不同的 instrumentation 版本。W1.1 记录实际依赖树，并用 Node 24.22.1 验证注册、请求内 context、单 SERVER span、Pino 关联和关闭行为。[Fastify 1.0.1 manifest](https://github.com/fastify/otel/blob/v1.0.1/package.json) · [OTel 0.301.2 release](https://github.com/open-telemetry/opentelemetry-js/releases/tag/experimental%2Fv0.301.2)
+- Pino 10.3.1 在候选插件声明的 `>=5.14.0 <11` 范围内。W1.1 仍须以实际生产入口验证 correlation、原 stdout 脱敏与独立关闭 log sending。[Pino 插桩](https://www.npmjs.com/package/@opentelemetry/instrumentation-pino)
+- 对依赖 loader patch 的自动插桩，W1.1 验证在目标模块加载之前完成注册，并按所选版本确认 ESM loader/preload 方式。显式 Fastify 插件注册需早于目标路由。使用构建产物和实际镜像入口选定接线。[OTel Node 启动文档](https://opentelemetry.io/docs/languages/js/getting-started/nodejs/) · [Fastify 显式注册](https://github.com/fastify/otel/tree/v1.0.1)
+- On/无导出是独立验收态。NodeSDK 上游文档描述了默认 OTLP 自动配置，W1.1 须确认候选版本在该模式下不创建远端导出路径，且受控观察能证明已记录信号。[NodeSDK exporter 配置](https://github.com/open-telemetry/opentelemetry-js/blob/main/experimental/packages/opentelemetry-sdk-node/README.md)
+
+W0 的证据等级为发布信息和上游声明。本仓库的编译、运行、性能和故障行为留待对应阶段实测。
 
 ## 5. Consequences
 
