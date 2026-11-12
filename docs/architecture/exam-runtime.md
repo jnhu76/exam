@@ -919,6 +919,10 @@ Candidate 页面在本地观察由 snapshot 派生的 `effectiveDeadline`，到�
 
 两种客户端触发源——页面 1s tick 与 `ExamTimer.onTimeout`——收敛为**一个 attempt 级 episode**（F16）：先尽力 flush 待保存答案，再调用与人工提交相同的 `handleSubmit`。`SUBMIT_SUCCESS` 只是瞬态事件；成功/失败的真实持久状态始终由随后的 authoritative snapshot 重建。
 
+episode 在 flush 与 submit 之间插入**服务端到期验证**（R-02，ADR-006/ADR-026）：客户端本地到期——包括 `ExamTimer` 向下取整显示出的 `00:00` 与墙钟前跳——只是展示层证据，不构成提交权威。episode 通过既有 `GET /candidate/attempts/:attemptId/take` re-read 取得服务端状态：该 GET 在自身锁定事务中对已到期 attempt 执行 deadline reconciliation 并返回冻结快照；仅当快照为 deadline 冻结（`lockReason='deadline'` 或已终态）时，才执行后续 `POST /submit`——此时该 POST 落在服务端已冻结的 attempt 上（reconciliation / crash-recovery 幂等，不会被记成 candidate manual submit）。若快照仍可编辑（服务端时钟未到截止时间）或 re-read 失败，则**不执行不可逆提交**，episode 重新武装并等待下一 tick 以 re-read 再基准化的 `serverNow` 重新判定；每个 tick 窗口至多一次验证 episode。服务端 deadline scanner 仍是客户端永不重试时的权威冻结路径。到期判定比较未取整的绝对时间差（`adjustedNow >= deadline`，与服务端严格截止比较一致）；`ExamTimer` 的展示秒数只负责渲染。
+
+**验证 read 期间的 in-flight manual submit 归属规则**：若用户在验证 GET await 期间经提交对话框发起了 manual submit（`submittingRef` 被占用），到点 episode 自己的 `handleSubmit` 会在 guard 处静默 no-op——此时 episode **必须释放声明**，不得对自己未执行的 POST 记 `deadline_auto_submit_success`；该 manual POST 的真实结果（成功导航 / 失败释放 `submittingRef`）才是事实。声明释放后，若 snapshot 的 `canSubmit` 仍驱动 1s tick，下一 tick 会重新走完整 gate 并以真实 auto submit 收敛；若冻结快照已关闭 `canSubmit`，tick 退役，页面收敛到锁定 overlay（提交已存在于服务端，无需第二次 POST）。
+
 episode 绑定声明它的 attempt：flush 是异步的，若期间路由切换到另一个 attempt，旧 episode 必须放弃——不得向旧 attempt 发 submit、不得导航回旧结果页、不得把旧 attempt 的 UI/遥测写到新 attempt，也不得清除新 attempt 的截止指示。身份判定复用页面既有的 `currentAttemptIdRef` 与 submit-flush 的 scope generation，不建立第二套 generation token。
 
 ---

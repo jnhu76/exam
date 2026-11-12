@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CandidateTakeSnapshot } from "@exam/contracts";
-import { deriveTakeExamView } from "./deriveTakeExamView";
+import {
+  deriveTakeExamView,
+  isDeadlineFrozenSnapshot,
+} from "./deriveTakeExamView";
 
 /**
  * P3-FSM-0 — deriveTakeExamView pure function.
@@ -211,5 +214,67 @@ describe("deriveTakeExamView", () => {
     expect(q0.answerValue).toBe("green");
     const q1 = view.questions[1]!;
     expect(q1.answerSource).toBe("none");
+  });
+});
+
+describe("isDeadlineFrozenSnapshot (deadline auto-submit gate verdict)", () => {
+  it("editable snapshot → false (server clock has not reached the deadline)", () => {
+    expect(isDeadlineFrozenSnapshot(buildSnapshot())).toBe(false);
+  });
+
+  it("deadline-locked snapshot → true (the /take read reconciled the expiry)", () => {
+    expect(
+      isDeadlineFrozenSnapshot(
+        buildSnapshot({
+          attemptStatus: "in_progress",
+          isEditable: false,
+          canSave: false,
+          canSubmit: false,
+          lockReason: "deadline",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("submitted / graded terminal snapshots → true (submit is idempotent crash recovery)", () => {
+    expect(
+      isDeadlineFrozenSnapshot(
+        buildSnapshot({ attemptStatus: "submitted", isEditable: false }),
+      ),
+    ).toBe(true);
+    expect(
+      isDeadlineFrozenSnapshot(
+        buildSnapshot({ attemptStatus: "graded", isEditable: false }),
+      ),
+    ).toBe(true);
+  });
+
+  it("disrupted lock → false: the restore flow owns it (ADR-012), never auto-submit", () => {
+    expect(
+      isDeadlineFrozenSnapshot(
+        buildSnapshot({
+          attemptStatus: "disrupted",
+          isEditable: false,
+          canSave: false,
+          canSubmit: false,
+          lockReason: "disrupted",
+          canResume: true,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("voided lock → false: a voided attempt must never be auto-submitted", () => {
+    expect(
+      isDeadlineFrozenSnapshot(
+        buildSnapshot({
+          attemptStatus: "voided",
+          isEditable: false,
+          canSave: false,
+          canSubmit: false,
+          lockReason: "voided",
+        }),
+      ),
+    ).toBe(false);
   });
 });
