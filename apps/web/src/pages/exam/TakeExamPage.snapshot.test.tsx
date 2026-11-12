@@ -980,9 +980,11 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       // The alert names the header correlation id for support lookup…
       const alert = screen.getByTestId("save-rejection-alert");
       expect(alert).toHaveTextContent("请求编号：req-deadline-865-929");
-      // …and the terminal signal drove exactly ONE authoritative re-read
-      // (the submit's own reload comes later).
-      expect(takeCalls).toBe(2);
+      // …and TWO authoritative re-reads have happened: the terminal signal's
+      // single reconcile (this test's subject) plus the deadline gate's own
+      // verification read before it may submit (R-02 server authority). The
+      // submit's own post-success reload comes later.
+      expect(takeCalls).toBe(3);
       await flushAll();
       const failed = telemetryEvents(send, "answer_autosave_failed");
       expect(failed).toHaveLength(1);
@@ -1124,6 +1126,21 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       serverNow: T0_ISO,
       effectiveDeadline: nearDeadline,
     });
+    // The deadline gate's verification read: the SERVER clock has passed the
+    // deadline and froze att-1 (the submit POST that follows is the
+    // idempotent converging action), so the episode proceeds to POST.
+    const frozenA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: new Date(T0.getTime() + 3_100).toISOString(),
+      effectiveDeadline: nearDeadline,
+      isEditable: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "deadline",
+      attemptStatus: "submitted",
+      submittedAt: nearDeadline,
+    });
     const lockedB = buildSnapshot({
       attemptId: "att-2",
       timingMode: "deadline",
@@ -1134,10 +1151,15 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       canSubmit: false,
       lockReason: "deadline",
     });
+    let attOneReads = 0;
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
         takeHandler(path);
-        return path.includes("att-1") ? editableA : lockedB;
+        if (path.includes("att-1")) {
+          attOneReads += 1;
+          return attOneReads === 1 ? editableA : frozenA;
+        }
+        return lockedB;
       }
       throw new Error(`unexpected GET ${path}`);
     });
@@ -1206,16 +1228,35 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       serverNow: T0_ISO,
       effectiveDeadline: nearDeadline,
     });
+    // The gate's verification read: the server froze att-1 at its deadline,
+    // which is what unlocks the converging submit POST.
+    const frozenA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: new Date(T0.getTime() + 3_100).toISOString(),
+      effectiveDeadline: nearDeadline,
+      isEditable: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "deadline",
+      attemptStatus: "submitted",
+      submittedAt: nearDeadline,
+    });
     const editableB = buildSnapshot({
       attemptId: "att-2",
       timingMode: "deadline",
       serverNow: T0_ISO,
       effectiveDeadline: farDeadline,
     });
+    let attOneReads = 0;
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
         takeHandler(path);
-        return path.includes("att-1") ? editableA : editableB;
+        if (path.includes("att-1")) {
+          attOneReads += 1;
+          return attOneReads === 1 ? editableA : frozenA;
+        }
+        return editableB;
       }
       throw new Error(`unexpected GET ${path}`);
     });
@@ -1264,10 +1305,26 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       serverNow: T0_ISO,
       effectiveDeadline: nearDeadline,
     });
+    // The gate's verification read: server-side deadline freeze, which is
+    // what unlocks the converging submit POST.
+    const frozenA = buildSnapshot({
+      attemptId: "att-1",
+      timingMode: "deadline",
+      serverNow: new Date(T0.getTime() + 3_100).toISOString(),
+      effectiveDeadline: nearDeadline,
+      isEditable: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "deadline",
+      attemptStatus: "submitted",
+      submittedAt: nearDeadline,
+    });
+    let takeReads = 0;
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
         takeHandler(path);
-        return editableA;
+        takeReads += 1;
+        return takeReads === 1 ? editableA : frozenA;
       }
       throw new Error(`unexpected GET ${path}`);
     });
@@ -1454,13 +1511,34 @@ describe("deadline auto-submit trigger declaration and result recording (F16)", 
       // timed_window mounts ExamTimer: at the deadline instant its onTimeout
       // and the page's 1s tick fire in the same window — one episode, not two
       // competing flows (the two triggers must not double-declare/submit).
-      installTakeRoute(
-        buildSnapshot({
-          timingMode: "timed_window",
-          serverNow: T0_ISO,
-          effectiveDeadline: nearDeadline,
-        }),
-      );
+      // The first /take read renders the editable page; the gate's later
+      // verification read returns the server's frozen deadline view, which is
+      // what unlocks the converging submit POST.
+      const editable = buildSnapshot({
+        timingMode: "timed_window",
+        serverNow: T0_ISO,
+        effectiveDeadline: nearDeadline,
+      });
+      const frozen = buildSnapshot({
+        timingMode: "timed_window",
+        serverNow: new Date(T0.getTime() + 3_100).toISOString(),
+        effectiveDeadline: nearDeadline,
+        isEditable: false,
+        canSave: false,
+        canSubmit: false,
+        lockReason: "deadline",
+        attemptStatus: "submitted",
+        submittedAt: nearDeadline,
+      });
+      let takeReads = 0;
+      apiGet.mockImplementation(async (path: string) => {
+        if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+          takeHandler(path);
+          takeReads += 1;
+          return takeReads === 1 ? editable : frozen;
+        }
+        throw new Error(`unexpected GET ${path}`);
+      });
       const pendingSubmits: DeferredSubmit[] = [];
       apiPost.mockImplementation(async (path: string) => {
         if (typeof path === "string" && path.includes("/submit")) {

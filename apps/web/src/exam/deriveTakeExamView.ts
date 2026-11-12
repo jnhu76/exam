@@ -90,3 +90,27 @@ export function deriveTakeExamView(
     })),
   };
 }
+
+/**
+ * Server-authoritative deadline verdict for the client auto-submit gate
+ * (R-02): true only when the snapshot reports the attempt as frozen BY THE
+ * DEADLINE (lockReason `deadline`) or already in a terminal status, meaning
+ * the POST /submit that follows lands on an attempt the server already froze
+ * (reconciliation / crash recovery — never a fresh manual submit).
+ *
+ * A non-editable snapshot is NOT by itself a deadline verdict: a `disrupted`
+ * lock belongs to the restore flow (ADR-012) and must never auto-submit, and
+ * an editable snapshot means the server clock has not reached the deadline —
+ * a client-side expiry belief (local clock ahead, floored 00:00 display) is
+ * display-level evidence only (ADR-006/ADR-026).
+ */
+export function isDeadlineFrozenSnapshot(
+  snapshot: CandidateTakeSnapshot,
+): boolean {
+  if (snapshot.isEditable) return false;
+  return (
+    snapshot.attemptStatus === "submitted" ||
+    snapshot.attemptStatus === "graded" ||
+    snapshot.lockReason === "deadline"
+  );
+}

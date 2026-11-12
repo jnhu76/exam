@@ -67,6 +67,7 @@ import { transientReducer, type TransientState } from "@/exam/transientReducer";
 // state is permitted.
 import {
   deriveTakeExamView,
+  isDeadlineFrozenSnapshot,
   type TakeExamView,
 } from "@/exam/deriveTakeExamView";
 import {
@@ -452,6 +453,12 @@ export function TakeExamPage() {
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
   const deadlineHandledRef = useRef(false);
+  // Wall-clock instant (ms) of the last deferred deadline verification. A
+  // deferral re-arms the episode, but the sibling trigger's interval
+  // callback can land in the SAME tick window (both triggers tick at 1s);
+  // this cooldown keeps one verification attempt per tick window instead of
+  // letting the two triggers immediately re-declare back-to-back.
+  const deadlineDeferredAtRef = useRef<number | null>(null);
   const serverOffsetRef = useRef(0);
   const submitOpenerRef = useRef<HTMLElement | null>(null);
   // Latest view, kept in a ref so async save callbacks can read the current
@@ -478,7 +485,8 @@ export function TakeExamPage() {
   // In-flight guard for the terminal-signal reconciliation re-read.
   // Concurrent terminal signals (heartbeat 409 + a settling autosave
   // rejection in the same episode) collapse into at most one active take GET.
-  const reconciliationInFlightRef = useRef<Promise<void> | null>(null);
+  const reconciliationInFlightRef =
+    useRef<Promise<CandidateTakeSnapshot | null> | null>(null);
   const { scheduleSave, flush, getScopeGeneration, failedQuestionIds } =
     useSubmitFlush(attemptId);
   // Latest failure set / answers, readable from stable callbacks (heartbeat,
@@ -647,35 +655,43 @@ export function TakeExamPage() {
    * rejection alert), and the next heartbeat retries. The generation guard
    * (same discipline as loadSnapshot) rejects a reconciliation that resolves
    * after a route change or a superseding page-level load.
+   *
+   * Resolves with the fetched snapshot so callers that must DECIDE on server
+   * state (the deadline auto-submit gate) can read the same authoritative
+   * re-read instead of issuing a second GET; resolves null when the re-read
+   * failed or was superseded. Fire-and-forget callers ignore the value.
    */
-  const reconcileAuthoritativeAttempt = useCallback(() => {
-    if (!attemptId) return Promise.resolve();
-    if (reconciliationInFlightRef.current) {
-      return reconciliationInFlightRef.current;
-    }
-    const attemptAtStart = attemptId;
-    const generationAtStart = loadGenerationRef.current;
-    const promise = fetchSnapshot(attemptAtStart)
-      .then((data) => {
-        if (
-          generationAtStart !== loadGenerationRef.current ||
-          currentAttemptIdRef.current !== attemptAtStart
-        ) {
-          return;
-        }
-        applySnapshot(data);
-      })
-      .catch(() => {
-        // Best-effort convergence; next terminal signal retries.
-      })
-      .finally(() => {
-        if (reconciliationInFlightRef.current === promise) {
-          reconciliationInFlightRef.current = null;
-        }
-      });
-    reconciliationInFlightRef.current = promise;
-    return promise;
-  }, [attemptId, fetchSnapshot, applySnapshot]);
+  const reconcileAuthoritativeAttempt =
+    useCallback((): Promise<CandidateTakeSnapshot | null> => {
+      if (!attemptId) return Promise.resolve(null);
+      if (reconciliationInFlightRef.current) {
+        return reconciliationInFlightRef.current;
+      }
+      const attemptAtStart = attemptId;
+      const generationAtStart = loadGenerationRef.current;
+      const promise = fetchSnapshot(attemptAtStart)
+        .then((data) => {
+          if (
+            generationAtStart !== loadGenerationRef.current ||
+            currentAttemptIdRef.current !== attemptAtStart
+          ) {
+            return null;
+          }
+          applySnapshot(data);
+          return data;
+        })
+        .catch(() => {
+          // Best-effort convergence; next terminal signal retries.
+          return null;
+        })
+        .finally(() => {
+          if (reconciliationInFlightRef.current === promise) {
+            reconciliationInFlightRef.current = null;
+          }
+        });
+      reconciliationInFlightRef.current = promise;
+      return promise;
+    }, [attemptId, fetchSnapshot, applySnapshot]);
 
   useEffect(() => {
     void loadSnapshot();
@@ -762,6 +778,7 @@ export function TakeExamPage() {
     clientSeqsRef.current = new Map();
     submittingRef.current = false;
     deadlineHandledRef.current = false;
+    deadlineDeferredAtRef.current = null;
     heartbeatFailureRef.current = 0;
     heartbeatFailureReportedRef.current = false;
     // Drop any in-flight reconciliation from the PREVIOUS attempt.
@@ -1180,13 +1197,25 @@ export function TakeExamPage() {
    *      deadline_auto_submit_success while permanently disarming the retry
    *      path;
    *   3. otherwise declare and own the episode: flush (flush-before-submit is
-   *      unchanged), then submit.
+   *      unchanged), then verify with the server, then submit.
    *   4. the episode is bound to the attempt that declared it: if the route
-   *      changes while flush() is awaiting, this invocation is abandoned. It
-   *      must not submit/navigate the old attempt, toast onto the new route,
-   *      or clear the new attempt's deadline indicator. Identity comes from
-   *      the same currentAttemptIdRef + scope-generation authority as
-   *      runSubmitFlush — no second token.
+   *      changes while flush()/the verification read is awaiting, this
+   *      invocation is abandoned. It must not submit/navigate the old
+   *      attempt, toast onto the new route, or clear the new attempt's
+   *      deadline indicator. Identity comes from the same currentAttemptIdRef
+   *      + scope-generation authority as runSubmitFlush — no second token.
+   *   5. SERVER AUTHORITY (ADR-006/ADR-026): local expiry — including
+   *      ExamTimer's floored 00:00 display and a forward-jumped wall clock —
+   *      is display-level evidence, never a submission authority. After the
+   *      flush, the episode re-reads the authoritative /take snapshot. Only
+   *      a snapshot that is frozen BY THE DEADLINE (lockReason 'deadline') or
+   *      already terminal unlocks the irreversible ordinary submit; that POST
+   *      then hits an attempt the server already froze, so reconciliation /
+   *      crash recovery makes it idempotent and it can never be recorded as
+   *      a candidate manual submit. An editable snapshot (server clock has
+   *      not reached the deadline) or an unavailable verification read
+   *      defers: NO submit, re-arm, and let the next tick re-check against
+   *      the offset re-based by the applied snapshot.
    * Success/failure telemetry and autoSubmitFailed record only the REAL
    * result of this invocation's own submit: the submittingRef re-check below
    * is synchronous with the handleSubmit call, so a pass through it
@@ -1197,6 +1226,15 @@ export function TakeExamPage() {
   const runDeadlineAutoSubmit = useCallback(async () => {
     if (!attemptId || deadlineHandledRef.current) return;
     if (submittingRef.current) return;
+    // One verification episode per tick window: a deferral (server has not
+    // confirmed expiry) re-arms the episode, and the sibling trigger's
+    // queued callback in the same window must wait for the next tick.
+    if (
+      deadlineDeferredAtRef.current !== null &&
+      Date.now() - deadlineDeferredAtRef.current < 1000
+    ) {
+      return;
+    }
     // An interval callback from the previous attempt can fire between the
     // route commit and its effect cleanup; it must not declare an episode
     // (or set the indicator) for the new attempt.
@@ -1248,25 +1286,66 @@ export function TakeExamPage() {
       // claim success.
       deadlineHandledRef.current = false;
     } else {
-      try {
-        await handleSubmit();
-        trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
-      } catch {
-        trackExamEvent(
-          "deadline_auto_submit_failed",
-          { stage: "submit", errorCode: "SUBMIT_ERROR" },
-          { attemptId, level: "error" },
-        );
-        if (!stale()) {
-          setAutoSubmitFailed(true);
-          toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+      // SERVER AUTHORITY GATE (see guard 5 above): the authoritative /take
+      // re-read both reconciles an expired attempt (freezing it as
+      // deadline-submitted) and reports whether the server clock actually
+      // agrees with the client's expiry belief.
+      const verified = await reconcileAuthoritativeAttempt();
+      if (stale()) {
+        // The route changed during the verification read; the new route's
+        // render-time reset owns its refs and UI.
+        return;
+      }
+      if (verified && isDeadlineFrozenSnapshot(verified)) {
+        deadlineDeferredAtRef.current = null;
+        try {
+          await handleSubmit();
+          trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
+        } catch {
+          trackExamEvent(
+            "deadline_auto_submit_failed",
+            { stage: "submit", errorCode: "SUBMIT_ERROR" },
+            { attemptId, level: "error" },
+          );
+          if (!stale()) {
+            setAutoSubmitFailed(true);
+            toast.error(t("candidateRuntime.errors.autoSubmitFailed"));
+          }
         }
+      } else {
+        // The server has NOT confirmed expiry: either the snapshot is still
+        // editable (client clock ahead of the server clock) or the
+        // verification read failed. An unverified local clock must never
+        // execute the irreversible ordinary submit — the server would
+        // freeze it as a legitimate manual submit before the real deadline,
+        // destroying the candidate's remaining time. Defer, re-arm, and let
+        // the next tick re-check against the offset re-based by the applied
+        // snapshot. The server's own deadline scanner remains the
+        // authoritative freeze path if the client never re-verifies.
+        deadlineHandledRef.current = false;
+        deadlineDeferredAtRef.current = Date.now();
+        trackExamEvent(
+          "deadline_auto_submit_deferred",
+          {
+            reason: verified
+              ? "server_deadline_not_reached"
+              : "server_state_unavailable",
+          },
+          { attemptId, level: "warn" },
+        );
       }
     }
     if (!stale()) {
       setDeadlineAutoSubmitting(false);
     }
-  }, [attemptId, flush, getScopeGeneration, handleSubmit, t]);
+  }, [
+    attemptId,
+    flush,
+    getScopeGeneration,
+    handleSubmit,
+    reconcileAuthoritativeAttempt,
+    t,
+  ]);
 
   /** Handles exam timer expiry through the shared deadline auto-submit seam. */
   const handleTimeout = useCallback(() => {
@@ -1468,6 +1547,7 @@ export function TakeExamPage() {
 
     if (nowByServerClock() < new Date(view.effectiveDeadline).getTime()) {
       deadlineHandledRef.current = false;
+      deadlineDeferredAtRef.current = null;
       setAutoSubmitFailed(false);
     }
 
