@@ -19,11 +19,19 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverSource = readFileSync(join(__dirname, "../server.ts"), "utf8");
 const runtimeSource = readFileSync(join(__dirname, "./runtime.ts"), "utf8");
-const bundleSource = readFileSync(join(__dirname, "./sdkBundle.ts"), "utf8");
 const businessSpanSource = readFileSync(
   join(__dirname, "./businessOperationSpan.ts"),
   "utf8",
 );
+const loopSpanSource = readFileSync(
+  join(__dirname, "./backgroundLoopSpan.ts"),
+  "utf8",
+);
+const loopVocabularySource = readFileSync(
+  join(__dirname, "./backgroundLoopVocabulary.ts"),
+  "utf8",
+);
+const bundleSource = readFileSync(join(__dirname, "./sdkBundle.ts"), "utf8");
 
 /**
  * The production files allowed to reference the business span helper (the
@@ -169,9 +177,9 @@ describe("telemetry runtime construction contract", () => {
 describe("business operation span wiring (#964 W3)", () => {
   it("creates spans only through the single helper — no second span-creation site", () => {
     // The only startActiveSpan/startSpan call sites in production src are the
-    // business helper (below) and the W1 sdkBundle/W2 plugin internals. Route
-    // code must never create spans directly — it wires the helper at the
-    // existing boundaries.
+    // business helper (below), the W4 loop helper, and the W1 sdkBundle/W2
+    // plugin internals. Route code must never create spans directly — it
+    // wires the helper at the existing boundaries.
     expect(businessSpanSource).toContain("tracer.startActiveSpan(");
     expect(businessSpanSource).not.toContain('from "./sdkBundle.js"');
     expect(businessSpanSource).not.toContain(
@@ -193,11 +201,82 @@ describe("business operation span wiring (#964 W3)", () => {
     }
   });
 
-  it("keeps the API-facade import contained to the business span helper", () => {
-    // Off-state module-graph contract (businessOperationSpan.ts header): the
-    // API-only @opentelemetry/api facade is imported by exactly ONE
-    // production module consumed by routes; runtime.ts and the routes never
-    // import it statically.
+  it("keeps the API-facade import contained to the API telemetry span helpers", () => {
+    // Off-state module-graph contract (businessOperationSpan.ts and
+    // backgroundLoopSpan.ts headers): the API-only @opentelemetry/api facade
+    // is statically imported by EXACTLY these two production modules; the
+    // runtime and everything else loads it only dynamically (or not at all).
     expect(runtimeSource).not.toMatch(/from ["']@opentelemetry\/api["']/);
+    for (const allowed of [
+      "./businessOperationSpan.ts",
+      "./backgroundLoopSpan.ts",
+    ]) {
+      expect(readFileSync(join(__dirname, allowed), "utf8")).toMatch(
+        /from ["']@opentelemetry\/api["']/,
+      );
+    }
+  });
+});
+
+describe("single technical-signal owner (#964 W7.1)", () => {
+  it("keeps @fastify/otel as the only HTTP SERVER span owner", () => {
+    // W1.1 measured dual instrumentation emitting 2 server spans per request;
+    // ADR-028 §3 table two forbids it. HTTP instrumentation remains registered
+    // for outbound client spans/propagation only.
+    expect(bundleSource).toContain(
+      "disableIncomingRequestInstrumentation: true",
+    );
+    expect(runtimeSource).toContain("bundle.createHttpInstrumentation()");
+    expect(runtimeSource).toContain("bundle.createFastifyInstrumentation()");
+    expect(runtimeSource).not.toContain("registerOnInitialization");
+  });
+
+  it("keeps Pino as the only server log API with log sending disabled", () => {
+    // Correlation only: instrumentation-pino injects trace_id/span_id into
+    // stdout; it never becomes a second remote log path (ADR-028 D3).
+    expect(bundleSource).toContain(
+      "new PinoInstrumentation({ disableLogSending: true })",
+    );
+    expect(runtimeSource).toContain('process.env.OTEL_LOGS_EXPORTER = "none"');
+    expect(runtimeSource).not.toContain("logRecordProcessors");
+  });
+});
+
+describe("background loop span wiring (#964 W4)", () => {
+  const LOOP_CALLER_FILES = [
+    "../plugins/deadlineScanner.ts",
+    "../plugins/heartbeat.ts",
+    "../plugins/clientEventRetention.ts",
+    "../plugins/emailOutboxLoop.ts",
+  ];
+
+  it("resolves cycle span names only through the frozen loop→span bijection", () => {
+    // The helper takes a closed BackgroundLoopName and resolves the span
+    // name through SPAN_NAME_BY_LOOP — a call site cannot invent a name.
+    expect(loopSpanSource).toContain("SPAN_NAME_BY_LOOP[loop]");
+    expect(loopSpanSource).toContain("tracer.startActiveSpan(");
+    // The bijection is total over the four frozen loop constants.
+    for (const loop of [
+      "LOOP_HEARTBEAT",
+      "LOOP_DEADLINE_SCANNER",
+      "LOOP_CLIENT_EVENT_RETENTION",
+      "LOOP_EMAIL_OUTBOX",
+    ]) {
+      expect(loopVocabularySource).toContain(`[${loop}]:`);
+    }
+  });
+
+  it("wires every background loop through the shared cycle helper", () => {
+    for (const caller of LOOP_CALLER_FILES) {
+      const source = readFileSync(join(__dirname, caller), "utf8");
+      expect(
+        source.includes("withLoopCycleSpan("),
+        `${caller} must wire its cycle through the shared loop helper`,
+      ).toBe(true);
+      expect(
+        source.includes("startActiveSpan("),
+        `${caller} must not create spans directly`,
+      ).toBe(false);
+    }
   });
 });
