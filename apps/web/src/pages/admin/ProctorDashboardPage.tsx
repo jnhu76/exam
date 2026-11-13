@@ -387,6 +387,13 @@ export function ProctorDashboardPage() {
   // and a slow response must never render a candidate list the routed exam
   // does not name.
   const statusRequestRef = useRef(0);
+  // The exam the URL currently names, readable from an async continuation that
+  // closed over an OLDER examId. A command handler started for exam A can
+  // settle after the route moved to exam B; its `loadStatus({ force: true })`
+  // would otherwise become the newest generation and commit A's candidates
+  // (or error) under B's route.
+  const routedExamIdRef = useRef(examId);
+  routedExamIdRef.current = examId;
   // Single-flight for scheduled poll ticks: while a read is on the wire the
   // interval skips its tick, so slow responses cannot stack overlapping
   // requests that supersede each other and freeze the refresh cycle. Explicit
@@ -397,6 +404,10 @@ export function ProctorDashboardPage() {
   const loadStatus = useCallback(
     async (options?: { force?: boolean }) => {
       if (!examId) return;
+      // A continuation from the previous route must not even start a read: a
+      // forced read issued now would be the newest generation for the WRONG
+      // exam, so the generation check alone cannot protect the projection.
+      if (examId !== routedExamIdRef.current) return;
       if (statusInFlightRef.current && !options?.force) return;
       const generation = ++statusRequestRef.current;
       statusInFlightRef.current = true;
@@ -405,15 +416,24 @@ export function ProctorDashboardPage() {
         const result = await api.get<CandidateStatusResponse>(
           `/api/admin/exams/${examId}/candidates/status`,
         );
+        // The route may have switched while this read was on the wire, even
+        // before the new exam's effect started its own read.
+        if (examId !== routedExamIdRef.current) return;
         if (generation !== statusRequestRef.current) return;
         setData(result);
       } catch {
+        if (examId !== routedExamIdRef.current) return;
         if (generation !== statusRequestRef.current) return;
         setError(t("admin.proctorDashboard.errors.loadFailed"));
       } finally {
         // A superseded request must not release the in-flight slot it no longer
-        // owns — the superseding read manages the slot from here.
-        if (generation === statusRequestRef.current) {
+        // owns — the superseding read manages the slot from here. A read whose
+        // exam is no longer routed likewise must not end the current exam's
+        // loading window.
+        if (
+          generation === statusRequestRef.current &&
+          examId === routedExamIdRef.current
+        ) {
           statusInFlightRef.current = false;
           setIsLoading(false);
         }

@@ -53,6 +53,7 @@ vi.mock("sonner", () => ({
 }));
 
 const getMock = vi.mocked(api.get);
+const postMock = vi.mocked(api.post);
 
 const adminUser: MeResponse = {
   id: "admin-1",
@@ -149,6 +150,7 @@ function renderPage(strict = false) {
 describe("ProctorDashboardPage status-read ownership (R7)", () => {
   beforeEach(() => {
     getMock.mockReset();
+    postMock.mockReset();
     queue.length = 0;
     sessionStorage.clear();
     localStorage.clear();
@@ -280,5 +282,53 @@ describe("ProctorDashboardPage status-read ownership (R7)", () => {
     });
     expect(screen.queryByText("考生轮")).not.toBeInTheDocument();
     expect(screen.getByText("考生刷")).toBeInTheDocument();
+  });
+
+  it("a command continuation from the previous exam must not start a forced read after the route switched", async () => {
+    renderPage();
+    // exam-1's status loads with a live candidate.
+    await act(async () => {
+      queue.shift()!.resolve(candidatesOf("考生甲"));
+    });
+    expect(await screen.findByText("考生甲")).toBeInTheDocument();
+
+    // Start an exam-1 force-submit command; its POST stays on the wire.
+    const command = deferred<unknown>();
+    postMock.mockImplementation(() => command.promise);
+    fireEvent.click(screen.getByRole("button", { name: "强制交卷" }));
+    await screen.findByRole("heading", { name: "确认强制交卷" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "确认强制交卷" }));
+    });
+    expect(postMock).toHaveBeenCalledTimes(1);
+
+    // Switch to exam-2 while the command is still in flight; its status read
+    // resolves and owns the projection.
+    await act(async () => {
+      screen.getByRole("button", { name: "后退" }).click();
+    });
+    await act(async () => {});
+    expect(statusCalls().at(-1)).toContain("/exams/exam-2/");
+    await act(async () => {
+      queue[0]!.resolve(candidatesOf("考生乙"));
+    });
+    expect(await screen.findByText("考生乙")).toBeInTheDocument();
+    const readsBeforeCommandSettles = statusCalls().length;
+    expect(readsBeforeCommandSettles).toBe(2);
+
+    // The old command's continuation now runs with the exam-1 closure. It must
+    // NOT issue an exam-1 read: that read would become the newest generation
+    // and commit the previous exam's candidates under the exam-2 route.
+    await act(async () => {
+      command.resolve({ disposition: "applied" });
+      await Promise.resolve();
+    });
+
+    expect(statusCalls()).toHaveLength(readsBeforeCommandSettles);
+    expect(statusCalls().at(-1)).toContain("/exams/exam-2/");
+    expect(screen.getByText("考生乙")).toBeInTheDocument();
+    expect(screen.queryByText("考生甲")).not.toBeInTheDocument();
+    expect(screen.queryByText("加载监考数据失败")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
