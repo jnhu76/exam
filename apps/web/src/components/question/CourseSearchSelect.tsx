@@ -8,6 +8,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
+import { useDataViewTextCommit } from "@/hooks/useDataViewTextCommit";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 
@@ -41,9 +42,23 @@ const SEARCH_PAGE_SIZE = 100;
  * remote search (GET /api/courses?search=...). In edit mode, if the selected
  * courseId is not in the local list, QuestionEditPage fetches it separately.
  *
+ * The text-commit choreography (draft → debounce → clear) is owned once by
+ * `hooks/useDataViewTextCommit` (docs/standards/ui-system.md §Toolbar filters);
+ * this component owns only what a committed term MEANS: the remote query and
+ * its query ownership. Unlike the toolbar search, blur and Enter do NOT flush
+ * the pending commit — Enter activates the highlighted option and blur inside
+ * the popover is not a commit action.
+ *
+ * INVARIANT: only the most recently issued query (latest seq) may update
+ * results, truncation, loading, or failure fallback. Typing a new term,
+ * clearing, closing, selecting, and an initial-list (scope) change all
+ * invalidate in-flight queries immediately, so a slow stale response can never
+ * land inside a newer query's debounce window.
+ *
  * Keyboard interaction follows the WAI-ARIA combobox/listbox pattern:
  * ArrowDown/ArrowUp move the active option, Home/End jump to first/last,
- * Enter selects, Escape closes without selecting.
+ * Enter selects, Escape closes without selecting. Keys while an IME
+ * composition is active belong to the IME and never reach navigation.
  */
 export function CourseSearchSelect({
   courses: initialCourses,
@@ -61,23 +76,27 @@ export function CourseSearchSelect({
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focusTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  // Request sequencing: only the latest search response may update state, so a
-  // slow stale response cannot overwrite a newer one (race under fast typing).
+  // Query ownership token: see the INVARIANT in the component docstring.
   const searchSeq = useRef(0);
 
-  // Sync local results when the initial courses prop changes.
+  // A new initial list is a scope change (e.g. the edit page finishing its
+  // course load): searches issued under the previous list must never land.
+  // Loading resets too, because an invalidated response skips its own
+  // finally-branch cleanup.
   useEffect(() => {
+    searchSeq.current += 1;
     setResults(initialCourses);
+    setTruncated(false);
+    setLoading(false);
   }, [initialCourses]);
 
-  // Clear both pending timers on unmount so callbacks never run after teardown.
+  // The commit hook cancels its own timer on unmount; only the popover focus
+  // delay needs manual teardown.
   useEffect(() => {
     return () => {
-      if (searchTimeout.current) clearTimeout(searchTimeout.current);
       if (focusTimeout.current) clearTimeout(focusTimeout.current);
     };
   }, []);
@@ -105,40 +124,63 @@ export function CourseSearchSelect({
     }
   }, [activeIndex]);
 
-  /** Unified close-and-reset: invalidates in-flight requests, clears debounce,
-   * restores initial state. Used by select, Escape, and popover close. */
+  /** Fetch courses matching the search term; see the ownership INVARIANT. */
+  const doSearch = useCallback(
+    async (term: string) => {
+      const seq = ++searchSeq.current;
+      if (!term.trim()) {
+        setResults(initialCourses);
+        setTruncated(false);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await api.get<CourseListResponse>(
+          `/api/courses?search=${encodeURIComponent(term.trim())}&pageSize=${SEARCH_PAGE_SIZE}`,
+        );
+        if (seq !== searchSeq.current) return;
+        setResults(res.items);
+        // The contract caps a page at SEARCH_PAGE_SIZE; if more matched, the
+        // rest are unreachable through this control. Surface it rather than
+        // silently hiding courses beyond the cap.
+        setTruncated(res.total > res.items.length);
+      } catch {
+        if (seq !== searchSeq.current) return;
+        // Fall back to the initial list on network error.
+        setResults(initialCourses);
+        setTruncated(false);
+      } finally {
+        if (seq === searchSeq.current) setLoading(false);
+      }
+    },
+    [initialCourses],
+  );
+
+  const commit = useDataViewTextCommit({
+    value: search,
+    onChange: setSearch,
+    onCommit: doSearch,
+  });
+
+  /** Close and restore the pre-search state. commit.clear() cancels a pending
+   * debounced commit and, via doSearch(""), invalidates in-flight queries. */
   const closeAndReset = useCallback(() => {
-    searchSeq.current += 1;
-    if (searchTimeout.current) {
-      clearTimeout(searchTimeout.current);
-      searchTimeout.current = undefined;
-    }
-    setSearch("");
-    setResults(initialCourses);
-    setTruncated(false);
-    setLoading(false);
+    commit.clear();
     setActiveIndex(-1);
     setOpen(false);
-  }, [initialCourses]);
+  }, [commit]);
 
   /** Select a course, cache it for label display, and close. */
   const selectCourse = useCallback(
     (course: CourseRow) => {
       setSelectedCourse(course);
       onChange(course.id);
-      searchSeq.current += 1;
-      if (searchTimeout.current) {
-        clearTimeout(searchTimeout.current);
-        searchTimeout.current = undefined;
-      }
-      setSearch("");
-      setResults(initialCourses);
-      setTruncated(false);
-      setLoading(false);
+      commit.clear();
       setActiveIndex(-1);
       setOpen(false);
     },
-    [onChange, initialCourses],
+    [onChange, commit],
   );
 
   /** Move the active index clamped to [0, results.length). */
@@ -152,56 +194,22 @@ export function CourseSearchSelect({
     [results.length],
   );
 
-  /** Fetch courses matching the search term. */
-  const doSearch = useCallback(
-    async (term: string) => {
-      // Invalidate any older in-flight request before the early-return branch.
-      const seq = ++searchSeq.current;
-      if (!term.trim()) {
-        setResults(initialCourses);
-        setTruncated(false);
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const res = await api.get<CourseListResponse>(
-          `/api/courses?search=${encodeURIComponent(term.trim())}&pageSize=${SEARCH_PAGE_SIZE}`,
-        );
-        if (seq !== searchSeq.current) return; // a newer search superseded this
-        setResults(res.items);
-        // The contract caps a page at SEARCH_PAGE_SIZE; if more matched, the
-        // rest are unreachable through this control. Surface it rather than
-        // silently hiding courses beyond the cap.
-        setTruncated(res.total > res.items.length);
-      } catch {
-        if (seq !== searchSeq.current) return;
-        // Silently fall back to the initial list on network error.
-        setResults(initialCourses);
-        setTruncated(false);
-      } finally {
-        if (seq === searchSeq.current) setLoading(false);
-      }
-    },
-    [initialCourses],
-  );
-
-  /** Debounced search on input change. */
+  /** Route input through the shared commit owner. An empty term is a
+   * deliberate clear: it commits "" immediately (no debounce wait). A
+   * non-empty term schedules the debounced commit AND invalidates in-flight
+   * queries right away, so an older response can never land inside this
+   * term's debounce window. */
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const term = e.target.value;
-      setSearch(term);
-      if (searchTimeout.current) clearTimeout(searchTimeout.current);
-      // When the term is cleared, immediately invalidate any in-flight search
-      // so a stale response cannot overwrite the restored initial state.
       if (!term.trim()) {
-        searchSeq.current++;
+        commit.clear();
+        return;
       }
-      searchTimeout.current = setTimeout(() => {
-        doSearch(term);
-      }, 300);
+      searchSeq.current += 1;
+      commit.change(term);
     },
-    [doSearch],
+    [commit],
   );
 
   // Focus the search input when the popover opens.
@@ -215,6 +223,10 @@ export function CourseSearchSelect({
   /** Handle keyboard events on the search input (combobox). */
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      // IME composition: Enter confirms the composition and Escape cancels it
+      // — these keys belong to the IME, not to list navigation. keyCode 229
+      // is the legacy composition marker.
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       if (!open) return;
 
       switch (e.key) {
