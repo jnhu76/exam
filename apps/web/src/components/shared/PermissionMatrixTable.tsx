@@ -63,7 +63,7 @@ export function PermissionMatrixTable({
         </colgroup>
         <TableHeader>
           <TableRow>
-            <TableHead className="font-mono text-xs">
+            <TableHead data-column-role="matrix-key" className="font-mono">
               {t("admin.permissions.roles.columnPermission")}
             </TableHead>
             {roleLabels.map((roleLabel) => (

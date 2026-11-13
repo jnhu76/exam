@@ -1,6 +1,7 @@
 import { Permission } from "@exam/authz";
 import {
   CELL_CHROME_PX,
+  CELL_TIER_PX,
   TOKEN_GRID_PX,
   tokenGrid,
 } from "@/table/roleCalibration";
@@ -25,10 +26,24 @@ import { headerGlyphRun } from "@/table/headerCapacity";
  * horizontal scroll (the matrix's row identity must not scroll away).
  */
 
-/** Mono advance for the capability keys at the matrix's 12px mono tier. */
-export const MATRIX_MONO_ADVANCE_PX = 7.2;
+/**
+ * Mono advance for the capability keys, derived from the tier the cells
+ * actually render at. recipes.css is unlayered, so its governed body-cell
+ * tier (0.9375rem = CELL_TIER_PX) wins over any page `text-*` utility on a
+ * matrix cell — the key renders at THAT size, and the column must budget the
+ * mono run against it (budgeting a smaller assumed tier made the widest key
+ * paint across the sticky boundary onto the grant column). MONO_ADVANCE_EM is
+ * a conservative upper bound over the `--font-mono-stack` fleet (ui-monospace
+ * → DejaVu Sans Mono / Liberation Mono on Linux at 0.602em; Menlo/Consolas
+ * narrower).
+ */
+export const MONO_ADVANCE_EM = 0.62;
 
-/** Width of `glyphs` full-width glyphs at the 12px mono tier, rounded up. */
+/** Mono advance in px at the governed body cell tier. */
+export const MATRIX_MONO_ADVANCE_PX =
+  Math.ceil(CELL_TIER_PX * MONO_ADVANCE_EM * 10) / 10;
+
+/** Width of `glyphs` full-width glyphs at the mono cell tier, rounded up. */
 function monoGlyphRun(glyphs: number): number {
   return Math.ceil(glyphs * MATRIX_MONO_ADVANCE_PX);
 }
