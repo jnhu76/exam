@@ -100,11 +100,20 @@ function contractViolations<TRow>(
 export function RowActions<TRow>({
   actions,
   row,
+  entityName,
   className,
   "aria-label": ariaLabel,
 }: {
   actions: RowActionDeclaration<TRow>[];
   row: TRow;
+  /**
+   * The row entity's localized display name (user name, exam title, …). When
+   * present it is composed into every control's accessible name — a table of
+   * icon-only actions all labeled "编辑用户" is unusable by screen reader
+   * (audit #971 F-07). Visible copy is untouched: inline buttons stay
+   * icon-only and kebab menu items keep the concise action text.
+   */
+  entityName?: string;
   className?: string;
   "aria-label"?: string;
 }) {
@@ -137,6 +146,14 @@ export function RowActions<TRow>({
     ? actions.filter((a) => a !== primary)
     : [];
 
+  const actionName = (action: RowActionDeclaration<TRow>) =>
+    entityName
+      ? t("common.rowActionNamed", { action: action.label, name: entityName })
+      : action.label;
+  const kebabName = entityName
+    ? t("common.moreActionsNamed", { name: entityName })
+    : t("common.moreActions");
+
   const activate = (action: RowActionDeclaration<TRow>) => {
     if (action.confirm) setConfirming(action);
     else action.onSelect?.(row);
@@ -149,7 +166,7 @@ export function RowActions<TRow>({
         type="button"
         size="icon"
         variant="ghost"
-        aria-label={action.label}
+        aria-label={actionName(action)}
         data-action-id={action.id}
         disabled={isDisabled(action)}
         onClick={(event) => {
@@ -191,7 +208,7 @@ export function RowActions<TRow>({
       <TooltipProvider key={action.id}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span tabIndex={0} aria-label={action.label}>
+            <span tabIndex={0} aria-label={actionName(action)}>
               {child}
             </span>
           </TooltipTrigger>
@@ -217,7 +234,7 @@ export function RowActions<TRow>({
               type="button"
               size="icon"
               variant="ghost"
-              aria-label={t("common.moreActions")}
+              aria-label={kebabName}
               data-action-id="overflow-menu"
             >
               <AppIcon icon={MoreVertical} size="inline" />

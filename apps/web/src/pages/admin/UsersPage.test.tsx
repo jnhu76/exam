@@ -286,7 +286,9 @@ function getCalls(prefix: string) {
 async function openRowMenu(user: ReturnType<typeof userEvent.setup>) {
   const table = await screen.findByRole("table");
   const kebab = within(table).getAllByRole("button", {
-    name: "更多操作",
+    // Composed per-row accessible names (audit #971 F-07); the helper opens
+    // whichever row the current test's fixture puts first.
+    name: /的更多操作$/,
   })[0]!;
   await user.click(kebab);
   return screen.getByRole("menu");
@@ -484,7 +486,7 @@ describe("UsersPage", () => {
   it("opens edit dialog for Admin", async () => {
     const user = userEvent.setup();
     renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑用户");
+    const editButtons = await screen.findAllByLabelText(/^编辑用户：/);
     await user.click(editButtons[0]!);
     expect(screen.getByText("编辑用户")).toBeInTheDocument();
     const dialog = screen.getByRole("dialog");
@@ -494,7 +496,7 @@ describe("UsersPage", () => {
   it("edits a user", async () => {
     const user = userEvent.setup();
     renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑用户");
+    const editButtons = await screen.findAllByLabelText(/^编辑用户：/);
     await user.click(editButtons[0]!);
     const dialog = await screen.findByRole("dialog");
     const nameInput = getDialogInputs(dialog)[0]!;
@@ -514,7 +516,9 @@ describe("UsersPage", () => {
     const user = userEvent.setup();
     renderPage();
     const table = await screen.findByRole("table");
-    const toggleBtn = within(table).getByRole("button", { name: "禁用" });
+    const toggleBtn = within(table).getByRole("button", {
+      name: "禁用：Admin One",
+    });
     await user.click(toggleBtn);
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/Admin One/)).toBeInTheDocument();
@@ -620,7 +624,7 @@ describe("UsersPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑用户");
+    const editButtons = await screen.findAllByLabelText(/^编辑用户：/);
     await user.click(editButtons[0]!);
     const dialog = await screen.findByRole("dialog");
     // Read-only hint shows the ORIGINAL role (its zh label), not a silently
@@ -665,7 +669,7 @@ describe("UsersPage", () => {
     });
     const user = userEvent.setup();
     renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑用户");
+    const editButtons = await screen.findAllByLabelText(/^编辑用户：/);
     await user.click(editButtons[1]!);
     const dialog = await screen.findByRole("dialog");
     expect(screen.getByTestId("locked-role")).toHaveTextContent("候选人");
@@ -783,7 +787,7 @@ describe("UsersPage", () => {
         within(table).queryByRole("button", { name: "授课课程" }),
       ).not.toBeInTheDocument();
       expect(
-        within(table).queryAllByRole("button", { name: "更多操作" }),
+        within(table).queryAllByRole("button", { name: /的更多操作$/ }),
       ).toHaveLength(0);
     });
 
@@ -950,7 +954,7 @@ describe("UsersPage", () => {
         within(table).queryByRole("button", { name: "授课课程" }),
       ).not.toBeInTheDocument();
       expect(
-        within(table).queryAllByRole("button", { name: "更多操作" }),
+        within(table).queryAllByRole("button", { name: /的更多操作$/ }),
       ).toHaveLength(0);
     });
 
@@ -1472,7 +1476,7 @@ describe("UsersPage", () => {
         within(table).queryByRole("button", { name: "评卷考试" }),
       ).not.toBeInTheDocument();
       expect(
-        within(table).queryAllByRole("button", { name: "更多操作" }),
+        within(table).queryAllByRole("button", { name: /的更多操作$/ }),
       ).toHaveLength(0);
     });
 

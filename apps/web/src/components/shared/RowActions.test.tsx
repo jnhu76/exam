@@ -362,3 +362,53 @@ describe("RowActions contract violations (dev)", () => {
     ).toThrow(/must declare confirm/);
   });
 });
+
+describe("RowActions per-row entity naming (F-07)", () => {
+  const namedRow: Row = { id: "u-1" };
+
+  it("composes the entity name into inline icon buttons' accessible names", () => {
+    render(
+      <RowActions
+        actions={[decl({ id: "edit", label: "编辑用户" })]}
+        row={namedRow}
+        entityName="张三"
+      />,
+    );
+    // The bare generic label is the defect: 17 rows all announced "编辑用户".
+    expect(
+      screen.getByRole("button", { name: "编辑用户：张三" }),
+    ).toBeInTheDocument();
+    // The visible vocabulary stays icon-only.
+    expect(
+      screen.getByRole("button", { name: "编辑用户：张三" }).textContent,
+    ).toBe("");
+  });
+
+  it("names the kebab trigger after the row while menu item text stays concise", async () => {
+    const user = userEvent.setup();
+    render(
+      <RowActions
+        actions={[
+          decl({ id: "edit", label: "编辑" }),
+          decl({ id: "reset", label: "重置密码", icon: KeyRound }),
+          decl({ id: "disable", label: "禁用", icon: Trash2 }),
+        ]}
+        row={namedRow}
+        entityName="张三"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "张三的更多操作" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "张三的更多操作" }));
+    // Menu item visible text stays the concise action copy.
+    const item = await screen.findByRole("menuitem", { name: "重置密码" });
+    expect(item.textContent).toContain("重置密码");
+  });
+
+  it("keeps the generic labels when no entity name is supplied", () => {
+    renderActions([decl({ id: "edit", label: "编辑" })]);
+    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
+  });
+});
