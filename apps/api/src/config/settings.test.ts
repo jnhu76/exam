@@ -129,6 +129,7 @@ describe("resolveSettings primitives", () => {
     expect(s.telemetry.TELEMETRY_SAMPLE_RATIO).toBe(1);
     expect(s.telemetry.TELEMETRY_EXPORTER).toBe("none");
     expect(s.telemetry.TELEMETRY_MEMORY_DUMP_FILE).toBe("");
+    expect(s.telemetry.TELEMETRY_OTLP_ENDPOINT).toBe("");
   });
 
   it("treats set-but-empty values as unset (Compose ${KEY:-} forwards)", () => {
@@ -206,8 +207,12 @@ describe("resolveSettings primitives", () => {
       resolveSettings({ TELEMETRY_EXPORTER: "memory" }, DEV).telemetry
         .TELEMETRY_EXPORTER,
     ).toBe("memory");
-    expect(() => resolveSettings({ TELEMETRY_EXPORTER: "otlp" }, DEV)).toThrow(
-      /TELEMETRY_EXPORTER must be "none" or "memory"/,
+    expect(
+      resolveSettings({ TELEMETRY_EXPORTER: "otlp" }, DEV).telemetry
+        .TELEMETRY_EXPORTER,
+    ).toBe("otlp");
+    expect(() => resolveSettings({ TELEMETRY_EXPORTER: "grpc" }, DEV)).toThrow(
+      /TELEMETRY_EXPORTER must be "none", "memory" or "otlp"/,
     );
     // Truthy boolean switch never throws; a typo means Off, not startup death.
     expect(

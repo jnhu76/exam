@@ -1,0 +1,151 @@
+# Opt-in observability profile — #964 W6 (ADR-028, PROPOSED).
+#
+# Usage (with the production stack, same env file and project):
+#   docker compose --env-file .env.production \
+#     -f docker-compose.yml \
+#     -f deploy/observability/docker-compose.observability.yml \
+#     --profile observability up -d
+#
+# A bare `docker compose --env-file .env.production up -d` (base file
+# only) starts NONE of these services and keeps the default Off,
+# offline-capable deployment unchanged. Starting the profile alone does
+# not change app behavior either — telemetry export is enabled only by
+# the TELEMETRY_* settings in .env.production (see
+# docs/operations/technical-telemetry.md for the full enable/rollback
+# runbook).
+#
+# Images are pinned exactly (the version group W6 validated):
+#   otel/opentelemetry-collector-contrib:0.165.0
+#   grafana/loki:3.7.9 · grafana/tempo:3.1.1
+#   prom/prometheus:v3.16.0 · grafana/grafana:13.3.1
+#
+# Access boundary: every service below is internal to exam-net EXCEPT
+# grafana, which publishes one host port bound to loopback by default
+# (OBS_GRAFANA_HOST_BIND / OBS_GRAFANA_PORT). Technical telemetry is NOT
+# exposed through any Exam-managed API (ADR-018 D6).
+#
+# OWNERSHIP: this file owns only the observability additions and the app's
+# log-ingestion driver (the single remote log path for this deployment
+# mode — stdout collection, ADR-028 D3). The base file remains the single
+# authority for the app/web/db topology.
+services:
+  app:
+    logging:
+      # Single remote log ingestion path (stdout → collector file_log).
+      # The `tag` log-opt stamps every json-file line with attrs.tag so the
+      # collector's filter selects ONLY this container from the host's
+      # docker containers directory; max-size/max-file bound the host-side
+      # file. `docker compose logs app` keeps working (stdout contract).
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "exam-app"
+
+  otelcol:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    # Read-only host docker containers dir (json-file logs). Root group is
+    # required: those directories are root-only on a default Docker host.
+    user: "0:0"
+    volumes:
+      - ./deploy/observability/otelcol.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/otelcol-contrib",
+          "--config=/etc/otelcol/config.yaml",
+          "validate",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - exam-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  tempo:
+    profiles: ["observability"]
+    image: grafana/tempo:3.1.1
+    command:
+      - -config.file=/etc/tempo/tempo.yaml
+      # 14-day block retention (flag-addressable only in Tempo 3.1.1).
+      - -backend-scheduler.provider.work.compaction.block-retention=336h
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ${EXAM_DATA_ROOT:-./data}/observability/tempo:/var/tempo
+    # No Docker healthcheck: the tempo image (ubi-micro) ships no shell/
+    # wget to probe /ready. Backend unavailability is an observability
+    # outage only — never a business-health input (ADR-028 D1).
+    networks:
+      - exam-net
+    restart: unless-stopped
+
+  loki:
+    profiles: ["observability"]
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./deploy/observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - ${EXAM_DATA_ROOT:-./data}/observability/loki:/loki
+    # No Docker healthcheck (no shell/wget in the image); same reasoning
+    # as tempo above.
+    networks:
+      - exam-net
+    restart: unless-stopped
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=14d
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${EXAM_DATA_ROOT:-./data}/observability/prometheus:/prometheus
+    networks:
+      - exam-net
+    restart: unless-stopped
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:13.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${OBS_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${OBS_GRAFANA_ADMIN_PASSWORD:?OBS_GRAFANA_ADMIN_PASSWORD is required when the observability profile is enabled}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${EXAM_DATA_ROOT:-./data}/observability/grafana:/var/lib/grafana
+    ports:
+      - "${OBS_GRAFANA_HOST_BIND:-127.0.0.1}:${OBS_GRAFANA_PORT:-13000}:3000"
+    depends_on:
+      - tempo
+      - loki
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:3000/api/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - exam-net
+    restart: unless-stopped
