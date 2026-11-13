@@ -4,6 +4,7 @@ import { createDatabase } from "@exam/db/database";
 import { setTransactionRetryLogger } from "@exam/db/types";
 import type { Database } from "@exam/db/types";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { registerRootSqlConnectionForTelemetry } from "../telemetry/runtime.js";
 import { AUDIT_DRAIN_TIMEOUT_MS } from "./auditLifecycle.js";
 import {
   installCapacityResearchInstrumentation,
@@ -28,6 +29,11 @@ const dbPlugin: FastifyPluginAsync = async (fastify) => {
   if (isCapacityResearchEnabled()) {
     installCapacityResearchInstrumentation(conn.sql);
   }
+  // #964 W2: tag the root pool for the DB telemetry plugin (root vs
+  // transaction statement attribution). No-op unless telemetry is On —
+  // the handle only exists behind the telemetry-enabled gate. Runs BEFORE
+  // the first statement of this pool can execute.
+  registerRootSqlConnectionForTelemetry(conn.sql);
   fastify.decorate<Database>("db", conn.db);
   // Retry observability (#800 PR-B): transaction retries anywhere in the
   // process surface as structured warns on the Fastify logger. Wired once

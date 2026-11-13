@@ -1,5 +1,7 @@
 import { appendFileSync } from "node:fs";
 import type { FastifyPluginCallback } from "fastify";
+import { setTransactionSeam } from "@exam/db/observation";
+import type { TransactionSeam } from "@exam/db/observation";
 import {
   getRuntimeConfig,
   type TelemetryConfig,
@@ -11,6 +13,28 @@ import {
 import { ExceptionScrubSpanProcessor } from "./exceptionScrubSpanProcessor.js";
 import { ServerRootPropagator } from "./serverRootPropagator.js";
 import { UrlScrubSpanProcessor } from "./urlScrubSpanProcessor.js";
+
+/**
+ * Structural view of the root postgres.js pool the db plugin hands over for
+ * telemetry tagging. The plugin only creates ONE LAZY marker query through
+ * it (`sql.unsafe("select 1")` — created, never consumed, dropped), so a
+ * registration executes nothing.
+ */
+interface TelemetryRootSql {
+  unsafe: (query: string) => unknown;
+}
+
+/**
+ * Structural handle of the DB telemetry plugin (#964 W2). The plugin is
+ * referenced ONLY through the dynamic import inside startSdk — the Off
+ * deployment never loads the module (and its one-way driver prototype
+ * patch) at all.
+ */
+interface DbTelemetryHandle {
+  registerRootConnection(sql: TelemetryRootSql): void;
+  readonly transactionSeam: TransactionSeam;
+  disable(): void;
+}
 
 /**
  * Technical telemetry runtime (ADR-028, default Off).
@@ -74,6 +98,12 @@ interface ActiveTelemetry {
   memoryExporter: BoundedMemorySpanExporter | null;
   /** Witness dump path captured at init; empty string = disabled. */
   memoryDumpFile: string;
+  /**
+   * DB telemetry plugin handle (#964 W2) — null when its install degraded.
+   * The driver prototype patch it installed is one-way; `disable()` only
+   * stops recording (the patch keeps forwarding inertly).
+   */
+  dbTelemetry: DbTelemetryHandle | null;
 }
 
 let active: ActiveTelemetry | null = null;
@@ -87,6 +117,18 @@ export interface TelemetryRuntimeHandle {
 /** Whether a telemetry SDK is live in this process. */
 export function isTelemetryActive(): boolean {
   return active !== null;
+}
+
+/**
+ * Tags a root postgres.js pool for the DB telemetry plugin (root vs
+ * transaction attribution, #964 W2). No-op when telemetry is Off or the
+ * plugin install degraded — the db plugin calls it unconditionally right
+ * after `createDatabase`. Registrations after shutdown are ignored.
+ */
+export function registerRootSqlConnectionForTelemetry(
+  sql: TelemetryRootSql,
+): void {
+  active?.dbTelemetry?.registerRootConnection(sql);
 }
 
 /**
@@ -171,6 +213,18 @@ export async function shutdownTelemetry(): Promise<void> {
   initAttempted = true;
   if (!current) return;
 
+  // Stop DB telemetry recording FIRST (no new spans after this point), and
+  // clear the @exam/db observation seam so the transaction path returns to
+  // its seam-less behavior for whatever still runs during close (#964 W2).
+  if (current.dbTelemetry) {
+    try {
+      current.dbTelemetry.disable();
+    } catch {
+      // Contained: a broken disable never blocks the shutdown sequence.
+    }
+  }
+  setTransactionSeam(null);
+
   // Flush the batch queue FIRST so the witness dump sees every span the
   // process produced; both flush and shutdown are bounded races so a stuck
   // exporter can never extend the #351 shutdown budget.
@@ -252,6 +306,28 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
     ],
   });
 
+  // #964 W2: the DB telemetry plugin loads ONLY here — inside the On path,
+  // after the SDK is up and BEFORE the Fastify instance (and with it the db
+  // plugin's root pool) exists, so the one-way prototype patch is in place
+  // before the process's first statement. A degraded install keeps the rest
+  // of telemetry alive (ADR-028 D1: telemetry failures never change
+  // business results).
+  let dbTelemetry: DbTelemetryHandle | null = null;
+  try {
+    const dbBundle = await import("@exam/otel-drizzle-postgresjs");
+    dbTelemetry = dbBundle.installOtelDbTelemetry();
+    setTransactionSeam(dbTelemetry.transactionSeam);
+  } catch (err) {
+    dbTelemetry = null;
+    setTransactionSeam(null);
+    process.stderr.write(
+      `${JSON.stringify({
+        event: "telemetry.db_init_failed",
+        reason: err instanceof Error ? err.message : String(err),
+      })}\n`,
+    );
+  }
+
   const fastifyOtel = bundle.createFastifyInstrumentation();
   return {
     sdk,
@@ -259,6 +335,7 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
     fastifyOtelPlugin: fastifyOtel.plugin(),
     memoryExporter,
     memoryDumpFile: config.memoryDumpFile,
+    dbTelemetry,
   };
 }
 
