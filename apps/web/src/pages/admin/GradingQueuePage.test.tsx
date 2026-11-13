@@ -140,14 +140,39 @@ describe("GradingQueuePage", () => {
     expect(await screen.findByText("加载评分队列失败")).toBeInTheDocument();
   });
 
-  it("clicking a row navigates to grading detail", async () => {
+  it("exposes a real detail link per queue entry whose accessible name identifies the target", async () => {
+    renderPage();
+    const table = await screen.findByRole("table");
+
+    // One real link per row; its accessible name must distinguish the target
+    // (candidate + exam), not read as the row's bare first-cell text.
+    const links = within(table).getAllByRole("link");
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/admin/grading-queue/att-1");
+    expect(links[0]).toHaveAccessibleName(/张三/);
+    expect(links[0]).toHaveAccessibleName(/期末考试/);
+    expect(links[1]).toHaveAccessibleName(/李四/);
+    // A link is a native focusable element — the old <tr onClick> was not.
+    expect(links[0]).toHaveAttribute("href");
+  });
+
+  it("mobile cards carry the same real detail link (single column source)", async () => {
+    renderPage();
+    // Desktop table + mobile cards both render the shared candidate column
+    // cell, so the same named link exists in both representations.
+    const links = await screen.findAllByRole("link", { name: /张三/ });
+    expect(links.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("opens the grading detail with keyboard Enter on the native link", async () => {
     const user = userEvent.setup();
     renderPage();
     const table = await screen.findByRole("table");
 
-    const row = within(table).getByText("张三").closest("tr");
-    expect(row).toBeTruthy();
-    await user.click(row!);
+    const link = within(table).getAllByRole("link")[0]!;
+    link.focus();
+    expect(link).toHaveFocus();
+    await user.keyboard("{Enter}");
 
     expect(await screen.findByText("Detail Page")).toBeInTheDocument();
   });

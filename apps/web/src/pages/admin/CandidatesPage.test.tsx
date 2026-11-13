@@ -142,8 +142,9 @@ async function openRowMenu(
   // Row actions render twice by design (desktop table + mobile cards);
   // index rows within the desktop table representation.
   const table = screen.getByRole("table");
+  // Composed per-row accessible names (audit #971 F-07).
   const kebabs = await within(table).findAllByRole("button", {
-    name: "更多操作",
+    name: /的更多操作$/,
   });
   await user.click(kebabs[index]!);
   return await screen.findByRole("menu");
@@ -287,7 +288,7 @@ describe("CandidatesPage", () => {
   it("opens edit dialog with candidate data", async () => {
     const user = userEvent.setup();
     renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑考生");
+    const editButtons = await screen.findAllByLabelText(/^编辑考生：/);
     await user.click(editButtons[0]!);
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("编辑考生")).toBeInTheDocument();
@@ -296,7 +297,7 @@ describe("CandidatesPage", () => {
   it("edits a candidate", async () => {
     const user = userEvent.setup();
     renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑考生");
+    const editButtons = await screen.findAllByLabelText(/^编辑考生：/);
     await user.click(editButtons[0]!);
     const dialog = await screen.findByRole("dialog");
     const nameInput = dialog.querySelectorAll("input")[0]!;

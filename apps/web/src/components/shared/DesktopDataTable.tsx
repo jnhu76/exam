@@ -65,8 +65,6 @@ export interface DesktopDataTableProps<TData> {
   onPaginationChange?: (table: TanStackTable<TData>) => void;
   /** Row key resolver. */
   getRowId?: (row: TData) => string;
-  /** Row interactivity: navigates (or opens) a row on click. */
-  onRowClick?: (row: TData) => void;
   /** Stable per-row test anchor (e.g. GradingQueuePage queue rows). */
   getRowTestId?: (row: TData) => string;
   /**
@@ -102,7 +100,6 @@ export function DesktopDataTable<TData>({
   page,
   pageSize,
   getRowId,
-  onRowClick,
   getRowTestId,
   rowProps,
   loading = false,
@@ -236,8 +233,6 @@ export function DesktopDataTable<TData>({
             <TableRow
               key={row.id}
               data-testid={getRowTestId?.(row.original)}
-              className={onRowClick ? "cursor-pointer" : undefined}
-              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
               {...(rowProps?.(row.original) ?? {})}
             >
               {row.getVisibleCells().map((cell) => {

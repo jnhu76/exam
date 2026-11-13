@@ -558,6 +558,9 @@ export function CandidatesPage() {
         return (
           <RowActions
             row={candidate}
+            // F-07 (#971): compose the entity name so every icon control and
+            // kebab trigger announces WHICH row it acts on.
+            entityName={candidate.name || candidate.username}
             actions={[
               {
                 id: "edit",

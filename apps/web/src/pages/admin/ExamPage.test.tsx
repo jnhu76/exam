@@ -111,7 +111,7 @@ describe("ExamPage", () => {
       await screen.findByRole("button", { name: "创建考试" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "删除考试" }),
+      screen.queryByRole("button", { name: /^删除考试：/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -124,7 +124,7 @@ describe("ExamPage", () => {
     // scope to the desktop table representation.
     const table = await screen.findByRole("table");
     const deleteButtons = await within(table).findAllByRole("button", {
-      name: "删除考试",
+      name: /^删除考试：/,
     });
     expect(deleteButtons).toHaveLength(2);
     expect(deleteButtons[0]).toBeEnabled();
@@ -164,7 +164,7 @@ describe("ExamPage", () => {
     ).toBe(true);
     const score = within(table).getAllByText("60/100 分");
     const deleteButtons = within(table).getAllByRole("button", {
-      name: "删除考试",
+      name: /^删除考试：/,
     });
 
     expect(duration[0]?.closest("td")).toHaveAttribute(
@@ -427,7 +427,7 @@ describe("ExamPage #785 pagination and status filter (BDD L2)", () => {
 
     await user.click(
       within(await screen.findByRole("table")).getByRole("button", {
-        name: "删除考试",
+        name: /^删除考试：/,
       }),
     );
     await user.click(await screen.findByRole("button", { name: "确认" }));

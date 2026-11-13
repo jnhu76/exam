@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageContainer } from "@/components/shared/PageContainer";
-import { Upload, X } from "lucide-react";
+import { ChevronDown, Upload, X } from "lucide-react";
 import type { ImportJobLog, ImportLogListResponse } from "@exam/contracts";
 
 type ImportLogResponse = ImportLogListResponse;
@@ -193,6 +193,7 @@ export function ImportLogsPage() {
             { role: "number", key: "created" },
             { role: "number", key: "updated" },
             { role: "number", key: "errors" },
+            { role: "actions", key: "row-expand" },
           ]}
         >
           <TableHeader>
@@ -218,17 +219,14 @@ export function ImportLogsPage() {
               <DataTableHead role="number">
                 {t("admin.importLogs.columns.errors")}
               </DataTableHead>
+              <DataTableHead role="actions">
+                {t("common.rowActions")}
+              </DataTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <TableRow
-                key={item.id}
-                className="cursor-pointer"
-                onClick={() =>
-                  setExpandedId(expandedId === item.id ? null : item.id)
-                }
-              >
+              <TableRow key={item.id}>
                 <DataTableCell role="date" className="type-secondary">
                   {formatDateTime(item.createdAt)}
                 </DataTableCell>
@@ -250,6 +248,38 @@ export function ImportLogsPage() {
                 <DataTableCell role="number">{item.createdCount}</DataTableCell>
                 <DataTableCell role="number">{item.updatedCount}</DataTableCell>
                 <DataTableCell role="number">{item.errors}</DataTableCell>
+                <DataTableCell role="actions">
+                  {/* Real expansion control (keyboard/AT reachable), bound to
+                      the detail region below via aria-expanded/aria-controls —
+                      replaces the mouse-only row onClick. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-expanded={expandedId === item.id}
+                    aria-controls={`import-log-detail-${item.id}`}
+                    aria-label={t("admin.importLogs.detailToggle", {
+                      type: t(
+                        (TYPE_LABELS[item.type] ??
+                          "admin.importLogs.typeFilters.all") as "admin.importLogs.typeLabels.candidate",
+                      ),
+                      time: formatDateTime(item.createdAt),
+                    })}
+                    onClick={() =>
+                      setExpandedId(expandedId === item.id ? null : item.id)
+                    }
+                  >
+                    <AppIcon
+                      icon={ChevronDown}
+                      size="inline"
+                      className={
+                        expandedId === item.id
+                          ? "rotate-180 transition-transform"
+                          : "transition-transform"
+                      }
+                    />
+                  </Button>
+                </DataTableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -260,7 +290,12 @@ export function ImportLogsPage() {
           const item = items.find((i) => i.id === expandedId);
           if (!item) return null;
           return (
-            <div className="rounded-md border p-4">
+            <div
+              id={`import-log-detail-${item.id}`}
+              role="region"
+              aria-label={t("admin.importLogs.detailRegion")}
+              className="rounded-md border p-4"
+            >
               {item.errorsDetail && item.errorsDetail.length > 0 && (
                 <>
                   <h3 className="mb-2 text-sm font-medium">
