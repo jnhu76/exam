@@ -14,6 +14,8 @@ import { FormSection } from "@/components/shared/FormSection";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/shared/FieldError";
 import { Field, FieldGroup, FieldRow } from "@/components/shared/FieldGroup";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { localInputToInstant } from "@/lib/dateTime";
 
 /** A question's ID and its configured score value. */
 interface QuestionScore {
@@ -64,12 +66,23 @@ export interface ExamConfigData {
   minSubmitAfterStartMinutes?: number | null;
 }
 
+/**
+ * Field-level schedule hints the owning page derives (e.g. DST gap/overlap
+ * messages for edited wall clocks). Rendered next to the inputs so the
+ * failure stays tied to the field.
+ */
+export interface ExamScheduleFieldErrors {
+  openAt?: string | null;
+  closeAt?: string | null;
+}
+
 /** Props for the ExamConfigForm component. */
 interface ExamConfigFormProps {
   courses: Array<{ id: string; name: string }>;
   questions?: QuestionScore[];
   data: ExamConfigData;
   onChange: (data: ExamConfigData) => void;
+  scheduleFieldErrors?: ExamScheduleFieldErrors;
 }
 
 /**
@@ -81,8 +94,10 @@ export function ExamConfigForm({
   questions = [],
   data,
   onChange,
+  scheduleFieldErrors,
 }: ExamConfigFormProps) {
   const { t } = useTranslation();
+  const { timeZone: scheduleTimeZone } = useProductDateTime();
   const [manualTotalScore, setManualTotalScore] = useState(false);
 
   const computedTotal = questions
@@ -91,10 +106,20 @@ export function ExamConfigForm({
   const hasQuestions = data.questionIds.length > 0;
   const showWarning =
     hasQuestions && manualTotalScore && data.totalScore !== computedTotal;
-  const timeError =
-    data.openAt && data.closeAt
-      ? new Date(data.closeAt) <= new Date(data.openAt)
-      : false;
+  // Ordering compares instants in the scheduling zone (never the browser
+  // zone) via the shared seam; a wall clock that does not resolve uniquely
+  // is reported by the owning page, not here.
+  const openInstant = data.openAt
+    ? localInputToInstant(data.openAt, scheduleTimeZone)
+    : null;
+  const closeInstant = data.closeAt
+    ? localInputToInstant(data.closeAt, scheduleTimeZone)
+    : null;
+  const timeError = Boolean(
+    openInstant?.kind === "unique" &&
+    closeInstant?.kind === "unique" &&
+    closeInstant.instant <= openInstant.instant,
+  );
   const scoreError = data.totalScore > 0 && data.passingScore > data.totalScore;
 
   useEffect(() => {
@@ -201,6 +226,12 @@ export function ExamConfigForm({
               {t(`admin.forms.exam.timingModeHint.${data.timingMode}`)}
             </p>
           </Field>
+          {/* F-20: state which IANA zone these wall clocks are interpreted
+              in — it is the resolved product scheduling zone, not the
+              browser's. */}
+          <p className="type-metadata">
+            {t("admin.forms.exam.timeZoneHint", { timeZone: scheduleTimeZone })}
+          </p>
           <FieldRow>
             <Field>
               <Label>{t("admin.forms.exam.startTime")}</Label>
@@ -209,6 +240,7 @@ export function ExamConfigForm({
                 value={data.openAt}
                 onChange={(e) => update({ openAt: e.target.value })}
               />
+              <FieldError>{scheduleFieldErrors?.openAt}</FieldError>
             </Field>
             {data.timingMode !== "untimed" && (
               <Field>
@@ -218,6 +250,7 @@ export function ExamConfigForm({
                   value={data.closeAt ?? ""}
                   onChange={(e) => update({ closeAt: e.target.value })}
                 />
+                <FieldError>{scheduleFieldErrors?.closeAt}</FieldError>
               </Field>
             )}
           </FieldRow>

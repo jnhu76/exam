@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { DateTimeProvider } from "@/contexts/DateTimeContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamCreatePage } from "./ExamCreatePage";
 import { permissionsForRole } from "@exam/authz";
@@ -80,16 +81,21 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+/** Organization scheduling time zone served by /api/admin/settings in tests. */
+let orgTimeZone = "Asia/Shanghai";
+
 function defaultApiGet(path: string): unknown {
   if (path.includes("/api/courses"))
     return { items: mockCourses, total: 1, totalPages: 1 };
   if (path.includes("/api/questions"))
     return { items: mockQuestions, total: 2, totalPages: 1 };
   if (path.includes("/api/exam-profiles")) return [] as ExamProfileDTO[];
+  if (path.includes("/api/admin/settings"))
+    return Promise.resolve({ timezone: orgTimeZone });
   return {};
 }
 
-function renderPage() {
+function renderPage(withProductTime = true) {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/new"]}>
       <AuthProvider
@@ -103,17 +109,33 @@ function renderPage() {
         }}
       >
         <BrandProvider>
-          <Routes>
-            <Route path="/admin/exams/new" element={<ExamCreatePage />} />
-            <Route
-              path="/admin/exams/:id"
-              element={<div data-testid="exam-detail" />}
-            />
-            <Route
-              path="/admin/exams"
-              element={<div data-testid="exam-list" />}
-            />
-          </Routes>
+          {withProductTime ? (
+            <DateTimeProvider>
+              <Routes>
+                <Route path="/admin/exams/new" element={<ExamCreatePage />} />
+                <Route
+                  path="/admin/exams/:id"
+                  element={<div data-testid="exam-detail" />}
+                />
+                <Route
+                  path="/admin/exams"
+                  element={<div data-testid="exam-list" />}
+                />
+              </Routes>
+            </DateTimeProvider>
+          ) : (
+            <Routes>
+              <Route path="/admin/exams/new" element={<ExamCreatePage />} />
+              <Route
+                path="/admin/exams/:id"
+                element={<div data-testid="exam-detail" />}
+              />
+              <Route
+                path="/admin/exams"
+                element={<div data-testid="exam-list" />}
+              />
+            </Routes>
+          )}
         </BrandProvider>
       </AuthProvider>
     </MemoryRouter>,
@@ -122,6 +144,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  orgTimeZone = "Asia/Shanghai";
   apiGet.mockImplementation(defaultApiGet);
   apiPost.mockResolvedValue({ id: "exam-1" });
 });
@@ -679,4 +702,114 @@ describe("ExamCreatePage wizard — interruption policy override semantics", () 
       );
     });
   });
+});
+
+describe("ExamCreatePage wizard — scheduling time zone (F-20)", () => {
+  async function goToScheduleStep(
+    user: ReturnType<typeof userEvent.setup>,
+    tzHint = "以下时间按 Asia/Shanghai 时区填写与保存。",
+  ) {
+    renderPage();
+    await screen.findByText("创建考试");
+    fillTitle("TZ Exam");
+    // Step 1 → 4 (schedule).
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByRole("button", { name: /下一步/ }));
+    }
+    // The wizard states the IANA time zone its wall clocks are interpreted
+    // in; waiting for the ORG zone's hint also proves /api/admin/settings
+    // landed before any conversion happens.
+    await screen.findByText(tzHint);
+  }
+
+  it("labels the scheduling time zone explicitly on the schedule step", async () => {
+    const user = userEvent.setup();
+    await goToScheduleStep(user);
+    expect(
+      screen.getByText("以下时间按 Asia/Shanghai 时区填写与保存。"),
+    ).toBeInTheDocument();
+  });
+
+  it("converts 09:00 Shanghai wall clock to 2026-11-20T01:00:00.000Z on the wire and previews org-local 09:00", async () => {
+    const user = userEvent.setup();
+    await goToScheduleStep(user);
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-11-20T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-11-20T11:00" },
+    });
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    // Review renders the SAME resolved instant in the org zone (Shanghai),
+    // not a browser-zone re-parse of the wall clock.
+    expect(await screen.findByText("2026-11-20 09:00:00")).toBeInTheDocument();
+    expect(screen.getByText("2026-11-20 11:00:00")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "创建草稿" }));
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/exams",
+        expect.objectContaining({
+          openAt: "2026-11-20T01:00:00.000Z",
+          closeAt: "2026-11-20T03:00:00.000Z",
+        }),
+      );
+    });
+  });
+
+  it("blocks a DST-gap wall clock with a field hint (org America/Los_Angeles)", async () => {
+    orgTimeZone = "America/Los_Angeles";
+    const user = userEvent.setup();
+    await goToScheduleStep(
+      user,
+      "以下时间按 America/Los_Angeles 时区填写与保存。",
+    );
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-03-08T02:30" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-03-08T05:00" },
+    });
+    // 2026-03-08 02:00→03:00 PDT spring-forward: 02:30 does not exist.
+    expect(
+      await screen.findByText(
+        "该时间在 America/Los_Angeles 的夏令时切换中不存在，请选择其他时间。",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    expect(screen.getByLabelText("开始时间")).toBeInTheDocument();
+    expect(screen.queryByText("创建前检查")).not.toBeInTheDocument();
+    expect(apiPost).not.toHaveBeenCalled();
+  });
+
+  it("blocks a DST-overlap wall clock as not uniquely resolvable (org America/Los_Angeles)", async () => {
+    orgTimeZone = "America/Los_Angeles";
+    const user = userEvent.setup();
+    await goToScheduleStep(
+      user,
+      "以下时间按 America/Los_Angeles 时区填写与保存。",
+    );
+    fireEvent.change(screen.getByLabelText("开始时间"), {
+      target: { value: "2026-11-01T01:30" },
+    });
+    fireEvent.change(screen.getByLabelText("结束时间"), {
+      target: { value: "2026-11-01T05:00" },
+    });
+    // 2026-11-01 02:00→01:00 fall-back: 01:30 occurs twice.
+    expect(
+      await screen.findByText(
+        "该时间在 America/Los_Angeles 的夏令时回拨中出现两次，无法唯一确定，请调整时间。",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /下一步/ }));
+    expect(screen.getByLabelText("开始时间")).toBeInTheDocument();
+    expect(screen.queryByText("创建前检查")).not.toBeInTheDocument();
+    expect(apiPost).not.toHaveBeenCalled();
+  });
+
+  // Impossible calendar dates (e.g. 02-30) are NOT UI-reachable: the HTML
+  // datetime-local value sanitization algorithm rejects them in real
+  // browsers and jsdom alike, so the input itself blocks that entry. The
+  // seam still classifies them ("invalid" → scheduleInvalid hint) as
+  // defense-in-depth — covered at the unit level in dateTime.test.ts and
+  // wizardState.test.ts.
 });
