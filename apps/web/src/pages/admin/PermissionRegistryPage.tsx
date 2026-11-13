@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { PermissionCategory } from "@exam/authz";
 import type {
   EffectiveAuthorityResponse,
+  PaginatedResponse,
   PermissionEntry,
   PermissionRegistryResponse,
   RolePresetEntry,
@@ -18,10 +19,12 @@ import type {
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { BadgeCheck, KeyRound, ShieldCheck, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/shared/PageContainer";
+import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import {
   Select,
   SelectContent,
@@ -33,19 +36,23 @@ import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { PermissionMatrixTable } from "@/components/shared/PermissionMatrixTable";
 
 /**
- * The registry / effective-authority shapes are the @exam/contracts response
- * types (single owner — no local re-declaration). `UserSummary` /
- * `UserListResponse` below are the admin users-list projection, which has no
- * contract type owner.
+ * The registry / effective-authority shapes and the staff-directory response
+ * envelope (`PaginatedResponse`) are the @exam/contracts types (single owner —
+ * no local re-declaration). `UserSummary` is the picker's display subset of
+ * the staff-list item.
  */
 interface UserSummary {
   id: string;
   username: string;
   name: string;
 }
-interface UserListResponse {
-  items: UserSummary[];
-}
+
+/** Staff-directory page size — real pagination keeps every staff target
+ * reachable; the picker never truncates at a fixed first-page snapshot. */
+const DIRECTORY_PAGE_SIZE = 20;
+
+/** Lifecycle of the staff-directory request stream. */
+type DirectoryStatus = "loading" | "ready" | "error";
 
 /** Canonical category ordering for stable display (mirrors ADR §4.x). */
 const CATEGORY_ORDER = Object.values(PermissionCategory);
@@ -70,7 +77,6 @@ export function PermissionRegistryPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Effective-authority inspector state.
-  const [users, setUsers] = useState<UserSummary[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [authority, setAuthority] = useState<EffectiveAuthorityResponse | null>(
     null,
@@ -102,22 +108,52 @@ export function PermissionRegistryPage() {
     loadRegistry();
   }, [loadRegistry]);
 
-  // The inspector's user picker: the staff user list (the same read surface
-  // the Users page uses — no new search endpoint for this visibility page).
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get<UserListResponse>("/api/admin/users?pageSize=100")
-      .then((result) => {
-        if (!cancelled) setUsers(result.items);
-      })
-      .catch(() => {
-        if (!cancelled) setUsers([]);
-      });
-    return () => {
-      cancelled = true;
-    };
+  // The inspector's user picker: the staff directory (the same read surface
+  // the Users page uses — the GET /api/users pagination contract, no new
+  // search endpoint for this visibility page). Its loading/ready/error
+  // lifecycle is independent of the registry load and of the authority panel:
+  // a directory failure must not take down the already-loaded catalog/matrix
+  // or an inspector selection.
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersPage, setUsersPage] = useState(1);
+  const [directoryStatus, setDirectoryStatus] =
+    useState<DirectoryStatus>("loading");
+  // Latest-issued-wins for the directory stream: page flips and retries
+  // supersede in-flight requests; a superseded response may not land items,
+  // total, error, or the status flag — the picker must keep describing the
+  // page the controls point at.
+  const directoryGenerationRef = useRef(0);
+
+  const loadDirectory = useCallback(async (page: number) => {
+    const generation = ++directoryGenerationRef.current;
+    const isStale = () => generation !== directoryGenerationRef.current;
+    setDirectoryStatus("loading");
+    try {
+      const result = await api.get<PaginatedResponse<UserSummary>>(
+        `/api/users?page=${page}&pageSize=${DIRECTORY_PAGE_SIZE}`,
+      );
+      if (isStale()) return;
+      setUsers(result.items);
+      setUsersTotal(result.total);
+      setUsersPage(page);
+      setDirectoryStatus("ready");
+    } catch {
+      if (isStale()) return;
+      setDirectoryStatus("error");
+    }
   }, []);
+
+  useEffect(() => {
+    void loadDirectory(1);
+  }, [loadDirectory]);
+
+  const handleDirectoryPageChange = useCallback(
+    (page: number) => {
+      void loadDirectory(page);
+    },
+    [loadDirectory],
+  );
 
   const loadAuthority = useCallback(
     async (userId: string) => {
@@ -188,8 +224,6 @@ export function PermissionRegistryPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadRegistry} />;
-
-  const selectedUser = users.find((u) => u.id === selectedUserId);
 
   return (
     <PageContainer role="admin-standard" className="flex flex-col gap-8">
@@ -300,22 +334,49 @@ export function PermissionRegistryPage() {
           {t("admin.permissions.effective.description")}
         </p>
         <div className="flex max-w-md flex-col gap-3">
-          <Select value={selectedUserId} onValueChange={handleUserSelect}>
-            <SelectTrigger
-              aria-label={t("admin.permissions.effective.userSelect")}
-            >
-              <SelectValue
-                placeholder={t("admin.permissions.effective.userSelect")}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {users.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name || user.username}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {directoryStatus === "error" ? (
+            <ErrorState
+              message={t("admin.permissions.effective.loadDirectoryFailed")}
+              onRetry={() => void loadDirectory(usersPage)}
+            />
+          ) : directoryStatus === "loading" && users.length === 0 ? (
+            <LoadingState />
+          ) : directoryStatus === "ready" && users.length === 0 ? (
+            <EmptyState
+              title={t("admin.permissions.effective.empty")}
+              description={t("admin.permissions.effective.emptyDescription")}
+            />
+          ) : (
+            <>
+              <Select value={selectedUserId} onValueChange={handleUserSelect}>
+                <SelectTrigger
+                  aria-label={t("admin.permissions.effective.userSelect")}
+                >
+                  <SelectValue
+                    placeholder={t("admin.permissions.effective.userSelect")}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name || user.username}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {usersTotal > DIRECTORY_PAGE_SIZE && (
+                <DataTablePagination
+                  page={usersPage}
+                  pageSize={DIRECTORY_PAGE_SIZE}
+                  total={usersTotal}
+                  onPageChange={handleDirectoryPageChange}
+                  aria-label={t(
+                    "admin.permissions.effective.directoryPagination",
+                  )}
+                />
+              )}
+            </>
+          )}
 
           {authorityLoading && <LoadingState />}
           {authorityError && (
@@ -325,7 +386,7 @@ export function PermissionRegistryPage() {
             />
           )}
 
-          {authority && selectedUser && (
+          {authority && (
             <div className="flex flex-col gap-4 rounded-md border p-4">
               <div className="flex items-center justify-between">
                 <div>
