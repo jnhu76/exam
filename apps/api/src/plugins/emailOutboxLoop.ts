@@ -10,6 +10,19 @@ import {
 } from "@exam/db/repository/workerHeartbeatRepo";
 import { EmailOutboxService } from "../email/outboxService.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { withLoopCycleSpan } from "../telemetry/backgroundLoopSpan.js";
+import {
+  LOOP_EMAIL_OUTBOX,
+  LOOP_OUTCOME_EMPTY,
+  LOOP_OUTCOME_SUCCESS,
+  WORK_DEAD,
+  WORK_OWNERSHIP_LOST,
+  WORK_PROCESSED,
+  WORK_RECOVERED,
+  WORK_RETRY_WAIT,
+  WORK_SENT,
+  type LoopCycleOutcome,
+} from "../telemetry/backgroundLoopVocabulary.js";
 import {
   interruptibleSleep,
   waitForSingleOrganization,
@@ -115,31 +128,50 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
     while (!stopping) {
       const pollStart = fastify.now();
       try {
-        const recovered = await outboxRepo.recoverAbandoned(
-          orgScope,
-          pollStart,
-          lockTimeoutMs,
-        );
-        if (recovered > 0) {
-          log("warn", "recovered abandoned processing rows", {
-            count: recovered,
-          });
-        }
+        // #964 W4: one poll iteration is one rooted `exam.loop.email_outbox`
+        // cycle span with its projected work metrics. The helper rethrows a
+        // poll failure after recording it, so the existing per-poll catch
+        // (log + error heartbeat write + retry-after-interval) is untouched.
+        await withLoopCycleSpan(LOOP_EMAIL_OUTBOX, async (cycle) => {
+          const recovered = await outboxRepo.recoverAbandoned(
+            orgScope,
+            pollStart,
+            lockTimeoutMs,
+          );
+          if (recovered > 0) {
+            log("warn", "recovered abandoned processing rows", {
+              count: recovered,
+            });
+          }
+          cycle.countWork(WORK_RECOVERED, recovered);
 
-        const result = await outboxService.processDueEmails({
-          now: pollStart,
-          limit: batchSize,
-          workerInstanceId,
-        });
-        if (result.processed > 0) {
-          log("info", "poll cycle completed", {
-            processed: result.processed,
-            sent: result.sent,
-            retryWait: result.retryWait,
-            dead: result.dead,
-            ownershipLost: result.ownershipLost,
+          const result = await outboxService.processDueEmails({
+            now: pollStart,
+            limit: batchSize,
+            workerInstanceId,
           });
-        }
+          if (result.processed > 0) {
+            log("info", "poll cycle completed", {
+              processed: result.processed,
+              sent: result.sent,
+              retryWait: result.retryWait,
+              dead: result.dead,
+              ownershipLost: result.ownershipLost,
+            });
+          }
+          cycle.countWork(WORK_PROCESSED, result.processed);
+          cycle.countWork(WORK_SENT, result.sent);
+          cycle.countWork(WORK_RETRY_WAIT, result.retryWait);
+          cycle.countWork(WORK_DEAD, result.dead);
+          cycle.countWork(WORK_OWNERSHIP_LOST, result.ownershipLost);
+
+          // The loop's job is processing the outbox; row-level delivery
+          // failures are projected as their own work counters (retry/dead),
+          // so only actual processed volume counts as cycle work.
+          const outcome: LoopCycleOutcome =
+            result.processed > 0 ? LOOP_OUTCOME_SUCCESS : LOOP_OUTCOME_EMPTY;
+          return { outcome, result: undefined };
+        });
 
         await writeHeartbeat(null);
       } catch (err) {

@@ -91,7 +91,13 @@ const NON_RECORDING: BusinessOperationSpan = {
   setAttribute() {},
 };
 
-class ContainedSpan implements BusinessOperationSpan {
+/**
+ * Shared span-mechanics containment for BOTH API span layers: the W3
+ * business-operation helper below and the W4 background-loop helper
+ * (backgroundLoopSpan.ts). Every OTel span call is individually contained —
+ * a broken span implementation can never surface into the observed code.
+ */
+export class ContainedSpan implements BusinessOperationSpan {
   constructor(private readonly span: Span) {}
 
   setAttribute(key: string, value: SpanAttributeValue): void {

@@ -15,6 +15,19 @@ import {
   createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { withLoopCycleSpan } from "../telemetry/backgroundLoopSpan.js";
+import {
+  LOOP_HEARTBEAT,
+  LOOP_OUTCOME_EMPTY,
+  LOOP_OUTCOME_FAILED,
+  LOOP_OUTCOME_SUCCESS,
+  WORK_DISRUPTION_FAILED,
+  WORK_INCIDENT_CONFLICT,
+  WORK_INCIDENT_CREATED,
+  WORK_INCIDENT_FAILED,
+  WORK_INCIDENT_REPLAYED,
+  WORK_MARKED,
+} from "../telemetry/backgroundLoopVocabulary.js";
 import { reconcileSystemIncidents } from "../orchestrators/systemIncidentDelivery.js";
 
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.Heartbeat;
@@ -339,68 +352,92 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
       heartbeatMetrics.lastStartedAt = startedAt;
       heartbeatMetrics.activeSince = startedAt;
       try {
-        // ADR-006: one operation now per tick, from the time authority.
-        const tickNow = fastify.now();
-        const result = await scanDatabaseForDisruptedAttempts(
-          fastify,
-          tickNow,
-          heartbeatTimeoutSeconds,
-        );
-        heartbeatMetrics.lastScanAt = tickNow;
-        heartbeatMetrics.disruptedCount += result.markedCount;
-        heartbeatMetrics.disruptionFailedCount += result.failedCount;
-        // #800: aggregation-log parity with the deadline scanner
-        // (`submittedCount > 0 || failedCount > 0`) — an all-failure tick
-        // (markedCount === 0, failedCount > 0) must stay greppable, else a
-        // disruption leg failing every cycle leaves no aggregate signal.
-        if (result.markedCount > 0 || result.failedCount > 0) {
-          fastify.log.info(
-            {
-              markedCount: result.markedCount,
-              failedCount: result.failedCount,
-            },
-            "Marked stale exam attempts as disrupted",
+        // #964 W4: the whole tick (disruption leg + reconciliation leg) is
+        // one rooted `exam.loop.heartbeat` cycle span with its projected
+        // work metrics; the plugin's stall/throw bookkeeping below stays the
+        // settle owner (unmodified).
+        await withLoopCycleSpan(LOOP_HEARTBEAT, async (cycle) => {
+          // ADR-006: one operation now per tick, from the time authority.
+          const tickNow = fastify.now();
+          const result = await scanDatabaseForDisruptedAttempts(
+            fastify,
+            tickNow,
+            heartbeatTimeoutSeconds,
           );
-        }
-        // #304 F4A: after the disruption scan, reconcile System incidents for
-        // every committed heartbeat episode still missing its create
-        // operation. Best-effort per cycle; the op-unique arbiter guarantees
-        // convergence, never duplication.
-        const incidentCounts = await reconcileSystemIncidentsAcrossOrgs(
-          fastify,
-          tickNow,
-        );
-        heartbeatMetrics.systemIncidentsCreated += incidentCounts.createdCount;
-        heartbeatMetrics.systemIncidentConflicts +=
-          incidentCounts.conflictCount;
-        heartbeatMetrics.incidentReconciliationFailedCount +=
-          incidentCounts.failedCount;
-        // #800: same all-failure parity as the disruption leg — a
-        // reconciliation leg failing every cycle with zero creates must stay
-        // greppable.
-        if (incidentCounts.createdCount > 0 || incidentCounts.failedCount > 0) {
-          fastify.log.info(
-            {
-              createdCount: incidentCounts.createdCount,
-              replayedCount: incidentCounts.replayedCount,
-              failedCount: incidentCounts.failedCount,
-            },
-            "Created System incidents from heartbeat episodes",
+          heartbeatMetrics.lastScanAt = tickNow;
+          heartbeatMetrics.disruptedCount += result.markedCount;
+          heartbeatMetrics.disruptionFailedCount += result.failedCount;
+          // #800: aggregation-log parity with the deadline scanner
+          // (`submittedCount > 0 || failedCount > 0`) — an all-failure tick
+          // (markedCount === 0, failedCount > 0) must stay greppable, else a
+          // disruption leg failing every cycle leaves no aggregate signal.
+          if (result.markedCount > 0 || result.failedCount > 0) {
+            fastify.log.info(
+              {
+                markedCount: result.markedCount,
+                failedCount: result.failedCount,
+              },
+              "Marked stale exam attempts as disrupted",
+            );
+          }
+          // #304 F4A: after the disruption scan, reconcile System incidents for
+          // every committed heartbeat episode still missing its create
+          // operation. Best-effort per cycle; the op-unique arbiter guarantees
+          // convergence, never duplication.
+          const incidentCounts = await reconcileSystemIncidentsAcrossOrgs(
+            fastify,
+            tickNow,
           );
-        }
-        if (incidentCounts.conflictCount > 0) {
-          fastify.log.error(
-            { conflictCount: incidentCounts.conflictCount },
-            "Conflicting operations occupy heartbeat-derived System incident operationIds",
-          );
-        }
-        // #862 escalation input: a settled tick where EITHER leg had business
-        // failures extends the consecutive run; the first clean settle on both
-        // legs resets it.
-        heartbeatMetrics.consecutiveFailedTicks =
-          result.failedCount > 0 || incidentCounts.failedCount > 0
-            ? heartbeatMetrics.consecutiveFailedTicks + 1
-            : 0;
+          heartbeatMetrics.systemIncidentsCreated +=
+            incidentCounts.createdCount;
+          heartbeatMetrics.systemIncidentConflicts +=
+            incidentCounts.conflictCount;
+          heartbeatMetrics.incidentReconciliationFailedCount +=
+            incidentCounts.failedCount;
+          // #800: same all-failure parity as the disruption leg — a
+          // reconciliation leg failing every cycle with zero creates must stay
+          // greppable.
+          if (
+            incidentCounts.createdCount > 0 ||
+            incidentCounts.failedCount > 0
+          ) {
+            fastify.log.info(
+              {
+                createdCount: incidentCounts.createdCount,
+                replayedCount: incidentCounts.replayedCount,
+                failedCount: incidentCounts.failedCount,
+              },
+              "Created System incidents from heartbeat episodes",
+            );
+          }
+          if (incidentCounts.conflictCount > 0) {
+            fastify.log.error(
+              { conflictCount: incidentCounts.conflictCount },
+              "Conflicting operations occupy heartbeat-derived System incident operationIds",
+            );
+          }
+          // #862 escalation input: a settled tick where EITHER leg had business
+          // failures extends the consecutive run; the first clean settle on both
+          // legs resets it.
+          heartbeatMetrics.consecutiveFailedTicks =
+            result.failedCount > 0 || incidentCounts.failedCount > 0
+              ? heartbeatMetrics.consecutiveFailedTicks + 1
+              : 0;
+
+          cycle.countWork(WORK_MARKED, result.markedCount);
+          cycle.countWork(WORK_DISRUPTION_FAILED, result.failedCount);
+          cycle.countWork(WORK_INCIDENT_CREATED, incidentCounts.createdCount);
+          cycle.countWork(WORK_INCIDENT_REPLAYED, incidentCounts.replayedCount);
+          cycle.countWork(WORK_INCIDENT_FAILED, incidentCounts.failedCount);
+          cycle.countWork(WORK_INCIDENT_CONFLICT, incidentCounts.conflictCount);
+          const outcome =
+            result.failedCount > 0 || incidentCounts.failedCount > 0
+              ? LOOP_OUTCOME_FAILED
+              : result.markedCount > 0 || incidentCounts.createdCount > 0
+                ? LOOP_OUTCOME_SUCCESS
+                : LOOP_OUTCOME_EMPTY;
+          return { outcome, result: undefined };
+        });
       } catch (err) {
         threw = true;
         fastify.log.error({ err }, "Error scanning for disrupted attempts");
