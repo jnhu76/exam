@@ -132,11 +132,11 @@ describe("telemetry runtime construction contract", () => {
   });
 
   it("loads the DB telemetry plugin only inside the On-path SDK start, before fastify exists", () => {
-    // #964 W2: the plugin carries the one-way driver prototype patch — the
-    // Off deployment must never even import it. The only reference is the
-    // dynamic import inside startSdk (after `sdk.start()`, before the
-    // fastify plugin is built), and its seam registration must sit in the
-    // same On-path block.
+    // #964 W2: the plugin installs a driver prototype patch (reversible
+    // since #974) — the Off deployment must never even import it. The only
+    // reference is the dynamic import inside startSdk (after the granular
+    // SDK start — bundle.startTracing — before the fastify plugin is
+    // built), and its seam registration must sit in the same On-path block.
     const dynamicImportIndex = runtimeSource.indexOf(
       'await import("@exam/otel-drizzle-postgresjs")',
     );
@@ -144,7 +144,7 @@ describe("telemetry runtime construction contract", () => {
     expect(runtimeSource).not.toMatch(
       /from ["']@exam\/otel-drizzle-postgresjs["']/,
     );
-    const sdkStartIndex = runtimeSource.indexOf("sdk.start();");
+    const sdkStartIndex = runtimeSource.indexOf("bundle.startTracing(");
     const seamIndex = runtimeSource.indexOf(
       "setTransactionSeam(dbTelemetry.transactionSeam)",
     );

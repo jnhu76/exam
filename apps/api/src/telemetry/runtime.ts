@@ -27,8 +27,8 @@ interface TelemetryRootSql {
 /**
  * Structural handle of the DB telemetry plugin (#964 W2). The plugin is
  * referenced ONLY through the dynamic import inside startSdk — the Off
- * deployment never loads the module (and its one-way driver prototype
- * patch) at all.
+ * deployment never loads the module (and thus never installs its driver
+ * prototype patch) at all.
  */
 interface DbTelemetryHandle {
   registerRootConnection(sql: TelemetryRootSql): void;
@@ -100,8 +100,9 @@ interface ActiveTelemetry {
   memoryDumpFile: string;
   /**
    * DB telemetry plugin handle (#964 W2) — null when its install degraded.
-   * The driver prototype patch it installed is one-way; `disable()` only
-   * stops recording (the patch keeps forwarding inertly).
+   * Its install captured the pristine driver prototype references once;
+   * `disable()` stops recording AND restores those pristine methods (#974 —
+   * the patch is removed, not merely inert).
    */
   dbTelemetry: DbTelemetryHandle | null;
 }
@@ -308,8 +309,8 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
 
   // #964 W2: the DB telemetry plugin loads ONLY here — inside the On path,
   // after the SDK is up and BEFORE the Fastify instance (and with it the db
-  // plugin's root pool) exists, so the one-way prototype patch is in place
-  // before the process's first statement. A degraded install keeps the rest
+  // plugin's root pool) exists, so the prototype patch is in place before
+  // the process's first statement. A degraded install keeps the rest
   // of telemetry alive (ADR-028 D1: telemetry failures never change
   // business results).
   let dbTelemetry: DbTelemetryHandle | null = null;
