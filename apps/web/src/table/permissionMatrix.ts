@@ -23,7 +23,10 @@ import { headerGlyphRun } from "@/table/headerCapacity";
  * scroll region, the overflow facts and the local-scroll affordance, the ui
  * Table primitives + recipes.css own typography, cell padding and the grid
  * borders, and the detail-comparison archetype pins the key column during
- * horizontal scroll (the matrix's row identity must not scroll away).
+ * horizontal scroll at >=sm (the matrix's row identity must not scroll away
+ * where there is room for grants beside it; below sm recipes.css lets the key
+ * column scroll too, because a 336px pin leaves no reachable grant column at
+ * 375px).
  */
 
 /**

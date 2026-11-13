@@ -568,7 +568,13 @@ capabilities rather than record fields, so it owns its widths in
 `table/permissionMatrix.ts` (key column derived from the widest permission key
 in the registry) and renders through `PermissionMatrixTable` on the same
 shared surface (scroll region, typography, cell chrome, borders, overflow).
-No page may reintroduce a page-owned `min-w-[…]` for it.
+No page may reintroduce a page-owned `min-w-[…]` for it. Its key column is
+pinned during local scroll at ≥sm; below sm the key column scrolls with the
+grant columns, because the derived key width (336px for the widest catalog
+key) would otherwise consume nearly the whole narrow region and hide every
+grant cell under the opaque pin. The unpin is scoped to the matrix's
+`data-table-matrix="permissions"` marker — result sheets and attempt detail
+keep their pinned detail-comparison context column at every width.
 
 Table typography (#577 M7): header cells render **14/20/500** via the
 unlayered recipe (issue #601 V2b supersedes the #582 D4 header value); body

@@ -28,6 +28,33 @@ function cssHexVar(css: string, name: string): string | null {
   return m?.[1] ?? null;
 }
 
+/** The body of the first brace block opened at/after `opener`'s match. */
+function cssBlock(css: string, opener: RegExp): string | null {
+  const m = opener.exec(css);
+  if (!m) return null;
+  const open = css.indexOf("{", m.index);
+  if (open === -1) return null;
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}") {
+      depth--;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/** The selector text and body of the first rule matching `opener`. */
+function cssRule(css: string, opener: RegExp): string | null {
+  const m = opener.exec(css);
+  if (!m) return null;
+  const open = css.indexOf("{", m.index);
+  const close = open === -1 ? -1 : css.indexOf("}", open);
+  if (open === -1 || close === -1) return null;
+  return css.slice(m.index, close + 1);
+}
+
 describe("table and color visual-finish authority", () => {
   it("keeps the brand pin and the documented neutral token relationships", () => {
     // index.css is the palette authority, so
@@ -146,6 +173,47 @@ describe("table and color visual-finish authority", () => {
   it("leaves DataTableShell as the single local overflow owner", () => {
     expect(tableCss).toMatch(
       /\[data-slot="admin-table-shell"\]\s+\[data-slot="table-container"\][\s\S]*?overflow-x:\s*visible/,
+    );
+  });
+
+  it("unpins the permission matrix first column only on narrow viewports", () => {
+    // W5 review: at 375px the matrix scroll region is ~343px while the derived
+    // capability-key column is 336px, so a pinned key column leaves ~7px of
+    // grant column visible — every grant icon paints under the opaque pinned
+    // cell. Below the sm breakpoint the matrix uses the shared horizontal
+    // scroll instead; the desktop (detail-comparison) pin contract stays.
+    const basePin = cssBlock(
+      tableCss,
+      /\[data-table-archetype="detail-comparison"\] \[data-slot="table-head"\]:first-child,/,
+    );
+    expect(
+      basePin,
+      "the detail-comparison sticky rule must exist",
+    ).not.toBeNull();
+    expect(basePin).toContain("position: sticky");
+
+    const narrow = cssBlock(tableCss, /@media \(max-width: 639px\)/);
+    expect(
+      narrow,
+      "the matrix needs a narrow-viewport override",
+    ).not.toBeNull();
+    const unpinRule = cssRule(
+      narrow!,
+      /\[data-table-matrix="permissions"\][^{]*\{/,
+    );
+    expect(unpinRule, "the matrix narrow override must exist").not.toBeNull();
+    for (const slot of ["table-head", "table-cell"]) {
+      expect(unpinRule).toContain(`[data-slot="${slot}"]:first-child`);
+    }
+    expect(unpinRule).toContain("position: static");
+    // Scoped to the matrix: the result sheet and attempt detail keep their
+    // pinned context column at every width.
+    expect(narrow).not.toMatch(/\[data-table-archetype="detail-comparison"\]/);
+
+    // Base pin and narrow override have equal specificity, so the override
+    // must come after the base rule to win the cascade.
+    expect(tableCss.indexOf("@media (max-width: 639px)")).toBeGreaterThan(
+      tableCss.indexOf('[data-table-archetype="detail-comparison"]'),
     );
   });
 
