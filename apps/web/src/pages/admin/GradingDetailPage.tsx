@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { ContentDocumentV1 } from "@exam/domain";
@@ -182,11 +182,29 @@ interface NextPendingProbe {
   items: Array<{ attemptId: string }>;
 }
 
+/**
+ * Outcome of an authoritative grading-details read. `superseded` means a
+ * newer authoritative read has started while this one was on the wire: the
+ * newer read owns the state projection and this response must be discarded
+ * whole — applying it could unlock already-committed questions or resurrect
+ * a stale attempt projection.
+ */
+type RefreshOutcome =
+  | { kind: "current"; data: GradingDetailData }
+  | { kind: "superseded" }
+  | { kind: "unavailable" };
+
 export function GradingDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { formatDateTime } = useProductDateTime();
+  // Latest-read ownership: only the newest authoritative read may commit
+  // data / scores / comments. A slow earlier read (initial load, a POST's
+  // reconciliation GET) that settles after a newer read must be dropped, or
+  // its pre-POST snapshot would re-unlock questions whose grades are already
+  // irrevocably committed.
+  const readGenerationRef = useRef(0);
   const [data, setData] = useState<GradingDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -213,6 +231,11 @@ export function GradingDetailPage() {
    * Re-fetches the authoritative grading-details and replaces local state from
    * the server response. Used for initial load and post-POST reconciliation.
    *
+   * Only a read that is still the latest one commits state ({@link RefreshOutcome}):
+   * a superseded read returns `superseded` and the CURRENT read takes over the
+   * projection, so the caller must not classify outcomes or restore drafts
+   * from a response nobody is waiting for anymore.
+   *
    * For **completed** questions (entry !== null) the server value is authoritative
    * and always overwrites local state, making the question read-only with the
    * real gradedBy/gradedAt.
@@ -225,49 +248,57 @@ export function GradingDetailPage() {
    * it carries the attempt-level gradingStatus and question metadata that are
    * server-authoritative.
    */
-  const refreshFromServer =
-    useCallback(async (): Promise<GradingDetailData | null> => {
-      if (!id) return null;
-      const result = await api.get<GradingDetailData>(
-        `/api/admin/attempts/${id}/grading-details`,
-      );
-      if (!result) return null;
-      setData(result);
-      // For scores: only overwrite completed questions from the server; keep
-      // local draft for pending questions so multi-question grading is safe.
-      setScores((current) => {
-        const next = { ...current };
-        for (const q of result.questions) {
-          if (q.entry != null) {
-            next[q.questionId] = String(q.entry.score);
-          } else if (!(q.questionId in next)) {
-            next[q.questionId] = "";
-          }
+  const refreshFromServer = useCallback(async (): Promise<RefreshOutcome> => {
+    if (!id) return { kind: "unavailable" };
+    const generation = ++readGenerationRef.current;
+    const result = await api.get<GradingDetailData>(
+      `/api/admin/attempts/${id}/grading-details`,
+    );
+    if (!result) return { kind: "unavailable" };
+    if (generation !== readGenerationRef.current) {
+      return { kind: "superseded" };
+    }
+    setData(result);
+    // For scores: only overwrite completed questions from the server; keep
+    // local draft for pending questions so multi-question grading is safe.
+    setScores((current) => {
+      const next = { ...current };
+      for (const q of result.questions) {
+        if (q.entry != null) {
+          next[q.questionId] = String(q.entry.score);
+        } else if (!(q.questionId in next)) {
+          next[q.questionId] = "";
         }
-        return next;
-      });
-      // Comments: same logic — completed questions get the committed comment,
-      // pending questions keep their local draft.
-      setComments((current) => {
-        const next = { ...current };
-        for (const q of result.questions) {
-          if (q.entry != null) {
-            next[q.questionId] = q.entry.comment ?? "";
-          } else if (!(q.questionId in next)) {
-            next[q.questionId] = "";
-          }
+      }
+      return next;
+    });
+    // Comments: same logic — completed questions get the committed comment,
+    // pending questions keep their local draft.
+    setComments((current) => {
+      const next = { ...current };
+      for (const q of result.questions) {
+        if (q.entry != null) {
+          next[q.questionId] = q.entry.comment ?? "";
+        } else if (!(q.questionId in next)) {
+          next[q.questionId] = "";
         }
-        return next;
-      });
-      return result;
-    }, [id]);
+      }
+      return next;
+    });
+    return { kind: "current", data: result };
+  }, [id]);
 
   const loadDetail = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     setError(null);
     try {
-      await refreshFromServer();
+      const outcome = await refreshFromServer();
+      // A superseded initial read must not own the error state — the newer
+      // authoritative read is already driving the page. (Nothing else can
+      // start a read while this full-page loading gate hides all triggers;
+      // the check is defense-in-depth for that invariant.)
+      if (outcome.kind === "superseded") return;
     } catch {
       setError(t("admin.gradingDetail.errors.loadFailed"));
     } finally {
@@ -326,8 +357,13 @@ export function GradingDetailPage() {
    *   Case C — attempt became fully_graded, or the question disappeared from
    *     the workset: load the latest state and show a status-changed message.
    *
-   *   Failure-of-failure — the reconciliation GET itself fails: preserve input,
-   *     show the "unknown / please refresh" message, and do not auto-POST.
+   *   Failure-of-failure — the reconciliation GET itself fails, or it is
+   *     superseded by a newer authoritative read: preserve input, show the
+   *     "unknown / please refresh" message, and do not auto-POST. On the
+   *     superseded path the newer read has already taken over the state
+   *     projection, but THIS read can no longer classify the committed /
+   *     failed / state-changed outcome, so the result stays explicitly
+   *     unconfirmed.
    */
   const reconcileAfterPostError = useCallback(
     async (
@@ -335,9 +371,9 @@ export function GradingDetailPage() {
       scoreAtSubmit: number,
       commentAtSubmit: string,
     ) => {
-      let refreshed: GradingDetailData | null;
+      let outcome: RefreshOutcome;
       try {
-        refreshed = await refreshFromServer();
+        outcome = await refreshFromServer();
       } catch {
         // Could not confirm server state — do not claim success or failure, do
         // not clear the form, do not auto-retry. The operator's input is still
@@ -345,10 +381,11 @@ export function GradingDetailPage() {
         toast.error(t("admin.gradingDetail.errors.submitUnknown"));
         return;
       }
-      if (!refreshed) {
+      if (outcome.kind !== "current") {
         toast.error(t("admin.gradingDetail.errors.submitUnknown"));
         return;
       }
+      const refreshed = outcome.data;
       const target = refreshed.questions.find(
         (q) => q.questionId === questionId,
       );
@@ -403,9 +440,12 @@ export function GradingDetailPage() {
         // Authoritative reconciliation: replace local state from the server so
         // the just-graded question becomes read-only with the real gradedBy /
         // gradedAt, and the top-level gradingStatus reflects the committed
-        // terminal projection.
-        const refreshed = await refreshFromServer();
-        if (refreshed && result.fullyGraded) {
+        // terminal projection. The POST outcome is KNOWN success here, so a
+        // refresh that failed or was superseded (a newer authoritative read
+        // owns the projection) still reports the commit — only the
+        // fully-graded confirmation stays tied to a read we could verify.
+        const outcome = await refreshFromServer();
+        if (outcome.kind === "current" && result.fullyGraded) {
           toast.success(t("admin.gradingDetail.toast.fullyGraded"));
         } else {
           toast.success(t("admin.gradingDetail.toast.saved"));
