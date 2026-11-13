@@ -51,8 +51,15 @@ interface UserSummary {
  * reachable; the picker never truncates at a fixed first-page snapshot. */
 const DIRECTORY_PAGE_SIZE = 20;
 
-/** Lifecycle of the staff-directory request stream. */
-type DirectoryStatus = "loading" | "ready" | "error";
+/**
+ * Lifecycle of the staff-directory request stream. The error variant carries
+ * the page that FAILED, so retry re-issues that target instead of the last
+ * page whose items happen to remain on screen.
+ */
+type DirectoryState =
+  | { status: "loading" }
+  | { status: "ready" }
+  | { status: "error"; page: number };
 
 /** Canonical category ordering for stable display (mirrors ADR §4.x). */
 const CATEGORY_ORDER = Object.values(PermissionCategory);
@@ -76,8 +83,11 @@ export function PermissionRegistryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Effective-authority inspector state.
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  // Effective-authority inspector state. `selectedUser` is the single
+  // authoritative selection: the picker's own summary of the user, which the
+  // visible page may stop containing after a flip, while the trigger label
+  // and the authority panel below must keep naming the same user.
+  const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
   const [authority, setAuthority] = useState<EffectiveAuthorityResponse | null>(
     null,
   );
@@ -117,8 +127,9 @@ export function PermissionRegistryPage() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [usersPage, setUsersPage] = useState(1);
-  const [directoryStatus, setDirectoryStatus] =
-    useState<DirectoryStatus>("loading");
+  const [directoryState, setDirectoryState] = useState<DirectoryState>({
+    status: "loading",
+  });
   // Latest-issued-wins for the directory stream: page flips and retries
   // supersede in-flight requests; a superseded response may not land items,
   // total, error, or the status flag — the picker must keep describing the
@@ -128,7 +139,7 @@ export function PermissionRegistryPage() {
   const loadDirectory = useCallback(async (page: number) => {
     const generation = ++directoryGenerationRef.current;
     const isStale = () => generation !== directoryGenerationRef.current;
-    setDirectoryStatus("loading");
+    setDirectoryState({ status: "loading" });
     try {
       const result = await api.get<PaginatedResponse<UserSummary>>(
         `/api/users?page=${page}&pageSize=${DIRECTORY_PAGE_SIZE}`,
@@ -137,10 +148,11 @@ export function PermissionRegistryPage() {
       setUsers(result.items);
       setUsersTotal(result.total);
       setUsersPage(page);
-      setDirectoryStatus("ready");
+      setDirectoryState({ status: "ready" });
     } catch {
       if (isStale()) return;
-      setDirectoryStatus("error");
+      // The failed attempt owns its target: retry re-issues THIS page.
+      setDirectoryState({ status: "error", page });
     }
   }, []);
 
@@ -184,11 +196,22 @@ export function PermissionRegistryPage() {
 
   const handleUserSelect = useCallback(
     (userId: string) => {
-      setSelectedUserId(userId);
-      if (userId) loadAuthority(userId);
+      const user = users.find((candidate) => candidate.id === userId) ?? null;
+      setSelectedUser(user);
+      if (user) loadAuthority(user.id);
     },
-    [loadAuthority],
+    [loadAuthority, users],
   );
+
+  // The picker's label survives directory page flips: fall back to the
+  // captured summary until the server authority projection lands, then prefer
+  // that projection so the trigger and the panel below name the same user
+  // from server truth.
+  const selectedUserLabel = authority?.user
+    ? authority.user.name || authority.user.username
+    : selectedUser
+      ? selectedUser.name || selectedUser.username
+      : undefined;
 
   const groupedPermissions = useMemo(() => {
     const byCategory = new Map<string, PermissionEntry[]>();
@@ -334,27 +357,32 @@ export function PermissionRegistryPage() {
           {t("admin.permissions.effective.description")}
         </p>
         <div className="flex max-w-md flex-col gap-3">
-          {directoryStatus === "error" ? (
+          {directoryState.status === "error" ? (
             <ErrorState
               message={t("admin.permissions.effective.loadDirectoryFailed")}
-              onRetry={() => void loadDirectory(usersPage)}
+              onRetry={() => void loadDirectory(directoryState.page)}
             />
-          ) : directoryStatus === "loading" && users.length === 0 ? (
+          ) : directoryState.status === "loading" && users.length === 0 ? (
             <LoadingState />
-          ) : directoryStatus === "ready" && users.length === 0 ? (
+          ) : directoryState.status === "ready" && users.length === 0 ? (
             <EmptyState
               title={t("admin.permissions.effective.empty")}
               description={t("admin.permissions.effective.emptyDescription")}
             />
           ) : (
             <>
-              <Select value={selectedUserId} onValueChange={handleUserSelect}>
+              <Select
+                value={selectedUser?.id ?? ""}
+                onValueChange={handleUserSelect}
+              >
                 <SelectTrigger
                   aria-label={t("admin.permissions.effective.userSelect")}
                 >
                   <SelectValue
                     placeholder={t("admin.permissions.effective.userSelect")}
-                  />
+                  >
+                    {selectedUserLabel}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((user) => (
@@ -382,7 +410,9 @@ export function PermissionRegistryPage() {
           {authorityError && (
             <ErrorState
               message={authorityError}
-              onRetry={() => loadAuthority(selectedUserId)}
+              onRetry={() => {
+                if (selectedUser) void loadAuthority(selectedUser.id);
+              }}
             />
           )}
 

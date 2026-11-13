@@ -457,6 +457,98 @@ describe("PermissionRegistryPage", () => {
     expect(screen.queryByRole("option", { name: "员工99" })).toBeNull();
   });
 
+  it("retries the failed directory target page, not the last landed page", async () => {
+    const user = userEvent.setup();
+    const pageOneUsers = [alice, staffItem(2)];
+    const pageTwoUsers = [staffItem(21)];
+    installRoutes({
+      "/api/admin/permission-registry": registry,
+      "/api/users?page=1&pageSize=20": directoryPage(1, pageOneUsers, 41),
+      // Page 2 is intentionally unrouted: the 404 rejects the flip, so the
+      // error state must remember WHICH page failed.
+    });
+    renderPage();
+
+    // Page 1 landed: real pagination controls are rendered.
+    await screen.findByRole("button", { name: "下一页" });
+    const directoryCalls = (path: string) =>
+      getMock.mock.calls.filter(([calledPath]) => calledPath === path).length;
+
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    expect(await screen.findByText("加载员工目录失败")).toBeInTheDocument();
+    expect(directoryCalls("/api/users?page=2&pageSize=20")).toBe(1);
+
+    // Recover page 2 and retry: the retry must re-issue the FAILED page 2,
+    // not the page that happens to be on screen (page 1).
+    routes["/api/users?page=2&pageSize=20"] = directoryPage(
+      2,
+      pageTwoUsers,
+      41,
+    );
+    await user.click(screen.getByRole("button", { name: "重试" }));
+
+    await waitFor(() => {
+      expect(directoryCalls("/api/users?page=2&pageSize=20")).toBe(2);
+    });
+    expect(directoryCalls("/api/users?page=1&pageSize=20")).toBe(1);
+
+    // The retried page 2 landed and its staff is selectable.
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "第 2 页" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    });
+    await openUserPicker(user);
+    expect(
+      await screen.findByRole("option", { name: "员工21" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the picker label and authority detail on the same selected user across page flips", async () => {
+    const user = userEvent.setup();
+    const pageOneUsers = [alice, staffItem(2)];
+    const pageTwoUsers = [staffItem(21)];
+    installRoutes({
+      "/api/admin/permission-registry": registry,
+      "/api/users?page=1&pageSize=20": directoryPage(1, pageOneUsers, 41),
+      "/api/users?page=2&pageSize=20": directoryPage(2, pageTwoUsers, 41),
+      "/api/admin/users/u-1/effective-authority": authorityFor(alice),
+      "/api/admin/users/u-21/effective-authority": authorityFor(staffItem(21)),
+    });
+    renderPage();
+    await screen.findAllByText("exam.publish");
+
+    await openUserPicker(user);
+    await user.click(await screen.findByRole("option", { name: "员工1" }));
+
+    const picker = screen.getByRole("combobox", { name: /选择员工用户/ });
+    expect(picker).toHaveTextContent("员工1");
+    expect(await screen.findByText("staff001")).toBeInTheDocument();
+
+    // Page 2 no longer contains the selected staff item. The picker trigger
+    // label must keep naming 员工1, exactly like the authority panel below.
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "第 2 页" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    });
+    expect(picker).toHaveTextContent("员工1");
+    expect(screen.getByText("staff001")).toBeInTheDocument();
+
+    // A new selection updates BOTH the trigger label and the detail panel.
+    await openUserPicker(user);
+    await user.click(await screen.findByRole("option", { name: "员工21" }));
+    expect(picker).toHaveTextContent("员工21");
+    expect(await screen.findByText("staff021")).toBeInTheDocument();
+    expect(screen.queryByText("staff001")).toBeNull();
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/admin/users/u-21/effective-authority",
+    );
+  });
+
   it("keeps the selected user's authority panel across directory page flips", async () => {
     const user = userEvent.setup();
     const pageOneUsers = [alice, staffItem(2)];
