@@ -513,18 +513,30 @@ describe("save-rejection requestId correlation (#924, TASK-CONTRACT §3.6)", () 
 
     // Move to q2 and save successfully: the success clears the rejection
     // alert AND its id together (same-point clear) — no residual 请求编号.
+    // R6 (#971): the chip derives from EVERY question's revision status, so
+    // q1's still-failed revision keeps the chip on 保存失败 — q2's success
+    // no longer flips the chip to the synced claim behind a failed question
+    // (the per-question banner remains the "which question" surface).
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "下一题" }));
     await editAnswer();
+    // q2's ACK is the discriminating event: it clears the rejection alert
+    // and its id together (same-point clear, #924) — no residual 请求编号.
     await waitFor(
       () => {
-        expect(screen.getByText("已保存")).toBeInTheDocument();
+        expect(
+          screen.queryByTestId("save-rejection-alert"),
+        ).not.toBeInTheDocument();
       },
       { timeout: 4000 },
     );
-    expect(
-      screen.queryByTestId("save-rejection-alert"),
-    ).not.toBeInTheDocument();
+    // R6 (#971): the chip derives from EVERY question's revision status, so
+    // q1's still-failed revision keeps the chip on 保存失败 — q2's success
+    // no longer flips the chip to the synced claim behind a failed question
+    // (the per-question banner remains the "which question" surface).
+    expect(screen.getByText("保存失败")).toBeInTheDocument();
+    expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
 
     await flushAll();
     // Success telemetry stays id-free even though this response carried one

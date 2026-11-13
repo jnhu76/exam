@@ -877,21 +877,16 @@ function deriveTakeExamView(snapshot: CandidateTakeSnapshot) {
 }
 ```
 
-### 7.3 瞬态 Reducer
+### 7.3 瞬态 Reducer 与保存状态派生
 
 ```ts
 type TransientState =
   | 'idle'
-  | 'saving'
-  | 'save_failed'
   | 'submitting'
   | 'submit_failed'
   | 'load_failed';
 
 type TransientEvent =
-  | 'SAVE_REQUEST'
-  | 'SAVE_SUCCESS'
-  | 'SAVE_FAILED'
   | 'SUBMIT_REQUEST'
   | 'SUBMIT_SUCCESS'
   | 'SUBMIT_FAILED'
@@ -900,9 +895,6 @@ type TransientEvent =
 ```
 
 转换规则：
-- `idle` + `SAVE_REQUEST` → `saving`
-- `saving` + `SAVE_SUCCESS` → `idle`
-- `saving` + `SAVE_FAILED` → `save_failed`
 - `idle` + `SUBMIT_REQUEST` → `submitting`
 - `submitting` + `SUBMIT_SUCCESS` → `idle`（然后用 snapshot 重算 derived）
 - `submitting` + `SUBMIT_FAILED` → `submit_failed`
@@ -910,7 +902,10 @@ type TransientEvent =
 
 **禁止的转换**：
 - `submitting` 状态下不能再次触发 `SUBMIT_REQUEST`（防重复点击）
-- `submitted` snapshot 下不能触发 `SAVE_REQUEST`
+
+**答案保存状态没有全局 slot（#971 R6）**：逐题保存生命周期（pending / inflight / saved / failed）由保存队列（`useSubmitFlush`）按 scope 维护，全局保存 chip 与读屏提示（`SaveIndicator`，`role="status"` + `aria-live="polite"`）从**所有题目的当前修订状态派生**：任一题 failed/skipped → 保存失败；任一题 pending/inflight → 保存中；全部已确认 → 已同步。任何一题的成功不得掩盖另一题的等待或失败；`STALE_VERSION` 区分「已读到服务端现有答案」（应用 serverAnswer 并显示提示，本次编辑未被接受）与「本次编辑被接受」，且旧回包只推进服务端版本认知，不覆盖更新的未确认输入。
+
+**可控离页（#971 F-01）**：考生壳层（ExamLayout）拥有的出口——考试列表、账号设置、退出登录、通知导航——在导航前咨询答题页注册的 leave guard：页面以既有逐题串行保存队列 flush 并等待业务 ACK 后才放行；保存失败或超时保留页面与编辑，并由考生明确确认放弃。受保护卸载与 `pagehide` 对未触发防抖的编辑做尽力 drain（transport keepalive），只作为兜底发送路径；浏览器关闭/硬刷新/崩溃的持久恢复归 REC-I1/#827。原生 Back/Forward 在当前 `BrowserRouter` 模式下不可拦截（data-router blocker 需要全站路由迁移），是已记录的取舍。
 
 ### 7.4 刷新恢复
 

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Bell } from "lucide-react";
 import type {
@@ -18,6 +17,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
+// #971 F-01: notification navigation is an app-initiated exit from whatever
+// page is active — under the exam shell it consults the leave guard.
+import { useGuardedExit } from "@/components/layout/leaveGuard";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 
 // Candidate NotificationBell + panel.
@@ -40,11 +42,12 @@ type NotificationListResponse = PaginatedResponse<NotificationDTO>;
  * Bell icon + unread badge + popover panel for the candidate Inbox.
  *
  * Mounts in the ExamLayout header. Self-contained: owns its own polling,
- * list state, and read actions. Navigation delegates to react-router.
+ * list state, and read actions. Navigation goes through the shell's leave
+ * guard (#971 F-01) so leaving an active take page waits for its saves.
  */
 export function NotificationBell() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const navigateViaGuard = useGuardedExit();
   const { formatDateTime } = useProductDateTime();
 
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -122,9 +125,9 @@ export function NotificationBell() {
       );
       void refreshCount();
       setOpen(false);
-      navigate(notification.actionPath);
+      await navigateViaGuard(notification.actionPath);
     },
-    [navigate, refreshCount],
+    [navigateViaGuard, refreshCount],
   );
 
   const handleMarkAllRead = useCallback(async () => {

@@ -56,11 +56,20 @@ import type {
 import { useAttemptRestore } from "@/exam/useAttemptRestore";
 
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
-import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
-// The transient UI state reducer is the single source of truth for the
-// saving/submitting lifecycle. The backend CandidateTakeSnapshot remains the
-// business truth source; this reducer only owns UI phases (L0 §7.3).
+import {
+  useSubmitFlush,
+  type FlushResult,
+  type SaveInvokeOptions,
+} from "@/hooks/useSubmitFlush";
+// The transient UI state reducer owns the submit/load phases only (#971 R6:
+// per-question save state derives from the save queue, not a global slot).
 import { transientReducer, type TransientState } from "@/exam/transientReducer";
+// Shell leave-guard seam (#971 F-01): the ExamLayout exits consult this
+// page's guard before navigating away.
+import {
+  useRegisterLeaveGuard,
+  type LeaveGuard,
+} from "@/components/layout/leaveGuard";
 // deriveTakeExamView drives every business-derived UI decision from the
 // authoritative CandidateTakeSnapshot returned by the take endpoint. No
 // frontend reconstruction of isEditable / canSave / answerSource / lock
@@ -434,7 +443,15 @@ export function TakeExamPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [questionStates, setQuestionStates] = useState<QuestionState[]>([]);
   const [answers, setAnswers] = useState<Map<string, unknown>>(new Map());
-  const [saveState, setSaveState] = useState<SaveState>("idle");
+  // #971 R6: the global save chip is DERIVED below from the save queue's
+  // per-question revision statuses — there is no imperative global saveState
+  // slot anymore (one question's success must not mask another's failure).
+  // #971 R6: questions whose latest STALE_VERSION reconcile applied the
+  // server's existing answer (this edit was NOT accepted). The notice stays
+  // until the candidate edits that question again or the snapshot reloads.
+  const [staleReconciledIds, setStaleReconciledIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   // `isSubmitting` is derived from transientState; `submittingRef` guards
   // re-entrant submit handlers within the same tick (the reducer state update
@@ -449,6 +466,21 @@ export function TakeExamPage() {
   // generic flush state (review U-R4: the submit-dialog flush shares
   // isFlushing and must not read as auto-submitting).
   const [deadlineAutoSubmitting, setDeadlineAutoSubmitting] = useState(false);
+  // Synchronous mirror of deadlineAutoSubmitting for the leave guard (the
+  // guard must decline exits during an auto-submit episode without waiting
+  // for a render).
+  const deadlineAutoSubmittingRef = useRef(false);
+  // #971 F-01: controlled-leave lifecycle. "saving" holds the shell on the
+  // page while the save queue drains and awaits server ACKs; "confirm" is
+  // the explicit abandon decision when revisions remain unconfirmed.
+  const [leavePhase, setLeavePhase] = useState<"idle" | "saving" | "confirm">(
+    "idle",
+  );
+  const [leaveUnconfirmedCount, setLeaveUnconfirmedCount] = useState(0);
+  const leaveDecisionRef = useRef<Promise<boolean> | null>(null);
+  const resolveLeaveDecisionRef = useRef<((leave: boolean) => void) | null>(
+    null,
+  );
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
@@ -492,8 +524,13 @@ export function TakeExamPage() {
   // rejection in the same episode) collapse into at most one active take GET.
   const reconciliationInFlightRef =
     useRef<Promise<CandidateTakeSnapshot | null> | null>(null);
-  const { scheduleSave, flush, getScopeGeneration, failedQuestionIds } =
-    useSubmitFlush(attemptId);
+  const {
+    scheduleSave,
+    flush,
+    getScopeGeneration,
+    getSaveQueueSummary,
+    failedQuestionIds,
+  } = useSubmitFlush(attemptId);
   // Latest failure set / answers, readable from stable callbacks (heartbeat,
   // online listener) without stale-closure races.
   const failedQuestionIdsRef = useRef<string[]>(failedQuestionIds);
@@ -582,6 +619,9 @@ export function TakeExamPage() {
       q.answerValue != null ? "answered" : "unanswered",
     );
     setQuestionStates(states);
+    // The authoritative snapshot replaces the editor content wholesale, so
+    // any stale-reconcile notice about replaced edits is retired with it.
+    setStaleReconciledIds(new Set());
     setIsDisconnected(false);
     setSaveServerFault(false);
     setSaveFaultRequestId(null);
@@ -759,11 +799,12 @@ export function TakeExamPage() {
     setLoadError(null);
     setIsLoading(true);
     // Reset all attempt-scoped UI state so nothing from the previous attempt
-    // leaks onto the new route.
+    // leaks onto the new route. The save chip needs no reset: it derives
+    // from the new scope's empty queue (#971 R6).
     setCurrentIndex(0);
     setQuestionStates([]);
     setAnswers(new Map());
-    setSaveState("idle");
+    setStaleReconciledIds(new Set());
     setSaveRejection(null);
     setSaveRejectionRequestId(null);
     setShowSubmitDialog(false);
@@ -772,6 +813,9 @@ export function TakeExamPage() {
     setFlushResult(null);
     setAutoSubmitFailed(false);
     setDeadlineAutoSubmitting(false);
+    deadlineAutoSubmittingRef.current = false;
+    setLeavePhase("idle");
+    setLeaveUnconfirmedCount(0);
     setIsDisconnected(false);
     setSaveServerFault(false);
     setSaveFaultRequestId(null);
@@ -865,8 +909,14 @@ export function TakeExamPage() {
       ),
     );
 
-    setSaveState("saving");
-    setTransientState((s) => transientReducer(s, { type: "SAVE_REQUEST" }));
+    // A new edit retires this question's stale-reconcile notice: the
+    // candidate is overwriting the shown server answer with fresh input.
+    setStaleReconciledIds((prev) => {
+      if (!prev.has(questionId)) return prev;
+      const next = new Set(prev);
+      next.delete(questionId);
+      return next;
+    });
 
     // Capture the save-scope generation at SCHEDULE time. The save queue is
     // attempt-scoped (useSubmitFlush(attemptId) installs a fresh scope per
@@ -879,7 +929,7 @@ export function TakeExamPage() {
     const scopeGenAtSchedule = getScopeGeneration();
     const saveStale = () => scopeGenAtSchedule !== getScopeGeneration();
 
-    scheduleSave(questionId, async () => {
+    scheduleSave(questionId, async (invokeOpts?: SaveInvokeOptions) => {
       // Scope guard FIRST: a stale callback must not read the NEW attempt's
       // authority (viewRef/versionsRef/clientSeqsRef) at all. This runs
       // after the 1500ms debounce; if the route changed, bail before any
@@ -892,13 +942,11 @@ export function TakeExamPage() {
       // during the debounce window) decides whether to save. This is the
       // authoritative seam — disabled controls alone are NOT sufficient.
       if (!viewRef.current?.canSave) {
-        // Nothing was sent — the answer stays UNACKNOWLEDGED. Map the skip
-        // to the error chip (never 保存中 stuck, never the synced idle
-        // claim — a skipped edit is a save that did not happen) and reject
-        // so the save queue records the question failed instead of silently
-        // marking it saved.
-        setSaveState("error");
-        setTransientState((s) => transientReducer(s, { type: "RESET" }));
+        // Nothing was sent — the answer stays UNACKNOWLEDGED. The skip
+        // rejects so the save queue records the question failed; the
+        // derived chip (#971 R6) surfaces it as 保存失败 — never 保存中
+        // stuck, never the synced claim: a skipped edit is a save that did
+        // not happen.
         throw new Error("save skipped: attempt not saveable");
       }
 
@@ -926,6 +974,8 @@ export function TakeExamPage() {
         // so a BUSINESS rejection (accepted:false never forms an ApiError)
         // still leaves a client-claimed correlation id. Same URL, same
         // payload, same error contract — only the metadata wrapper differs.
+        // F-01 (#971): best-effort drains (unmount/pagehide fallback) carry
+        // fetch keepalive so the request survives the document unloading.
         const { data: result, meta } =
           await api.postWithMeta<SaveAnswerResponseDTO>(
             `/api/attempts/${attemptId}/answers/${questionId}`,
@@ -937,6 +987,7 @@ export function TakeExamPage() {
               clientSavedAt: new Date().toISOString(),
               baseVersion,
             },
+            invokeOpts?.bestEffort ? { keepalive: true } : undefined,
           );
         // Scope guard again after the await: an in-flight save that settles
         // after a route change must NOT write the NEW page's state/refs.
@@ -946,15 +997,11 @@ export function TakeExamPage() {
 
         if (result.accepted) {
           versionsRef.current.set(questionId, result.serverVersion);
-          setSaveState("saved");
           setIsDisconnected(false);
           setSaveServerFault(false);
           setSaveFaultRequestId(null);
           setSaveRejection(null);
           setSaveRejectionRequestId(null);
-          setTransientState((s) =>
-            transientReducer(s, { type: "SAVE_SUCCESS" }),
-          );
           trackExamEvent(
             "answer_autosave_success",
             { durationMs: Date.now() - saveStartedAt, saveMode: "autosave" },
@@ -970,26 +1017,41 @@ export function TakeExamPage() {
           typeof result.details === "object" &&
           "serverAnswer" in result.details
         ) {
+          // #971 R6: an old reply may advance THIS attempt's knowledge of
+          // the server version, but it must never clobber a NEWER
+          // unconfirmed input nor claim success for it. Per-question saves
+          // are serialized within the scope, so a newer edit exists exactly
+          // when the answer map has moved past the value this closure was
+          // saving.
           versionsRef.current.set(questionId, result.serverVersion);
-          setAnswers((prev) => {
-            const next = new Map(prev);
-            next.set(questionId, result.details!.serverAnswer);
-            return next;
-          });
-          setSaveState("saved");
-          setIsDisconnected(false);
-          setSaveServerFault(false);
-          setSaveFaultRequestId(null);
-          setSaveRejection(null);
-          setSaveRejectionRequestId(null);
-          setTransientState((s) =>
-            transientReducer(s, { type: "SAVE_SUCCESS" }),
-          );
+          const superseded =
+            answersRef.current.get(questionId) !== undefined &&
+            answersRef.current.get(questionId) !== answer;
+          if (!superseded) {
+            // This closure still owns the editor: apply the server's
+            // existing answer and SAY so — reading the server's current
+            // answer is not "this edit was accepted".
+            const serverAnswer = (result.details as { serverAnswer: unknown })
+              .serverAnswer;
+            setAnswers((prev) => {
+              const next = new Map(prev);
+              next.set(questionId, serverAnswer);
+              return next;
+            });
+            setStaleReconciledIds((prev) => new Set(prev).add(questionId));
+            setIsDisconnected(false);
+            setSaveServerFault(false);
+            setSaveFaultRequestId(null);
+            setSaveRejection(null);
+            setSaveRejectionRequestId(null);
+          }
           trackExamEvent(
             "answer_autosave_success",
             {
               durationMs: Date.now() - saveStartedAt,
-              saveMode: "stale_reconcile",
+              saveMode: superseded
+                ? "stale_version_advance"
+                : "stale_reconcile",
             },
             { attemptId, questionId },
           );
@@ -997,12 +1059,10 @@ export function TakeExamPage() {
         }
 
         rejected = true;
-        setSaveState("error");
         setSaveRejection(result);
         // Same-point unconditional overwrite (null clears a prior id) — see
         // the state declaration INVARIANT above.
         setSaveRejectionRequestId(meta.requestId);
-        setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         trackExamEvent(
           "answer_autosave_failed",
           {
@@ -1029,14 +1089,12 @@ export function TakeExamPage() {
       } catch (err) {
         // Scope guard at the TOP of catch: api.post() rejecting does NOT go
         // through the post-await stale check above — without this guard a
-        // network failure on the OLD attempt's save would write saveState
-        // "error" / setIsDisconnected(true) / transient SAVE_FAILED onto the
-        // NEW page. A stale save's failure is not the new attempt's failure.
+        // network failure on the OLD attempt's save would write
+        // setIsDisconnected(true) onto the NEW page. A stale save's failure
+        // is not the new attempt's failure.
         if (saveStale()) {
           return;
         }
-        setSaveState("error");
-        setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         if (!rejected) {
           // #800 PR-B A2-F1: an ApiError already carries the wire's machine
           // facts — record the stable code, HTTP status, and envelope
@@ -1189,6 +1247,101 @@ export function TakeExamPage() {
   }, [attemptId]);
 
   /**
+   * The shell's leave-guard answer (#971 F-01). Contract:
+   *   1. an in-flight submit / auto-submit episode owns the page's next
+   *      location (it navigates to the result route itself) → decline;
+   *   2. a page that cannot save (frozen/disrupted attempt) owns nothing
+   *      unconfirmed — its accepted answers are already the server-side
+   *      scoring basis (EXSEM-008), and later saves are the server's
+   *      rejections to make → allow;
+   *   3. otherwise the EXISTING per-question serial save queue drains via
+   *      flush() and the shell is held until the business ACKs arrive. The
+   *      flush loop re-drains edits that arrive while it waits, so the leave
+   *      criterion is always the LAST revision still needing a save;
+   *   4. failed/timeout revisions keep the page and demand the explicit
+   *      abandon decision — abandoning unconfirmed edits is never silent.
+   *
+   * Concurrent exit requests join the in-flight decision (one drain).
+   */
+  const confirmLeave = useCallback(async (): Promise<boolean> => {
+    if (submittingRef.current || deadlineAutoSubmittingRef.current) {
+      return false;
+    }
+    if (!viewRef.current?.canSave) {
+      return true;
+    }
+    if (leaveDecisionRef.current) {
+      return leaveDecisionRef.current;
+    }
+    const before = getSaveQueueSummary();
+    if (before.unconfirmedIds.length === 0 && before.failedIds.length === 0) {
+      return true;
+    }
+    setLeavePhase("saving");
+    const decision = new Promise<boolean>((resolve) => {
+      resolveLeaveDecisionRef.current = resolve;
+    });
+    leaveDecisionRef.current = decision;
+    void (async () => {
+      try {
+        const result = await flush();
+        const pending =
+          resolveLeaveDecisionRef.current !== null &&
+          !result.timedOut &&
+          result.pendingCount === 0 &&
+          result.failedQuestionIds.length === 0;
+        if (pending) {
+          resolveLeaveDecisionRef.current?.(true);
+          return;
+        }
+        if (resolveLeaveDecisionRef.current !== null) {
+          setLeaveUnconfirmedCount(
+            result.pendingCount + result.failedQuestionIds.length,
+          );
+          setLeavePhase("confirm");
+        }
+      } catch {
+        // flush() cannot reject by construction (allSettled inside); a
+        // defensive catch still routes to the explicit decision below.
+        if (resolveLeaveDecisionRef.current !== null) {
+          setLeavePhase("confirm");
+        }
+      }
+    })();
+    try {
+      return await decision;
+    } finally {
+      if (leaveDecisionRef.current === decision) {
+        leaveDecisionRef.current = null;
+      }
+      resolveLeaveDecisionRef.current = null;
+      setLeavePhase("idle");
+    }
+  }, [flush, getSaveQueueSummary]);
+
+  /** Resolves the in-flight leave decision from the hold/confirm dialogs. */
+  const resolveLeaveDecision = useCallback((leave: boolean) => {
+    resolveLeaveDecisionRef.current?.(leave);
+  }, []);
+
+  // A pending leave decision must not outlive the page: if the page unmounts
+  // while an exit is being negotiated (e.g. the deadline episode navigated
+  // first), the awaiting shell exit resolves as declined.
+  useEffect(
+    () => () => {
+      resolveLeaveDecisionRef.current?.(false);
+      resolveLeaveDecisionRef.current = null;
+    },
+    [],
+  );
+
+  const leaveGuard = useMemo<LeaveGuard>(
+    () => ({ confirmLeave }),
+    [confirmLeave],
+  );
+  useRegisterLeaveGuard(leaveGuard);
+
+  /**
    * One deadline auto-submit episode, shared by BOTH triggers — the page's 1s
    * deadline tick and ExamTimer's onTimeout — so they cannot run competing
    * flows (F16; ADR-009 narrow scope: one episode, one declarer). Guards, in
@@ -1257,6 +1410,7 @@ export function TakeExamPage() {
     deadlineHandledRef.current = true;
     trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
     setDeadlineAutoSubmitting(true);
+    deadlineAutoSubmittingRef.current = true;
 
     let flushFailed = false;
     try {
@@ -1353,6 +1507,9 @@ export function TakeExamPage() {
     if (!stale()) {
       setDeadlineAutoSubmitting(false);
     }
+    // The ref mirror clears regardless: once this invocation's episode is
+    // over, exit requests must no longer be declined for it.
+    deadlineAutoSubmittingRef.current = false;
   }, [
     attemptId,
     flush,
@@ -1667,6 +1824,21 @@ export function TakeExamPage() {
   const answeredCount = questionStates.filter(
     (s) => s === "answered" || s === "flagged",
   ).length;
+  // #971 R6: the global save chip DERIVES from every question's latest
+  // revision status in the active scope. Any failed/skipped revision reads
+  // 保存失败 even while other questions saved; any pending/inflight revision
+  // reads 保存中 even while other questions saved — a success can never mask
+  // another question's unconfirmed or failed state. Only when EVERY touched
+  // revision is acknowledged does the chip read the synced claim.
+  const saveQueueSummary = getSaveQueueSummary();
+  const saveState: SaveState =
+    saveQueueSummary.failedIds.length > 0
+      ? "error"
+      : saveQueueSummary.unconfirmedIds.length > 0
+        ? "saving"
+        : saveQueueSummary.savedCount > 0
+          ? "saved"
+          : "idle";
   const failedSaveCount = flushResult?.failedQuestionIds.length ?? 0;
   const unsavedCount = flushResult
     ? flushResult.pendingCount + failedSaveCount
@@ -1877,6 +2049,22 @@ export function TakeExamPage() {
                   >
                     {t("candidateRuntime.saveRetry.retry")}
                   </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* #971 R6: a STALE_VERSION reconcile that applied the server's
+                existing answer must be distinguishable from "this edit was
+                accepted". The notice retires when the candidate edits the
+                question again or the authoritative snapshot reloads. */}
+            {staleReconciledIds.size > 0 && !view.isLocked && (
+              <Alert data-testid="stale-reconcile-notice">
+                <AppIcon icon={CircleHelp} size="inline" />
+                <AlertTitle>
+                  {t("candidateRuntime.saveReconcile.title")}
+                </AlertTitle>
+                <AlertDescription>
+                  {t("candidateRuntime.saveReconcile.description")}
                 </AlertDescription>
               </Alert>
             )}
@@ -2133,6 +2321,79 @@ export function TakeExamPage() {
                   : t("candidateRuntime.submitDialog.submitAnyway")}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* #971 F-01: controlled-leave hold. While the save queue drains for
+          an exit, the shell is held on the page and the wait is visible.
+          Any dismissal path (escape, overlay click, 留在本页) declines the
+          exit — the candidate stays and can retry through the save banner. */}
+      <Dialog
+        open={leavePhase === "saving"}
+        onOpenChange={(open) => {
+          if (!open) resolveLeaveDecision(false);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          data-testid="leave-saving-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {t("candidateRuntime.leaveGuard.savingTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("candidateRuntime.leaveGuard.savingDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => resolveLeaveDecision(false)}
+            >
+              {t("candidateRuntime.leaveGuard.stayButton")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* #971 F-01: abandoning unconfirmed edits is never silent — the
+          candidate names the loss explicitly before the shell navigates. */}
+      <Dialog
+        open={leavePhase === "confirm"}
+        onOpenChange={(open) => {
+          if (!open) resolveLeaveDecision(false);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          data-testid="leave-abandon-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {t("candidateRuntime.leaveGuard.confirmTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("candidateRuntime.leaveGuard.confirmDescription", {
+                count: leaveUnconfirmedCount,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => resolveLeaveDecision(false)}
+            >
+              {t("candidateRuntime.leaveGuard.stayButton")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => resolveLeaveDecision(true)}
+              data-testid="leave-abandon-confirm-btn"
+            >
+              {t("candidateRuntime.leaveGuard.abandonButton")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

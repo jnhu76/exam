@@ -4,26 +4,18 @@ import { transientReducer } from "./transientReducer";
 /**
  * P3-FSM-0 — transient reducer.
  *
- * Only owns UI transient states (saving / submitting / error). It does NOT
- * duplicate AttemptStatus — the backend snapshot is the business truth source.
- * (L0 §7.3)
+ * Only owns UI transient submit/load states. It does NOT duplicate
+ * AttemptStatus — the backend snapshot is the business truth source (L0
+ * §7.3).
+ *
+ * R6 (#971): the per-question answer-save lifecycle is derived from the save
+ * queue's per-question statuses (useSubmitFlush), NOT from a single global
+ * save slot here — a global SAVE_SUCCESS/SAVE_FAILED slot let one question's
+ * outcome mask another's pending/failed state. The SAVE_* events therefore
+ * no longer exist in this vocabulary; the submit flow keeps its own states.
  */
 
 describe("transientReducer", () => {
-  it("idle + SAVE_REQUEST → saving", () => {
-    expect(transientReducer("idle", { type: "SAVE_REQUEST" })).toBe("saving");
-  });
-
-  it("saving + SAVE_SUCCESS → idle", () => {
-    expect(transientReducer("saving", { type: "SAVE_SUCCESS" })).toBe("idle");
-  });
-
-  it("saving + SAVE_FAILED → save_failed", () => {
-    expect(transientReducer("saving", { type: "SAVE_FAILED" })).toBe(
-      "save_failed",
-    );
-  });
-
   it("idle + SUBMIT_REQUEST → submitting", () => {
     expect(transientReducer("idle", { type: "SUBMIT_REQUEST" })).toBe(
       "submitting",
@@ -48,12 +40,6 @@ describe("transientReducer", () => {
     );
   });
 
-  it("save_failed + SAVE_REQUEST → saving (retry allowed)", () => {
-    expect(transientReducer("save_failed", { type: "SAVE_REQUEST" })).toBe(
-      "saving",
-    );
-  });
-
   it("submit_failed + SUBMIT_REQUEST → submitting (retry after failure)", () => {
     expect(transientReducer("submit_failed", { type: "SUBMIT_REQUEST" })).toBe(
       "submitting",
@@ -61,7 +47,6 @@ describe("transientReducer", () => {
   });
 
   it("any state + RESET → idle", () => {
-    expect(transientReducer("save_failed", { type: "RESET" })).toBe("idle");
     expect(transientReducer("submit_failed", { type: "RESET" })).toBe("idle");
     expect(transientReducer("submitting", { type: "RESET" })).toBe("idle");
     expect(transientReducer("load_failed", { type: "RESET" })).toBe("idle");
@@ -71,21 +56,22 @@ describe("transientReducer", () => {
     expect(transientReducer("idle", { type: "LOAD_FAILED" })).toBe(
       "load_failed",
     );
-    expect(transientReducer("saving", { type: "LOAD_FAILED" })).toBe(
+    expect(transientReducer("submitting", { type: "LOAD_FAILED" })).toBe(
       "load_failed",
     );
   });
 
-  it("submitting + SAVE_REQUEST stays submitting (no save during submit)", () => {
-    expect(transientReducer("submitting", { type: "SAVE_REQUEST" })).toBe(
-      "submitting",
-    );
-  });
-
-  it("ignores SAVE_SUCCESS when not saving (no spurious idle transition)", () => {
-    expect(transientReducer("idle", { type: "SAVE_SUCCESS" })).toBe("idle");
-    expect(transientReducer("submitting", { type: "SAVE_SUCCESS" })).toBe(
-      "submitting",
-    );
+  it("exposes only the submit/load vocabulary — per-question save state lives in the save queue", () => {
+    // The save-phase states are gone from the reducer's vocabulary (R6):
+    // dispatching a SAVE_* event must be a compile-time error, and the
+    // reduced states must never include the old global save slots.
+    const statesAfterSubmitCycle = new Set([
+      transientReducer("idle", { type: "SUBMIT_REQUEST" }),
+      transientReducer("submitting", { type: "SUBMIT_FAILED" }),
+      transientReducer("submit_failed", { type: "RESET" }),
+      transientReducer("idle", { type: "LOAD_FAILED" }),
+    ]);
+    expect(statesAfterSubmitCycle.has("saving" as never)).toBe(false);
+    expect(statesAfterSubmitCycle.has("save_failed" as never)).toBe(false);
   });
 });

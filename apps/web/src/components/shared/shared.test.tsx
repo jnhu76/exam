@@ -444,6 +444,20 @@ describe("StatsCard", () => {
 });
 
 describe("SaveIndicator", () => {
+  // F-08 (#971): the save chip is the screen-reader's only answer-persistence
+  // channel on the take page — it must be a live status region, not a silent
+  // span. polite (not assertive): saves retry automatically, so interruptions
+  // must not trample whatever the candidate is doing.
+  it("announces state changes as a polite live status region (role=status, aria-live=polite)", () => {
+    const { rerender } = render(<SaveIndicator state="idle" />);
+    const chip = screen.getByRole("status");
+    expect(chip).toHaveAttribute("aria-live", "polite");
+
+    rerender(<SaveIndicator state="saving" />);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("保存中...")).toBeInTheDocument();
+  });
+
   it("renders idle state as the calm synced steady state (nothing pending)", () => {
     render(<SaveIndicator state="idle" />);
     expect(screen.getByText("已保存")).toBeInTheDocument();

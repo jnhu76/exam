@@ -1,6 +1,11 @@
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { BrandHeader } from "./BrandHeader";
+import {
+  LeaveGuardProvider,
+  useConfirmLeave,
+  useGuardedExit,
+} from "@/components/layout/leaveGuard";
 import { useAuth } from "@/hooks/useAuth";
 import { routes } from "@/lib/routes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,19 +28,15 @@ import {
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 /**
- * Shell layout for candidate-facing exam pages. Renders a top header
- * with branding, exam list link, user info, and logout.
- * Redirects non-candidate users to /login.
- *
- * OWNERSHIP: the shell owns the main gutter (p-4 sm:p-6);
- * page width is declared by each page through <PageContainer role="…">. The
- * take-exam runtime page is the documented exception (page-owned gutter
- * and full-bleed sticky chrome).
+ * Inner shell content: lives under LeaveGuardProvider so the shell's exits
+ * consult the active page's leave guard (#971 F-01) before navigating.
  */
-export function ExamLayout() {
+function ExamLayoutContent() {
   const { t } = useTranslation();
   const { user, isLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const exit = useGuardedExit();
+  const exitGuard = useConfirmLeave();
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -70,12 +71,21 @@ export function ExamLayout() {
       <header className="flex h-14 items-center justify-between border-b bg-card px-4 sm:px-6">
         <BrandHeader />
         <div className="flex shrink-0 items-center gap-2">
+          {/* Exam-controlled exits route through the leave guard (#971
+              F-01): the active take page drains its pending answer saves and
+              obtains server ACKs before the shell navigates. Native browser
+              Back is not Exam-controlled under BrowserRouter — documented
+              tradeoff. */}
           <Button variant="ghost" size="sm" asChild>
             <NavLink
               to={routes.exam.list}
               className={({ isActive }) =>
                 cn(isActive && "font-medium text-primary")
               }
+              onClick={(event) => {
+                event.preventDefault();
+                void exit(routes.exam.list);
+              }}
             >
               {t("examLayout.myExams")}
             </NavLink>
@@ -103,13 +113,20 @@ export function ExamLayout() {
               <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onSelect={() => void navigate(routes.exam.settings)}
+                onSelect={() => void exit(routes.exam.settings)}
               >
                 {t("examLayout.accountSettings")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-                onSelect={() => void logout()}
+                onSelect={() => {
+                  void (async () => {
+                    // Logging out IS leaving the page: the save guard runs
+                    // first, then the authoritative logout command performs
+                    // its own navigation to /login.
+                    if (await exitGuard()) await logout();
+                  })();
+                }}
               >
                 {t("examLayout.logout")}
               </DropdownMenuItem>
@@ -123,5 +140,23 @@ export function ExamLayout() {
         <Outlet />
       </main>
     </div>
+  );
+}
+
+/**
+ * Shell layout for candidate-facing exam pages. Renders a top header
+ * with branding, exam list link, user info, and logout.
+ * Redirects non-candidate users to /login.
+ *
+ * OWNERSHIP: the shell owns the main gutter (p-4 sm:p-6);
+ * page width is declared by each page through <PageContainer role="…">. The
+ * take-exam runtime page is the documented exception (page-owned gutter
+ * and full-bleed sticky chrome).
+ */
+export function ExamLayout() {
+  return (
+    <LeaveGuardProvider>
+      <ExamLayoutContent />
+    </LeaveGuardProvider>
   );
 }
