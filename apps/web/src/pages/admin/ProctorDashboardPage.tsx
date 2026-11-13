@@ -381,25 +381,53 @@ export function ProctorDashboardPage() {
     hydrateForceSubmit();
   }, [hydrateForceSubmit]);
 
+  // Latest-read ownership for the status poll: only the newest read may
+  // commit data / error / the loading flag. An exam switch (this page is NOT
+  // remounted per :id) supersedes the in-flight read of the previous exam,
+  // and a slow response must never render a candidate list the routed exam
+  // does not name.
+  const statusRequestRef = useRef(0);
+  // Single-flight for scheduled poll ticks: while a read is on the wire the
+  // interval skips its tick, so slow responses cannot stack overlapping
+  // requests that supersede each other and freeze the refresh cycle. Explicit
+  // reads (manual refresh, post-command resync) pass `force` and supersede.
+  const statusInFlightRef = useRef(false);
+
   /** Fetches candidate status from the API. */
-  const loadStatus = useCallback(async () => {
-    if (!examId) return;
-    setError(null);
-    try {
-      const result = await api.get<CandidateStatusResponse>(
-        `/api/admin/exams/${examId}/candidates/status`,
-      );
-      setData(result);
-    } catch {
-      setError(t("admin.proctorDashboard.errors.loadFailed"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [examId, t]);
+  const loadStatus = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!examId) return;
+      if (statusInFlightRef.current && !options?.force) return;
+      const generation = ++statusRequestRef.current;
+      statusInFlightRef.current = true;
+      setError(null);
+      try {
+        const result = await api.get<CandidateStatusResponse>(
+          `/api/admin/exams/${examId}/candidates/status`,
+        );
+        if (generation !== statusRequestRef.current) return;
+        setData(result);
+      } catch {
+        if (generation !== statusRequestRef.current) return;
+        setError(t("admin.proctorDashboard.errors.loadFailed"));
+      } finally {
+        // A superseded request must not release the in-flight slot it no longer
+        // owns — the superseding read manages the slot from here.
+        if (generation === statusRequestRef.current) {
+          statusInFlightRef.current = false;
+          setIsLoading(false);
+        }
+      }
+    },
+    [examId, t],
+  );
 
   useEffect(() => {
-    loadStatus();
-    intervalRef.current = setInterval(loadStatus, POLL_INTERVAL_MS);
+    void loadStatus({ force: true });
+    intervalRef.current = setInterval(
+      () => void loadStatus(),
+      POLL_INTERVAL_MS,
+    );
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -552,7 +580,7 @@ export function ProctorDashboardPage() {
         setForceSubmitTargetAttemptId(null);
       }
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
-      await loadStatus();
+      await loadStatus({ force: true });
     } catch (err) {
       const failure = classifyGrantFailure(err);
       if (failure === "indeterminate") {
@@ -813,7 +841,7 @@ export function ProctorDashboardPage() {
       }
       // Confirmed result: close the dialog and reset to a fresh draft.
       resetGrantDialog();
-      await loadStatus();
+      await loadStatus({ force: true });
     } catch (err) {
       switch (classifyGrantFailure(err)) {
         case "indeterminate": {
@@ -1169,12 +1197,12 @@ export function ProctorDashboardPage() {
         );
         setMisconductState({ phase: "cleanup_failed", command });
         setMisconductDialogOpen(false);
-        await loadStatus();
+        await loadStatus({ force: true });
         return;
       }
       toast.success(t("admin.proctorDashboard.misconductDialog.done"));
       resetMisconductDialog();
-      await loadStatus();
+      await loadStatus({ force: true });
     } catch (err) {
       const failure = classifyGrantFailure(err);
       if (failure === "indeterminate") {
@@ -1194,7 +1222,7 @@ export function ProctorDashboardPage() {
         );
         setMisconductState({ phase: "cleanup_failed", command });
         setMisconductDialogOpen(false);
-        await loadStatus();
+        await loadStatus({ force: true });
         return;
       }
       resetMisconductDialog();
@@ -1281,7 +1309,13 @@ export function ProctorDashboardPage() {
       : misconductState.command.notes;
 
   if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadStatus} />;
+  if (error)
+    return (
+      <ErrorState
+        message={error}
+        onRetry={() => void loadStatus({ force: true })}
+      />
+    );
   if (!data) return null;
 
   const groups = groupByStatus(data.candidates);
@@ -1298,7 +1332,7 @@ export function ProctorDashboardPage() {
               size="sm"
               onClick={() => {
                 setIsLoading(true);
-                void loadStatus();
+                void loadStatus({ force: true });
               }}
             >
               <AppIcon icon={RefreshCw} size="inline" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
@@ -48,7 +48,15 @@ export function GradingQueuePage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
+  // Latest-read ownership (same contract as ScoreListPage's scores query,
+  // #958): a re-entered load (StrictMode double-fire, a page change racing a
+  // still-in-flight read) must not let an earlier-issued response mutate
+  // rows, error, or the loading flag — the table would describe a page/query
+  // the current read no longer names.
+  const requestGenerationRef = useRef(0);
+
   const loadQueue = useCallback(async () => {
+    const generation = ++requestGenerationRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -59,13 +67,18 @@ export function GradingQueuePage() {
       const result = await api.get<GradingQueueResponse>(
         `/api/admin/grading-queue?${params}`,
       );
+      if (generation !== requestGenerationRef.current) return;
       setData(result);
     } catch {
+      if (generation !== requestGenerationRef.current) return;
       setError(t("admin.grading.loadFailed"));
     } finally {
-      setIsLoading(false);
+      // A superseded request must not end the CURRENT read's loading window.
+      if (generation === requestGenerationRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [page]);
+  }, [page, t]);
 
   useEffect(() => {
     loadQueue();

@@ -441,25 +441,42 @@ export function ResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [result, setResult] = useState<CandidateAttemptResultResponse | null>(
-    null,
-  );
-  const [error, setError] = useState<string | null>(null);
+  // The visible snapshot is bound to the attemptId that produced it: an
+  // attempt switch (this page is NOT remounted per :attemptId) must render
+  // the current attempt's loading state — never the previous attempt's
+  // title, score, or error, not even briefly. A response is only adopted
+  // when it is both current (generation) and addressed to the URL's
+  // attempt; everything else is discarded.
+  const [snapshot, setSnapshot] = useState<{
+    attemptId: string;
+    result: CandidateAttemptResultResponse;
+  } | null>(null);
+  const [failure, setFailure] = useState<{
+    attemptId: string;
+    message: string;
+  } | null>(null);
+  const requestGenerationRef = useRef(0);
 
   /** Fetches the attempt result from the scores API. */
   const loadResult = useCallback(async () => {
     if (!attemptId) return;
-    setError(null);
+    const generation = ++requestGenerationRef.current;
+    const targetAttemptId = attemptId;
+    setFailure(null);
     try {
       // Candidate-safe result contract (EXSEM-017): the DTO structurally
       // cannot carry standardAnswer/rubric/gradingRule.
-      setResult(
-        await api.get<CandidateAttemptResultResponse>(
-          `/api/scores/attempts/${attemptId}`,
-        ),
+      const result = await api.get<CandidateAttemptResultResponse>(
+        `/api/scores/attempts/${targetAttemptId}`,
       );
+      if (generation !== requestGenerationRef.current) return;
+      setSnapshot({ attemptId: targetAttemptId, result });
     } catch {
-      setError(t("candidateResult.error.loadFailed"));
+      if (generation !== requestGenerationRef.current) return;
+      setFailure({
+        attemptId: targetAttemptId,
+        message: t("candidateResult.error.loadFailed"),
+      });
     }
   }, [attemptId, t]);
 
@@ -467,7 +484,16 @@ export function ResultPage() {
     void loadResult();
   }, [loadResult]);
 
-  if (error) return <ErrorState message={error} onRetry={loadResult} />;
+  // Derive the CURRENT attempt's view during render: a snapshot/failure from
+  // another attemptId is invisible even in the render frame before the load
+  // effect runs, so an attempt switch can never flash the old content.
+  const currentFailure =
+    failure && failure.attemptId === attemptId ? failure : null;
+  const result =
+    snapshot && snapshot.attemptId === attemptId ? snapshot.result : null;
+
+  if (currentFailure)
+    return <ErrorState message={currentFailure.message} onRetry={loadResult} />;
   if (!result) return <LoadingState />;
 
   // Hidden-result projection; null on the visible variant (see
