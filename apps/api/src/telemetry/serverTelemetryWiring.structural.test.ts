@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverSource = readFileSync(join(__dirname, "../server.ts"), "utf8");
 const runtimeSource = readFileSync(join(__dirname, "./runtime.ts"), "utf8");
+const bundleSource = readFileSync(join(__dirname, "./sdkBundle.ts"), "utf8");
 
 describe("server.ts telemetry wiring", () => {
   it("initializes telemetry before the Fastify instance is constructed", () => {
@@ -54,13 +55,28 @@ describe("telemetry runtime construction contract", () => {
     const envForceIndex = runtimeSource.indexOf(
       'process.env.OTEL_TRACES_EXPORTER = "none"',
     );
-    const sdkIndex = runtimeSource.indexOf("new bundle.NodeSDK");
+    const sdkIndex = runtimeSource.indexOf("bundle.startTracing(");
     expect(envForceIndex).toBeGreaterThan(-1);
     expect(sdkIndex).toBeGreaterThan(envForceIndex);
     expect(runtimeSource).toContain(
       'process.env.OTEL_METRICS_EXPORTER = "none"',
     );
     expect(runtimeSource).toContain('process.env.OTEL_LOGS_EXPORTER = "none"');
+  });
+
+  it("assembles the SDK from granular packages: sdk-node is banned", () => {
+    // #973 P1: @opentelemetry/sdk-node's dependency closure drags the gRPC /
+    // Zipkin / Prometheus exporter families (→ @grpc/grpc-js → protobufjs →
+    // @types/node) into the production payload, failing the deploy artifact
+    // contract's dev-toolchain negative scan. The bundle must not import the
+    // meta-package or use its facade, and the runtime must not reference the
+    // facade anywhere.
+    const specifiers = [
+      ...bundleSource.matchAll(/from\s+["']([^"']+)["']/g),
+    ].map((match) => match[1]!);
+    expect(specifiers).not.toContain("@opentelemetry/sdk-node");
+    expect(bundleSource).not.toContain("NodeSDK");
+    expect(runtimeSource).not.toContain("NodeSDK");
   });
 
   it("places the URL scrub processor first in the processor chain", () => {

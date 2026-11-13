@@ -45,8 +45,8 @@ beforeAll(async () => {
   resetRuntimeConfigForTest();
   handle = await initTelemetry();
   if (!handle) throw new Error("telemetry session did not start");
-  // Explicit no-export decision (see runtime.ts header — the NodeSDK
-  // default would dial localhost:4318 without this).
+  // Explicit no-export decision (see runtime.ts header — the default OTLP
+  // exporter would dial localhost:4318 without this).
   expect(process.env.OTEL_TRACES_EXPORTER).toBe("none");
   expect(process.env.OTEL_METRICS_EXPORTER).toBe("none");
   expect(process.env.OTEL_LOGS_EXPORTER).toBe("none");

@@ -21,15 +21,14 @@ import { UrlScrubSpanProcessor } from "./urlScrubSpanProcessor.js";
  *   package, instrumentation, export task, or network surface exists in the
  *   process (W1.1 measured the Off state: zero spans, zero connections to
  *   the collector port, unmodified exit).
- * - **On**: the SDK is constructed with explicit per-signal configuration —
- *   explicit `spanProcessors` bypass NodeSDK's env auto-configuration, and
- *   every signal's auto-configured OTLP exporter is additionally disabled
- *   via the `OTEL_*_EXPORTER=none` env defaults before construction
- *   (W1.1 probe F4/S8: without an explicit override the NodeSDK default
- *   dials localhost:4318; an empty `spanProcessors: []` array would ALSO
- *   suppress auto-config but reads as an accident, not a decision). There is
- *   no remote exporter at the API runtime layer; OTLP enablement is a W6
- *   deployment concern that must extend THIS wiring, not bypass it.
+ * - **On**: the SDK is assembled from granular OTel packages with explicit
+ *   per-signal configuration (sdkBundle.ts startTracing — no auto-configure
+ *   facade), and every signal's exporter env is additionally pinned to
+ *   `none` before construction (W1.1 probe F4/S8: the default OTLP exporter
+ *   dials localhost:4318; the explicit env decision keeps that surface at
+ *   zero for any OTel library that consults the env). There is no remote
+ *   exporter at the API runtime layer; OTLP enablement is a W6 deployment
+ *   concern that must extend THIS wiring, not bypass it.
  * - **Degraded**: any SDK construction/start failure is contained — a
  *   structured warn event goes to stderr and the process continues with
  *   telemetry Off. Telemetry failures never change business results
@@ -208,12 +207,11 @@ export async function shutdownTelemetry(): Promise<void> {
 }
 
 async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
-  // PROTOCOL (W1.1 S8/F4): NodeSDK auto-configures an OTLP exporter per
-  // signal that is not passed programmatically, and the default dials
-  // localhost:4318. The API runtime has no remote exporter surface; every
-  // signal's auto-export is disabled HERE, before construction. W6's OTLP
-  // enablement must replace this explicit decision with an explicit
-  // exporter — never remove it into silence.
+  // PROTOCOL (W1.1 S8/F4, kept from the sdk-node wiring): the API runtime
+  // has no remote exporter surface, and every OTel library that consults
+  // the exporter env must see the explicit `none` decision BEFORE any
+  // exporter construction. W6's OTLP enablement must replace this explicit
+  // decision with an explicit exporter — never remove it into silence.
   process.env.OTEL_TRACES_EXPORTER = "none";
   process.env.OTEL_METRICS_EXPORTER = "none";
   process.env.OTEL_LOGS_EXPORTER = "none";
@@ -238,26 +236,16 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
     flush = () => batch.forceFlush();
   }
 
-  const sdk = new bundle.NodeSDK({
-    resource: bundle.defaultResource().merge(
-      bundle.resourceFromAttributes({
-        "service.name": config.serviceName,
-      }),
-    ),
-    sampler: new bundle.ParentBasedSampler({
-      root: new bundle.TraceIdRatioBasedSampler(config.sampleRatio),
-    }),
-    textMapPropagator: new ServerRootPropagator(
-      bundle.createOutboundPropagator(),
-    ),
+  const sdk = bundle.startTracing({
+    serviceName: config.serviceName,
+    sampleRatio: config.sampleRatio,
     spanProcessors,
+    propagator: new ServerRootPropagator(bundle.createOutboundPropagator()),
     instrumentations: [
       bundle.createHttpInstrumentation(),
       bundle.createPinoInstrumentation(),
     ],
   });
-
-  sdk.start();
 
   const fastifyOtel = bundle.createFastifyInstrumentation();
   return {
