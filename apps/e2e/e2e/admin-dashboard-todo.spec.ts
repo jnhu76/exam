@@ -192,11 +192,16 @@ test.describe.serial("admin dashboard todo queues (#784 B3 L3)", () => {
     const body = (await (await queueResponse).json()) as { total: number };
     // The queue the card lands on counts the SAME workset the card displayed.
     expect(body.total).toBe(baselineGradingTotal + 2);
-    // The seeded row is on the queue — scoped to the desktop table (the
-    // mobile card list renders the same title but is display:none at the
-    // desktop viewport).
+    // The seeded row is on the queue — the exact match binds to the exam
+    // column cell: the candidate cell hosts the entry link whose accessible
+    // name carries candidate + exam, so it also contains this title as a
+    // substring. (The mobile card list renders the same title but is
+    // display:none at the desktop viewport.)
     await expect(
-      page.getByRole("cell", { name: `${GRADING_KEYWORD}-a 多主观题考试` }),
+      page.getByRole("cell", {
+        name: `${GRADING_KEYWORD}-a 多主观题考试`,
+        exact: true,
+      }),
     ).toBeVisible();
   });
 
