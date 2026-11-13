@@ -1374,6 +1374,10 @@ const zhCN = {
         description:
           "选择员工用户，查看其当前角色分配授予的能力集合。能力集合是资格，不等于逐资源授权。",
         userSelect: "选择员工用户",
+        loadDirectoryFailed: "加载员工目录失败",
+        empty: "暂无员工用户",
+        emptyDescription: "当前组织内还没有员工用户。",
+        directoryPagination: "员工目录分页",
         noActive: "无生效分配",
         capabilities: "授予的能力集合",
         assignments: "当前角色分配",
