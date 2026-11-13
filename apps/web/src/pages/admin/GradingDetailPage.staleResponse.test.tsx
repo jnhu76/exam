@@ -448,4 +448,89 @@ describe("GradingDetailPage stale-read ownership (F-11)", () => {
       screen.queryByTestId("grading-refresh-failed-banner"),
     ).not.toBeInTheDocument();
   });
+
+  it("a committed question stays locked when its refresh is superseded and the newer read then fails", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await act(async () => {
+      queue.shift()!.resolve(detail(null, null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+
+    // q1's POST succeeds; its authoritative refresh (read #2) is held on the
+    // wire. The committed q1 must be locked from this moment on — not only
+    // when a refresh happens to fail.
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q1",
+      score: 8,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q1", "8");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("grading-saved-pending-refresh-q1"),
+    ).toHaveTextContent("已保存 8 分（等待刷新）");
+    // Nothing has FAILED yet: no failure banner while the read is in flight.
+    expect(
+      screen.queryByTestId("grading-refresh-failed-banner"),
+    ).not.toBeInTheDocument();
+
+    // q2's POST succeeds while read #2 is in flight; read #3 supersedes it.
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q2",
+      score: 5,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q2", "5");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(3));
+
+    // The NEWER read (#3) fails, so q2's own refresh has no snapshot either.
+    await act(async () => {
+      queue[1]!.reject(new Error("refresh failed"));
+    });
+    // q1's superseded read (#2) settles last: it can never commit, and the
+    // already-committed q1 must stay locked regardless.
+    await act(async () => {
+      queue[0]!.resolve(detail(null, null, "pending_manual"));
+    });
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "评分已保存，但页面刷新失败，请重试刷新以查看最新状态。",
+      ),
+    );
+    // Both POST-committed questions are saved-stale, never editable again.
+    for (const [questionId, score] of [
+      ["q1", "8"],
+      ["q2", "5"],
+    ] as const) {
+      expect(
+        screen.getByTestId(`grading-score-input-${questionId}`),
+      ).toBeDisabled();
+      expect(
+        screen.queryByTestId(`grading-submit-btn-${questionId}`),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId(`grading-saved-pending-refresh-${questionId}`),
+      ).toHaveTextContent(`已保存 ${score} 分（等待刷新）`);
+    }
+    expect(
+      screen.getByTestId("grading-refresh-failed-banner"),
+    ).toBeInTheDocument();
+    // Exactly the two explicit POSTs: the superseded refresh must not trigger
+    // a reconciliation or a re-POST.
+    expect(postMock).toHaveBeenCalledTimes(2);
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalledWith(
+      "无法确认评分是否已提交，请刷新页面核对。",
+    );
+  });
 });

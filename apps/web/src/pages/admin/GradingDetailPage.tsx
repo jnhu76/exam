@@ -226,14 +226,27 @@ export function GradingDetailPage() {
     maxScore: number;
   } | null>(null);
   const [findingNext, setFindingNext] = useState(false);
-  // Questions whose POST is KNOWN to have committed but whose follow-up
-  // authoritative read failed. They are locked (the POST outcome is a fact, so
-  // the UI must not invite a duplicate submit) and rendered as saved-stale
-  // until an authoritative read returns their committed entry.
+  // Questions whose POST is KNOWN to have committed. The marker is written
+  // immediately AFTER the POST (before its own refresh) so a concurrent
+  // submission that supersedes that refresh cannot leave a committed question
+  // editable; `refreshFailed` drives the saved-but-unrefreshed notice only once
+  // a read actually failed or was superseded. Cleared only when an
+  // authoritative current read returns the committed entry.
   const [savedUnrefreshed, setSavedUnrefreshed] = useState<
-    Record<string, number>
+    Record<string, { score: number; refreshFailed: boolean }>
   >({});
   const [retryingSavedRefresh, setRetryingSavedRefresh] = useState(false);
+
+  const markSavedRefreshFailed = useCallback((questionId: string) => {
+    setSavedUnrefreshed((current) => {
+      const saved = current[questionId];
+      if (!saved || saved.refreshFailed) return current;
+      return {
+        ...current,
+        [questionId]: { ...saved, refreshFailed: true },
+      };
+    });
+  }, []);
 
   /**
    * Re-fetches the authoritative grading-details and replaces local state from
@@ -483,28 +496,45 @@ export function GradingDetailPage() {
         return;
       }
 
-      // The POST outcome is KNOWN committed from here. A failing/superseded
-      // refresh must not be reclassified as an unknown outcome (that would
-      // invite a duplicate POST); present the grade as saved and keep the
-      // re-read entry available.
+      // The POST outcome is KNOWN committed from here. Lock the question
+      // BEFORE starting the refresh: this submission's read can be superseded
+      // by a concurrent submission's newer read, and that newer read can
+      // itself fail — the committed question must never fall back to an
+      // editable state that invites a second POST.
+      setSavedUnrefreshed((current) => ({
+        ...current,
+        [questionId]: { score: result.score, refreshFailed: false },
+      }));
       try {
         const outcome = await refreshFromServer();
-        if (outcome.kind === "current" && result.fullyGraded) {
-          toast.success(t("admin.gradingDetail.toast.fullyGraded"));
+        if (outcome.kind === "current") {
+          toast.success(
+            result.fullyGraded
+              ? t("admin.gradingDetail.toast.fullyGraded")
+              : t("admin.gradingDetail.toast.saved"),
+          );
         } else {
-          toast.success(t("admin.gradingDetail.toast.saved"));
+          // Superseded / unavailable: this submission's own refresh did not
+          // verify the commit. A newer read may still clear the marker when it
+          // lands with the entry; until then the question stays locked.
+          markSavedRefreshFailed(questionId);
+          toast.error(t("admin.gradingDetail.errors.savedRefreshFailed"));
         }
       } catch {
-        setSavedUnrefreshed((current) => ({
-          ...current,
-          [questionId]: result.score,
-        }));
+        markSavedRefreshFailed(questionId);
         toast.error(t("admin.gradingDetail.errors.savedRefreshFailed"));
       } finally {
         setSaving((prev) => ({ ...prev, [questionId]: false }));
       }
     },
-    [id, comments, t, refreshFromServer, reconcileAfterPostError],
+    [
+      id,
+      comments,
+      t,
+      refreshFromServer,
+      reconcileAfterPostError,
+      markSavedRefreshFailed,
+    ],
   );
 
   /**
@@ -576,7 +606,7 @@ export function GradingDetailPage() {
         }
         status={<StatusBadge status={data.gradingStatus} />}
       />
-      {Object.keys(savedUnrefreshed).length > 0 ? (
+      {Object.values(savedUnrefreshed).some((saved) => saved.refreshFailed) ? (
         <div
           role="alert"
           data-testid="grading-refresh-failed-banner"
@@ -620,9 +650,10 @@ export function GradingDetailPage() {
         // committed but the follow-up read has not returned yet. Either way: no
         // submit button, inputs disabled, and no client-fabricated grader
         // metadata.
-        const savedScore = savedUnrefreshed[q.questionId];
+        const saved = savedUnrefreshed[q.questionId];
+        const savedScore = saved?.score;
         const completed =
-          q.entry !== null || isFullyGraded || savedScore !== undefined;
+          q.entry !== null || isFullyGraded || saved !== undefined;
         return (
           <Card key={q.questionId}>
             <CardHeader>
