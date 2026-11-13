@@ -14,6 +14,20 @@ const FLUSH_TIMEOUT_MS = 10_000;
 /** Lifecycle status of a per-question save operation. */
 export type SaveStatus = "idle" | "pending" | "inflight" | "saved" | "failed";
 
+/**
+ * Options the queue attaches when it invokes an owner-registered save
+ * closure. `bestEffort` marks a DRAIN fired outside any awaiting caller
+ * (unmount cleanup or the pagehide fallback): the closure cannot surface a
+ * result anymore, so the underlying transport should use keepalive and the
+ * closure must tolerate React state writes being no-ops.
+ */
+export interface SaveInvokeOptions {
+  bestEffort?: boolean;
+}
+
+/** Per-question save-closure shape accepted by scheduleSave. */
+export type SaveFn = (opts?: SaveInvokeOptions) => Promise<void>;
+
 /** Result returned by the flush method after draining all pending saves. */
 export interface FlushResult {
   pendingCount: number;
@@ -21,10 +35,25 @@ export interface FlushResult {
   timedOut: boolean;
 }
 
+/**
+ * A snapshot of every revision's terminal state in the ACTIVE scope, from
+ * which the page derives the global save indicator (#971 R6: the global
+ * state is DERIVED from all per-question statuses — one question's success
+ * can never mask another's pending/failed revision).
+ */
+export interface SaveQueueSummary {
+  /** Questions whose latest revision has been acknowledged by the server. */
+  savedCount: number;
+  /** Questions with a pending debounce timer or an in-flight request. */
+  unconfirmedIds: string[];
+  /** Questions whose latest save attempt failed or was skipped. */
+  failedIds: string[];
+}
+
 /** Internal entry tracking a debounced save timer and its save function. */
 interface PendingEntry {
   timer: ReturnType<typeof setTimeout>;
-  save: () => Promise<void>;
+  save: SaveFn;
   questionGeneration: number;
 }
 
@@ -63,11 +92,17 @@ function createScopeState(
 
 /** Public interface of the useSubmitFlush hook. */
 export interface UseSubmitFlush {
-  scheduleSave: (questionId: string, save: () => Promise<void>) => void;
+  scheduleSave: (questionId: string, save: SaveFn) => void;
   flush: () => Promise<FlushResult>;
   getQuestionStatus: (questionId: string) => SaveStatus;
   /** Monotonic scope-generation token. Bumps on every real scope change. */
   getScopeGeneration: () => number;
+  /**
+   * Derives the active scope's per-question terminal states. Read during
+   * render: the hook re-renders on every active-scope status write, so the
+   * summary is always current for the committing render (#971 R6).
+   */
+  getSaveQueueSummary: () => SaveQueueSummary;
   failedQuestionIds: string[];
 }
 
@@ -82,6 +117,13 @@ export interface UseSubmitFlush {
  * new scope; the previous scope's already-inflight saves are allowed to
  * settle but can no longer write status. This is what makes the save queue
  * safe when `TakeExamPage` reuses one component instance across attempts.
+ *
+ * F-01 (#971): two BEST-EFFORT drains back the controlled-leave path (the
+ * page's leave guard flushes and AWAITS server ACKs before navigation — that
+ * is the authoritative path). The drains only stop the silent discard when
+ * no guard ran: on component unmount the active scope's pending edits are
+ * fired immediately, and on `pagehide` the same drain marks the closures
+ * best-effort so the transport keeps the requests alive across unload.
  */
 export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
   // The currently-active scope. Replaced (not mutated) on a scope change.
@@ -131,8 +173,9 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
     (
       scope: SaveScopeState,
       questionId: string,
-      save: () => Promise<void>,
+      save: SaveFn,
       questionGeneration: number,
+      invokeOpts?: SaveInvokeOptions,
     ): Promise<void> => {
       const previous = scope.inflight.get(questionId);
       const execute = () => {
@@ -140,7 +183,7 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
           setStatus(scope, questionId, "inflight");
         }
         try {
-          return save();
+          return save(invokeOpts);
         } catch (error) {
           return Promise.reject(error);
         }
@@ -183,8 +226,27 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
     [runSave],
   );
 
+  /**
+   * Best-effort drain (unmount / pagehide): fires every pending edit of the
+   * scope immediately and marks each closure best-effort so the transport
+   * keeps it alive across unload. There is no awaiting caller anymore — this
+   * only prevents the silent discard of typed answers (F-01).
+   */
+  const drainBestEffort = useCallback(
+    (scope: SaveScopeState) => {
+      for (const [questionId, entry] of scope.pending.entries()) {
+        clearTimeout(entry.timer);
+        scope.pending.delete(questionId);
+        void runSave(scope, questionId, entry.save, entry.questionGeneration, {
+          bestEffort: true,
+        });
+      }
+    },
+    [runSave],
+  );
+
   const scheduleSave = useCallback(
-    (questionId: string, save: () => Promise<void>) => {
+    (questionId: string, save: SaveFn) => {
       // Capture the ACTIVE scope at schedule time. A late-firing timer reads
       // only this captured scope — never a scope that became active later.
       const scope = activeScopeRef.current;
@@ -279,6 +341,34 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
     [],
   );
 
+  const getSaveQueueSummary = useCallback((): SaveQueueSummary => {
+    const scope = activeScopeRef.current;
+    const summary: SaveQueueSummary = {
+      savedCount: 0,
+      unconfirmedIds: [],
+      failedIds: [],
+    };
+    for (const [questionId, status] of scope.statuses) {
+      if (status === "saved") {
+        summary.savedCount += 1;
+      } else if (status === "pending" || status === "inflight") {
+        summary.unconfirmedIds.push(questionId);
+      } else if (status === "failed") {
+        summary.failedIds.push(questionId);
+      }
+    }
+    // A pending timer that has not fired yet also sits in scope.pending with
+    // its status already set — covered above; entries in flight but not yet
+    // statused (cannot happen: runSave sets inflight synchronously) would be
+    // picked up through scope.inflight.
+    for (const questionId of scope.pending.keys()) {
+      if (!summary.unconfirmedIds.includes(questionId)) {
+        summary.unconfirmedIds.push(questionId);
+      }
+    }
+    return summary;
+  }, []);
+
   const getScopeGeneration = useCallback(
     () => activeScopeRef.current.generation,
     [],
@@ -290,6 +380,12 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
   // (1) clear the old scope's pending timers, (2) retain the old scope object
   // so its inflight saves settle without writing status, and (3) install a
   // brand-new scope with empty maps for the new scope's exclusive use.
+  // INVARIANT (#971): the pending timers are CANCELLED, not drained — an
+  // attempt switch means the page no longer holds the old attempt's editing
+  // authority (viewRef/versionsRef are rebuilt for the new attempt), so
+  // firing old-scope closures would read the wrong authority. Controlled
+  // exits flush BEFORE the route changes (leave guard); this cancellation is
+  // the isolation backstop for unguarded scope changes.
   useLayoutEffect(() => {
     const oldScope = activeScopeRef.current;
     if (oldScope.key === scopeKey) {
@@ -309,24 +405,33 @@ export function useSubmitFlush(scopeKey?: string): UseSubmitFlush {
     tick();
   }, [scopeKey, tick]);
 
-  // Mount flag + unmount cleanup: clear the active scope's pending timers.
-  // The scope is read INSIDE the returned cleanup (not captured at mount) so
-  // that if the scope changed during the component's life, unmount clears the
-  // CURRENTLY-active scope's timers, not the original one.
+  // Mount flag + unmount cleanup. F-01 (#971): unmount DRAINS the active
+  // scope's pending edits as best-effort sends instead of silently
+  // discarding them, and a pagehide listener re-fires the same drain as the
+  // hard-unload fallback (browser close / refresh — full persistence design
+  // is #827). The scope is read INSIDE the returned cleanup / listener (not
+  // captured at mount) so it always drains the CURRENTLY-active scope.
   useEffect(() => {
     mountedRef.current = true;
+    const onPageHide = () => {
+      drainBestEffort(activeScopeRef.current);
+    };
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       mountedRef.current = false;
+      window.removeEventListener("pagehide", onPageHide);
+      drainBestEffort(activeScopeRef.current);
       const scope = activeScopeRef.current;
       for (const entry of scope.pending.values()) clearTimeout(entry.timer);
       scope.pending.clear();
     };
-  }, []);
+  }, [drainBestEffort]);
 
   return {
     scheduleSave,
     flush,
     getQuestionStatus,
+    getSaveQueueSummary,
     getScopeGeneration,
     failedQuestionIds,
   };

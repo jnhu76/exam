@@ -117,6 +117,14 @@ function answersPostCalls() {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
@@ -321,9 +329,122 @@ describe("save-state chip mapping (real timers)", () => {
     expect(
       screen.queryByTestId("save-rejection-alert"),
     ).not.toBeInTheDocument();
+    // R6: a reconciled reply is NOT "this edit was accepted". The page
+    // states that the server's existing answer is now displayed — this edit
+    // was replaced, not accepted (STALE_VERSION distinction).
+    expect(screen.getByTestId("stale-reconcile-notice")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "已显示服务器上已保存的答案；你本次修改未被保存，可重新编辑。",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("keeps the failed question's banner visible after a later question saves (last-event chip, #677 F6)", async () => {
+  it("a stale reply that arrives while a NEWER unconfirmed edit exists does not clobber the editor: it advances version knowledge only, and the newer save replays against the advanced server version (R6)", async () => {
+    installTakeRoute([
+      buildSnapshot({}, [
+        {
+          id: "q1",
+          type: "multiple_choice",
+          prompt: "多选",
+          promptDocument: null,
+          answerMode: "plain" as const,
+          options: [
+            { id: "a", content: "A", contentDocument: null },
+            { id: "b", content: "B", contentDocument: null },
+            { id: "c", content: "C", contentDocument: null },
+          ],
+          inputMode: "choice",
+          maxScore: 10,
+          answerValue: null,
+          answerSource: "none",
+        },
+      ]),
+    ]);
+    // The first save (older revision ["a"]) is held inflight; it then
+    // resolves STALE_VERSION AFTER a newer edit (["b"]) is scheduled. The
+    // second save must fire with baseVersion advanced from the stale reply.
+    const staleAck = deferred<{
+      accepted: false;
+      reason: "STALE_VERSION";
+      message: string;
+      serverVersion: number;
+      savedAt: string;
+      details: { serverAnswer: string[] };
+    }>();
+    let call = 0;
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        call += 1;
+        if (call === 1) {
+          return staleAck.promise;
+        }
+        return { accepted: true, serverVersion: 4, savedAt: NOW };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+    const boxes = await screen.findAllByRole("checkbox");
+    await user.click(boxes[0]!); // revision 1: ["a"]
+    // Hold until revision 1 is on the wire (inflight, ACK latched).
+    await waitFor(
+      () => {
+        expect(answersPostCalls().length).toBe(1);
+      },
+      { timeout: 4000 },
+    );
+
+    // Newer unconfirmed edit while the old save is on the wire.
+    const freshBoxes = screen.getAllByRole("checkbox");
+    await user.click(freshBoxes[1]!); // revision 2: ["b"]
+
+    await act(async () => {
+      staleAck.resolve({
+        accepted: false,
+        reason: "STALE_VERSION",
+        message: "stale",
+        serverVersion: 3,
+        savedAt: NOW,
+        details: { serverAnswer: ["a", "c"] },
+      });
+      await Promise.resolve();
+    });
+
+    // The editor still shows the CANDIDATE's newest unconfirmed input — the
+    // old reply's serverAnswer (["a","c"]) must NOT overwrite it. Revision 2
+    // accumulated to ["a","b"]: A and B stay checked, C (only in the stale
+    // reply's serverAnswer) must NOT appear. Applying the serverAnswer would
+    // uncheck B and check C.
+    const after = screen.getAllByRole("checkbox");
+    expect(after[0]).toBeChecked();
+    expect(after[1]).toBeChecked();
+    expect(after[2]).not.toBeChecked();
+    expect(
+      screen.queryByTestId("stale-reconcile-notice"),
+    ).not.toBeInTheDocument();
+
+    // The newer revision replays with the ADVANCED baseVersion (3 from the
+    // stale reply's serverVersion), so it is accepted by the server.
+    await waitFor(
+      () => {
+        expect(answersPostCalls().length).toBe(2);
+      },
+      { timeout: 4000 },
+    );
+    const [, secondBody] = answersPostCalls()[1]!;
+    expect(secondBody.answer).toEqual(["a", "b"]);
+    expect(secondBody.baseVersion).toBe(3);
+    await waitFor(
+      () => {
+        expect(screen.getByText("已保存")).toBeInTheDocument();
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it("keeps the failed question's state visible after a later question saves — the chip is DERIVED from every question's revision status, not a last-event slot (#677 F6, R6)", async () => {
     installTakeRoute([
       buildSnapshot({}, [fillBlankQuestion("q1"), fillBlankQuestion("q2")]),
     ]);
@@ -356,20 +477,90 @@ describe("save-state chip mapping (real timers)", () => {
     );
     expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
 
-    // Move to q2 and save successfully: the chip reflects the LATEST save
-    // event (已保存), while q1's failure remains visible through the queue's
-    // per-question banner — the success must not mask the failed question.
+    // Move to q2 and save successfully: the chip stays on 保存失败 — a
+    // later question's success must NOT mask an earlier question's failed
+    // revision (R6: derived from ALL per-question statuses, not the last
+    // event). The per-question banner persists alongside it.
     await user.click(screen.getByRole("button", { name: "下一题" }));
     const input2 = await screen.findByLabelText("第1空答案");
     await user.type(input2, "y");
 
     await waitFor(
       () => {
+        expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+      },
+      { timeout: 4000 },
+    );
+    expect(screen.getByText("保存失败")).toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+  });
+
+  it("derives 保存中 from an earlier question's saved revision while the current question's edit is still unconfirmed (q1 ACK ≠ q2 synced, R6)", async () => {
+    // q1's save is HELD inflight; q2's edit sits in its debounce window. The
+    // chip must read 保存中 the whole time — never 已保存 — because q2's
+    // revision is unconfirmed even while q1's is not yet ACKed either.
+    const ackLatch = deferred();
+    installTakeRoute([
+      buildSnapshot({}, [fillBlankQuestion("q1"), fillBlankQuestion("q2")]),
+    ]);
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/q1")) {
+        return ackLatch.promise;
+      }
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return { accepted: true, serverVersion: 1, savedAt: NOW };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderPage();
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "x");
+    await waitFor(
+      () => {
+        expect(
+          apiPost.mock.calls.some(
+            ([p]) => typeof p === "string" && p.includes("/answers/q1"),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 4000 },
+    );
+
+    // Move to q2 and edit while q1's ACK is still held: chip reads 保存中.
+    await user.click(screen.getByRole("button", { name: "下一题" }));
+    const input2 = await screen.findByLabelText("第1空答案");
+    await user.type(input2, "y");
+    expect(screen.getByText("保存中...")).toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+
+    // q2's ACK lands while q1 is STILL inflight: the chip must stay 保存中 —
+    // q2's success cannot declare the whole page synced (R6).
+    await waitFor(
+      () => {
+        expect(
+          apiPost.mock.calls.some(
+            ([p]) => typeof p === "string" && p.includes("/answers/q2"),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 4000 },
+    );
+    expect(screen.getByText("保存中...")).toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+
+    // q1's ACK finally lands: everything confirmed → the chip reads saved.
+    await act(async () => {
+      ackLatch.resolve({ accepted: true, serverVersion: 1, savedAt: NOW });
+      await Promise.resolve();
+    });
+    await waitFor(
+      () => {
         expect(screen.getByText("已保存")).toBeInTheDocument();
       },
       { timeout: 4000 },
     );
-    expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
   });
 
   it("route reset maps the chip back to idle for the new attempt — the old attempt's un-ACKed saving state must not leak (P2)", async () => {

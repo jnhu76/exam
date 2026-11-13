@@ -217,22 +217,71 @@ describe("useSubmitFlush", () => {
     expect(flushResult.failedQuestionIds).toEqual([]);
   });
 
-  // ====== Reviewer C2 (Critical) ======
-  it("on unmount, pending debounced timers do NOT fire save()", async () => {
-    const save = vi.fn().mockResolvedValue(undefined);
+  // ====== F-01 (#971): unmount drains pending saves as best-effort sends ======
+  it("on unmount, pending saves fire ONCE as best-effort drains; no zombie timer fires afterwards", async () => {
+    const save = vi.fn(async (_opts?: { bestEffort?: boolean }) => {});
     const { result, unmount } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
     });
+    expect(save).not.toHaveBeenCalled();
 
+    // Unmount drains the pending edit immediately — the typed answer is not
+    // silently discarded (F-01). The drain is marked best-effort so the
+    // transport can use keepalive.
     unmount();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ bestEffort: true }),
+    );
 
+    // The debounce timer was cleared with the drain: advancing timers must
+    // not fire the save again (no post-unmount zombie work).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
+    expect(save).toHaveBeenCalledTimes(1);
+  });
 
+  it("pagehide drains pending saves ONCE as best-effort sends (hard-unload fallback)", async () => {
+    const save = vi.fn(async (_opts?: { bestEffort?: boolean }) => {});
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
+
+    act(() => {
+      result.current.scheduleSave("q1", save);
+    });
     expect(save).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+      await Promise.resolve();
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ bestEffort: true }),
+    );
+
+    // The drained entry is gone: neither its debounce timer nor a second
+    // pagehide fires the save again.
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("a scheduled save invoked through flush() is NOT marked best-effort", async () => {
+    const save = vi.fn(async (_opts?: { bestEffort?: boolean }) => {});
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
+
+    act(() => {
+      result.current.scheduleSave("q1", save);
+    });
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(save).toHaveBeenCalledWith(undefined);
   });
 
   // ====== Reviewer I2: ordering-strict assertion (already covered above by callOrder; this is a complement) ======
@@ -487,6 +536,56 @@ describe("useSubmitFlush", () => {
       await Promise.resolve();
     });
     expect(result.current.getQuestionStatus("q-shared")).toBe("saved");
+  });
+
+  // ====== R6 (#971): queue summary derives the global save state ======
+  it("getSaveQueueSummary derives failed / unconfirmed / saved counts from the ACTIVE scope", async () => {
+    let resolveQ1!: () => void;
+    const saveQ1 = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveQ1 = resolve;
+        }),
+    );
+    const saveQ2 = vi.fn().mockRejectedValue(new Error("network"));
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useSubmitFlush(scope),
+      { initialProps: { scope: "att-1" } },
+    );
+
+    act(() => {
+      result.current.scheduleSave("q1", saveQ1);
+      result.current.scheduleSave("q2", saveQ2);
+    });
+    // Both unconfirmed (debounce window): q2's future failure must already be
+    // represented once it lands — and q1 pending must never read as saved.
+    expect(result.current.getSaveQueueSummary().unconfirmedIds.sort()).toEqual([
+      "q1",
+      "q2",
+    ]);
+    expect(result.current.getSaveQueueSummary().failedIds).toEqual([]);
+    expect(result.current.getSaveQueueSummary().savedCount).toBe(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      resolveQ1();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // q1 saved while q2 failed — BOTH facts are visible at once. A single
+    // last-event slot would let q2's failure hide behind q1's success (R6).
+    const summary = result.current.getSaveQueueSummary();
+    expect(summary.savedCount).toBe(1);
+    expect(summary.failedIds).toEqual(["q2"]);
+    expect(summary.unconfirmedIds).toEqual([]);
+
+    // Scope switch: the new scope starts with an empty summary.
+    rerender({ scope: "att-2" });
+    expect(result.current.getSaveQueueSummary()).toEqual({
+      unconfirmedIds: [],
+      failedIds: [],
+      savedCount: 0,
+    });
   });
 
   it("an old-scope flush does not consume, await, or count the new scope's work", async () => {

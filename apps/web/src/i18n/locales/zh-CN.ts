@@ -712,6 +712,26 @@ const zhCN = {
       bannerDescription: "网络恢复后会自动重试；也可以立即手动重试。",
       retry: "重试保存",
     },
+    // #971 R6: a reconciled STALE_VERSION reply applied the server's
+    // existing answer. "读到服务端现有答案"与"本次编辑被接受"是两个事实，
+    // 该提示让考生能分辨两者。
+    saveReconcile: {
+      title: "已读取服务器上的答案",
+      description:
+        "已显示服务器上已保存的答案；你本次修改未被保存，可重新编辑。",
+    },
+    // #971 F-01: controlled-leave copy. Exam 出口（考试列表 / 设置 / 退出
+    // 登录 / 应用内导航）先保存并等待服务端确认再离开；放弃未确认编辑必须
+    // 由考生明确确认。浏览器关闭与硬刷新的持久恢复归 #827。
+    leaveGuard: {
+      savingTitle: "正在保存修改",
+      savingDescription: "正在保存尚未确认的修改，保存完成后才会离开本页。",
+      confirmTitle: "有修改未保存成功",
+      confirmDescription:
+        "有 {{count}} 道题的修改未获服务器确认。离开本页将丢失这些修改。",
+      stayButton: "留在本页",
+      abandonButton: "放弃修改并离开",
+    },
     answer: {
       panelTitle: "作答区",
       unsupportedType: "不支持的题目类型: {{type}}",
