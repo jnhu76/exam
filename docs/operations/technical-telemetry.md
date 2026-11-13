@@ -11,16 +11,19 @@
 
 ## 1. What the profile is
 
-`deploy/observability/docker-compose.observability.yml` adds an isolated
-`observability` Compose profile to the production stack:
+Two opt-in overlays add observability services to the production stack
+under Compose profiles. The verified overlay carries the VALIDATED
+traces/metrics leg; the logs overlay carries the file-log ingestion leg,
+which is **PENDING VERIFICATION** and disabled by default (§2.1):
 
-| Service | Image (pinned, W6-validated) | Role |
-| --- | --- | --- |
-| otelcol | `otel/opentelemetry-collector-contrib:0.165.0` | OTLP receiver (HTTP :4318, internal only), scrubbed pipeline, batch + bounded queues |
-| tempo | `grafana/tempo:3.1.1` | Trace backend (local filesystem storage) |
-| loki | `grafana/loki:3.7.9` | Log backend (native OTLP ingestion) |
-| prometheus | `prom/prometheus:v3.16.0` | Metric backend (scrapes the collector's :8889 exposition) |
-| grafana | `grafana/grafana:13.3.1` | Visualization (datasources auto-provisioned: Tempo/Prometheus/Loki) |
+| Service | Image (pinned, W6-validated) | Role | Overlay |
+| --- | --- | --- | --- |
+| otelcol | `otel/opentelemetry-collector-contrib:0.165.0` | OTLP receiver (HTTP :4318, internal only) for traces/metrics, batch + bounded queues | `docker-compose.observability.yml` (`observability`, validated) |
+| tempo | `grafana/tempo:3.1.1` | Trace backend (local filesystem storage) | same |
+| loki | `grafana/loki:3.7.9` | Log backend (native OTLP ingestion; idle until the logs leg is enabled) | same |
+| prometheus | `prom/prometheus:v3.16.0` | Metric backend (scrapes the collector's :8889 exposition) | same |
+| grafana | `grafana/grafana:13.3.1` | Visualization (datasources auto-provisioned: Tempo/Prometheus/Loki) | same |
+| otelcol-logs | `otel/opentelemetry-collector-contrib:0.165.0` | **File-log ingestion leg — PENDING VERIFICATION** | `docker-compose.observability.logs.yml` (`observability-logs`, §2.1) |
 
 **Port bindings.** Everything stays internal to `exam-net` EXCEPT
 Grafana, which publishes exactly one host port, loopback-bound by
@@ -30,12 +33,24 @@ Technical telemetry is never exposed through an Exam-managed API
 and provide an authenticated ingress — the host operator owns that
 decision and its exposure.
 
-**Log ingestion is single-path** (ADR-028 D3): the app keeps writing
-pino JSON to stdout; Docker's json-file driver serializes it and the
-collector's filelog receiver tails `/var/lib/docker/containers` on the
-host, selecting ONLY the app container via the `tag=exam-app` log-opt
-(the compose file stamps it). The same stdout stays consumable via
-`docker compose logs app` — the stdout operations contract is unchanged.
+**Log ingestion is single-path and GATED** (ADR-028 D3, #979 P1): the
+only remote log path for this deployment mode is stdout collection —
+pino JSON → Docker json-file driver → collector `file_log` receiver →
+Loki. After the #979 P1 split this leg ships in its own overlay
+(`docker-compose.observability.logs.yml`, `observability-logs` profile,
+config `otelcol.logs.yaml`) with STATUS **PENDING VERIFICATION**: it
+reads the Docker daemon's json-file storage directly, which Docker does
+not support for external tools, and it could not be host-verified in the
+W6 lab — so it MUST stay disabled until the §2.1 acceptance criteria
+pass on a real Linux Docker host. The verified overlay mounts no host
+Docker state. Selection is deployment-distinguishable: the app container
+stamps its compose container name (`tag: "{{.Name}}"`, e.g.
+`/exam-prod-app-1`) into every json-file line, and the logs collector
+keeps only entries whose tag matches `OBS_LOGS_TAG_PATTERN` (injected by
+the logs overlay, default `^/?exam-prod-app-1$`), so other containers
+and a second same-host Exam deployment are not ingested. The same stdout
+stays consumable via `docker compose logs app` — the stdout operations
+contract is unchanged.
 
 **Field-cleaning split.** The application owns redaction BEFORE export
 (`logRedaction.ts` secrets/URL policy, `UrlScrubSpanProcessor`, closed
@@ -80,7 +95,8 @@ docker compose --env-file .env.production logs otelcol | tail   # "Everything is
 curl -s http://localhost:${OBS_GRAFANA_PORT:-13000}/api/health   # Grafana up
 # In Grafana: Explore → Tempo (service.name=exam-api), Prometheus
 # (exam_loop_cycle_count_total — the collector's Prometheus exporter adds
-# the _total suffix to counters), Loki ({service_name="exam-app"}).
+# the _total suffix to counters). Loki has data ONLY with the logs leg
+# enabled (§2.1, PENDING VERIFICATION): then {service_name="exam-app"}.
 ```
 
 **Config validation** (no start required, target version):
@@ -90,6 +106,73 @@ docker run --rm -v "$(pwd)/deploy/observability/otelcol.yaml:/etc/otelcol/config
   otel/opentelemetry-collector-contrib:0.165.0 validate --config=/etc/otelcol/config.yaml
 # exit 0 = valid; a bad config prints the failing component and exits 1
 ```
+
+### 2.1 File-log ingestion leg — PENDING VERIFICATION (#979 P1)
+
+> **Status:** this leg is NOT verified end-to-end and MUST stay
+> disabled until the acceptance criteria below pass on a real Linux
+> Docker host. It was split out of the validated collector (#979 P1)
+> because it reads the Docker daemon's json-file storage
+> (`/var/lib/docker/containers`) directly — Docker does not support
+> external tools reading that storage (directory layout, file naming,
+> and root-only permissions are not a stable interface across Docker
+> versions) — and the W6 WSL2 lab host could not read it at all. The
+> validated traces/metrics acceptance in §2 above is unaffected.
+
+**Prerequisites (all required before enabling):**
+
+- A real Linux Docker host whose daemon data directory is readable
+  root-side (not a WSL2/Docker Desktop lab where it is not), running
+  the production Docker version.
+- The verified stack is already up per §2 (steps 0–2) and healthy.
+- Exactly one Exam deployment on the host uses the default pattern;
+  a second Exam deployment MUST set its own `OBS_LOGS_TAG_PATTERN`
+  (e.g. `^/?<its-project>-app-1$`) in its `.env.production` before
+  enabling its logs overlay, or it will ingest nothing (and its
+  neighbor with the default will not ingest it either).
+
+**Enable** (both profiles explicit; the file alone changes nothing —
+the service is behind the `observability-logs` profile):
+
+```bash
+docker compose --env-file .env.production \
+  -f docker-compose.yml \
+  -f deploy/observability/docker-compose.observability.yml \
+  -f deploy/observability/docker-compose.observability.logs.yml \
+  --profile observability --profile observability-logs up -d
+```
+
+**Config validation** (no start required; the deployment default
+`^/?exam-prod-app-1$` is owned by the logs overlay. The collector-side
+config itself has a match-nothing env fallback `^$`, so a bare run
+without the env validates but collects nothing — never permissive):
+
+```bash
+docker run --rm -e OBS_LOGS_TAG_PATTERN='^/?exam-prod-app-1$' \
+  -v "$(pwd)/deploy/observability/otelcol.logs.yaml:/etc/otelcol/config.yaml:ro" \
+  otel/opentelemetry-collector-contrib:0.165.0 validate --config=/etc/otelcol/config.yaml
+```
+
+**Acceptance criteria (record the evidence in the deployment's ops
+notes; all must pass before the leg is considered enabled):**
+
+1. **Exactly-once ingestion.** Every line the Exam app writes to stdout
+   appears in Loki exactly once, over a window that includes container
+   restart and log rotation (json-file `max-size: 50m`, `max-file: 5`).
+   The exporter's bounded queue + retry may delay delivery; it must not
+   duplicate or silently drop lines short of the documented overflow.
+2. **No foreign containers.** With unrelated containers running on the
+   same host (differently tagged or untagged), none of their entries
+   appear in Loki — the filter drops every non-matching tag, and a
+   missing `attrs.tag` never matches (fail-closed).
+3. **Same-host deployment isolation.** With a second Exam deployment
+   (different compose project) running on the same host, its logs do
+   not appear in this deployment's Loki and vice versa — per-deployment
+   `OBS_LOGS_TAG_PATTERN` values keep the two collectors disjoint.
+4. **Docker direct-read caveat acknowledged.** The ops notes record
+   that the leg reads json-file storage against Docker's
+   recommendation for external tools, the Docker version it was
+   verified on, and Docker upgrades as a re-verification trigger.
 
 **Startup guard.** `TELEMETRY_EXPORTER=otlp` without
 `TELEMETRY_OTLP_ENDPOINT` (or an endpoint left over after switching the
@@ -113,6 +196,11 @@ docker compose --env-file .env.production \
   --profile observability down
 ```
 
+Disabling only the file-log ingestion leg (§2.1, PENDING VERIFICATION)
+is equally independent: bring the stack down WITHOUT the
+`observability-logs` profile (recreate with §2's command) — the
+`otelcol-logs` container stops and nothing app-facing changes.
+
 No business schema or data is touched by either step. A bare
 `docker compose --env-file .env.production -f docker-compose.yml up -d`
 (base file only) never starts the profile.
@@ -134,6 +222,11 @@ No business schema or data is touched by either step. A bare
 - Readiness/alerting authority stays with `probeApplicationReadiness`
   and the `operability.*` stdout events — stopping every observability
   container does not change `/api/ready` or alert transitions.
+- **File-log leg (PENDING VERIFICATION, §2.1)**: the logs pipeline's
+  exporter queue + retry bounds match the validated semantics above,
+  but the host-read path itself (json-file tailing under rotation,
+  root-only permissions, Docker upgrades) is NOT validated — that is
+  precisely why the leg is gated behind its own overlay.
 
 ## 5. Retention, storage, and resources
 
@@ -152,10 +245,11 @@ policy. Disk sizing: telemetry volume is dominated by traces; with the
 default full sampling it is on the order of the request rate × a few
 KB. Bound first via `TELEMETRY_SAMPLE_RATIO` if disk-constrained.
 
-Resource bounds: the collector is capped at 768 MiB
-(`memory_limiter` 500 MiB hard limit + spike margin; compose memory
-limit 768M). Tempo/Loki/Prometheus/Grafana run with image defaults —
-profile them before raising.
+Resource bounds: each collector (otelcol, and otelcol-logs when the
+§2.1 overlay is enabled) is capped at 768 MiB (`memory_limiter` 500 MiB
+hard limit + spike margin; compose memory limit 768M).
+Tempo/Loki/Prometheus/Grafana run with image defaults — profile them
+before raising.
 
 ## 6. What is NOT here
 
@@ -179,6 +273,6 @@ profile them before raising.
 | --- | --- |
 | `telemetry.init_failed` in app stderr at boot | The guard pair: `TELEMETRY_EXPORTER=otlp` requires `TELEMETRY_OTLP_ENDPOINT` (and vice versa); also `exportIntervalMillis ≥ exportTimeoutMillis` reader bounds are code-owned |
 | No traces in Tempo | `docker logs otelcol` for exporter errors; confirm app env reached the container (`docker compose exec app printenv TELEMETRY_OTLP_ENDPOINT`) |
-| No logs in Loki | Host path `/var/lib/docker/containers` must be mounted read-only into otelcol (in the compose file); entries without `attrs.tag == "exam-app"` are dropped by design |
+| No logs in Loki | Expected with the logs leg disabled (§2.1, PENDING VERIFICATION). When the `observability-logs` overlay is enabled: host path `/var/lib/docker/containers` must be mounted read-only into `otelcol-logs` (real Linux Docker host); entries whose `attrs.tag` does not match `OBS_LOGS_TAG_PATTERN` are dropped by design — a same-host second Exam deployment must inject its own pattern |
 | No metrics in Prometheus | `http://otelcol:8889/metrics` (network-internal) should list `exam_loop_*` / `db_client_operation_duration_seconds_*`; check the `otelcol-exam-metrics` target at Prometheus `/targets` |
 | Grafana 403/locked out | `OBS_GRAFANA_ADMIN_PASSWORD` is required when the profile runs (compose fails fast without it); reset by clearing `data/observability/grafana` (loses dashboards) |

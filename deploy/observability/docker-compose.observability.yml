@@ -14,6 +14,16 @@
 # docs/operations/technical-telemetry.md for the full enable/rollback
 # runbook).
 #
+# Scope split (#979 P1): this validated overlay carries ONLY the
+# traces/metrics leg (OTLP receiver → tempo/prometheus). The file-log
+# ingestion leg (filelog receiver reading the host Docker containers dir
+# → loki) lives in a separate PENDING VERIFICATION overlay,
+# deploy/observability/docker-compose.observability.logs.yml, behind its
+# own `observability-logs` profile — it is not started by this file and
+# not enabled by default. Loki stays here: the Grafana datasource
+# provisions a Loki target unconditionally, and an idle Loki starts
+# receiving the moment the logs overlay is enabled.
+#
 # Images are pinned exactly (the version group W6 validated):
 #   otel/opentelemetry-collector-contrib:0.165.0
 #   grafana/loki:3.7.9 · grafana/tempo:3.1.1
@@ -24,34 +34,41 @@
 # (OBS_GRAFANA_HOST_BIND / OBS_GRAFANA_PORT). Technical telemetry is NOT
 # exposed through any Exam-managed API (ADR-018 D6).
 #
-# OWNERSHIP: this file owns only the observability additions and the app's
-# log-ingestion driver (the single remote log path for this deployment
-# mode — stdout collection, ADR-028 D3). The base file remains the single
-# authority for the app/web/db topology.
+# OWNERSHIP: this file owns only the observability additions and the
+# app's json-file log-driver configuration (rotation bounds + container
+# name tagging — see the app.logging block). The remote log INGESTION
+# leg is owned by docker-compose.observability.logs.yml (PENDING
+# VERIFICATION). The base file remains the single authority for the
+# app/web/db topology.
 services:
   app:
     logging:
-      # Single remote log ingestion path (stdout → collector file_log).
-      # The `tag` log-opt stamps every json-file line with attrs.tag so the
-      # collector's filter selects ONLY this container from the host's
-      # docker containers directory; max-size/max-file bound the host-side
-      # file. `docker compose logs app` keeps working (stdout contract).
+      # json-file with rotation bounds (host-side disk protection for the
+      # single remote-log-capable deployment mode, ADR-028 D3: stdout
+      # collection). The `tag` log-opt stamps every json-file line with
+      # attrs.tag = the compose container name (`{{.Name}}`, project
+      # prefix included, e.g. `/exam-prod-app-1`). It is stamped
+      # unconditionally — it costs nothing without the collector and lets
+      # the PENDING VERIFICATION logs overlay
+      # (docker-compose.observability.logs.yml) select this deployment by
+      # container name without ever recreating the app. `docker compose
+      # logs app` keeps working (stdout contract).
       driver: json-file
       options:
         max-size: "50m"
         max-file: "5"
-        tag: "exam-app"
+        tag: "{{.Name}}"
 
   otelcol:
     profiles: ["observability"]
     image: otel/opentelemetry-collector-contrib:0.165.0
     command: ["--config=/etc/otelcol/config.yaml"]
-    # Read-only host docker containers dir (json-file logs). Root group is
-    # required: those directories are root-only on a default Docker host.
-    user: "0:0"
+    # Traces/metrics leg only (validated in W6): OTLP receiver →
+    # tempo/prometheus. No host Docker state is mounted here; the
+    # file-log leg with its /var/lib/docker/containers mount lives in
+    # docker-compose.observability.logs.yml (PENDING VERIFICATION).
     volumes:
       - ./deploy/observability/otelcol.yaml:/etc/otelcol/config.yaml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     healthcheck:
       test:
         [

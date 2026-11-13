@@ -1,0 +1,155 @@
+# OpenTelemetry Collector — Exam FILE-LOG ingestion leg (#964 W6).
+#
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ STATUS: PENDING VERIFICATION.                                       │
+# │                                                                     │
+# │ This leg was split out of the validated traces/metrics collector    │
+# │ (#979 P1) because its host contract could NOT be verified on the    │
+# │ W6 dev host: it reads the Docker daemon's json-file storage         │
+# │ (/var/lib/docker/containers, root-only) directly, which is          │
+# │ unsupported by Docker for external tools (format, naming and        │
+# │ permissions may change between Docker versions) and was unreadable  │
+# │ in the WSL2 lab. Enable it only after the acceptance criteria in    │
+# │ docs/operations/technical-telemetry.md §2.1 pass on the real Linux  │
+# │ Docker host. Until then the deployment's remote log ingestion is    │
+# │ OFF (ADR-028 D3 keeps stdout as the only operational log contract). │
+# └─────────────────────────────────────────────────────────────────────┘
+#
+# Validated with: otel/opentelemetry-collector-contrib:0.165.0
+#   `docker run -e OBS_LOGS_TAG_PATTERN=<pattern> ... validate --config=...`
+#   (see docs/operations/technical-telemetry.md §2). The pattern env is
+#   normally injected by the compose overlay
+#   (docker-compose.observability.logs.yml, single default authority).
+#   INVARIANT (fail-closed): when the env is absent (a bare `docker run`
+#   bypassing compose), the collector falls back to the match-nothing
+#   pattern `[^[:space:][:^space:]]` — 0.165.0 resolves an unset ${env:}
+#   to the empty string (warn "Configuration references unset environment
+#   variable"), and an empty regex would match EVERY container on the
+#   host; `[^[:space:][:^space:]]` negates the union of whitespace and
+#   non-whitespace characters, so it never matches anything and the bare
+#   run collects nothing. The odd spelling is forced: confmap rejects
+#   `$` inside ${env:VAR:-default} values (ruling out `$`-anchored
+#   never-match patterns) and OTTL quoted strings reject `\s`-style
+#   escapes (ruling out `[^\s\S]`). Never weaken this fallback to a real
+#   default or an empty-string-accepting pattern.
+#
+# Signal flow (logs only):
+#   app (pino JSON on stdout) ──json-file driver──▶ host containers dir
+#     ──file_log/app──▶ filter/deployment ──▶ resource/examapp
+#     ──▶ memory_limiter ──▶ batch ──▶ otlp_http/logs ──▶ loki:3100/otlp
+#
+# Traces and metrics never touch this collector; they live in the
+# validated otelcol service (docker-compose.observability.yml +
+# otelcol.yaml). One remote log ingestion path per deployment mode
+# (ADR-028 D3): the app keeps writing pino JSON to stdout; Docker's
+# json-file driver serializes it as {"log","stream","time","attrs"} which
+# the container operator unwraps, then the json parser lifts the pino
+# fields so they stay queryable in Loki.
+#
+# Component names are the NON-deprecated forms (`file_log`), matching
+# otelcol.yaml.
+#
+# Field-cleaning split (ADR-028 D4): the APPLICATION owns secret/URL/SQL
+# redaction before export (logRedaction.ts, serializers); this collector
+# only adds deployment-level service identity. It intentionally does NOT
+# parse or rewrite bodies, and never gains body-rewriting operators.
+#
+# Bound contract (same as otelcol.yaml): the exporter queue and retries
+# are explicitly bounded — an unreachable Loki degrades to bounded
+# in-memory queuing then data loss, never to blocking or crashing.
+
+receivers:
+  # Tails the HOST Docker daemon's json-file storage read-only. Every
+  # container's file on the host may be opened; selection to Exam's own
+  # containers happens ONLY in filter/deployment below. The app container
+  # is told to stamp its compose container name (project prefix included,
+  # e.g. `/exam-prod-app-1`) via the `tag` log-opt in the observability
+  # overlay; Docker serializes it as attrs.tag.
+  file_log/app:
+    include: [/var/lib/docker/containers/*/*-json.log]
+    start_at: end
+    poll_interval: 1s
+    # Keep the source path as a provenance attribute.
+    include_file_path: true
+    operators:
+      - type: container
+        format: docker
+        # 0.165.0's add_metadata_from_filepath parses ONLY Kubernetes pod
+        # paths (/var/log/pods/<ns>_<pod>_<uid>/<container>/<restart>.log).
+        # With its default `true`, every Docker json-file entry logs
+        # "failed to detect a valid log path" (W6.R F2). Deployment
+        # identity comes from attrs.tag, not the file path (the path
+        # carries only the container ID).
+        add_metadata_from_filepath: false
+      - type: json_parser
+        parse_from: body
+
+processors:
+  # Deployment-distinguishable selection (filter processors are DROP
+  # rules): drop every entry whose tag does not match the configured
+  # pattern. OBS_LOGS_TAG_PATTERN is injected by the logs overlay with the
+  # deployment default `^/?exam-prod-app-1$` (compose project `exam-prod`
+  # from the base file; `{{.Name}}` yields the leading slash). A second
+  # Exam deployment on the same host MUST inject its own pattern
+  # (OBS_LOGS_TAG_PATTERN=^/?<its-project>-app-1$) — with the shared
+  # default it would see no exam-prod-app-1 container and ingest nothing,
+  # which keeps same-host deployments mutually isolated. Untagged or
+  # missing-tag entries never match and are dropped (fail-closed); the
+  # never-match env fallback keeps a bare run without compose inert (see
+  # the file header INVARIANT).
+  filter/deployment:
+    logs:
+      log_record:
+        - 'not IsMatch(attributes["attrs"]["tag"], "${env:OBS_LOGS_TAG_PATTERN:-[^[:space:][:^space:]]}")'
+  # Deployment-level service identity for the file_log pipeline: the app's
+  # stdout lines carry no OTel resource, so the collector stamps
+  # service.name — Loki's default OTLP mapping turns it into the
+  # service_name index label ({service_name="exam-app"}). This is the ONLY
+  # field the collector adds; secret/URL/SQL redaction stays in the app.
+  # Cross-deployment distinction is enforced by ingestion scope (the
+  # filter above), not by labels — each deployment runs its own Loki.
+  resource/examapp:
+    attributes:
+      - key: service.name
+        value: exam-app
+        action: upsert
+  # Bound the collector's own memory FIRST in every pipeline (upstream
+  # convention: memory_limiter precedes batch). ~500 MiB hard limit with a
+  # 100 MiB spike margin for the single-host LAN profile.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 500
+    spike_limit_mib: 100
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+
+exporters:
+  # Loki native OTLP ingestion (logs). Endpoint base; Loki serves /otlp/v1/*.
+  otlp_http/logs:
+    endpoint: http://loki:3100/otlp
+    sending_queue:
+      queue_size: 2000
+      num_consumers: 4
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 60s
+
+service:
+  extensions:
+    - health_check
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    logs:
+      receivers: [file_log/app]
+      processors: [filter/deployment, resource/examapp, memory_limiter, batch]
+      exporters: [otlp_http/logs]
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133

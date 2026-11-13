@@ -3,21 +3,27 @@
 #   `otelcol validate --config=otelcol.yaml` (see
 #   docs/operations/technical-telemetry.md).
 #
-# Signal flow:
+# Signal flow (traces and metrics ONLY — #979 P1 split):
 #   app (TELEMETRY_EXPORTER=otlp) ──OTLP/HTTP 4318──▶ otlp receiver
 #   traces  → memory_limiter → batch → otlp_http → tempo:4318
 #   metrics → memory_limiter → batch → prometheus (exposition :8889, scraped
 #             by the prometheus service — no remote-write dependency)
-#   logs    → file_log(app stdout json) → batch → otlp_http → loki:3100/otlp
 #
-# Component names are the NON-deprecated forms (`file_log`, `otlp_http`):
-# 0.165.0 still accepts the `filelog` / `otlphttp` aliases but logs a
-# deprecation warning for each; a future upgrade may remove the aliases.
+# The file-log ingestion leg (filelog receiver on the host Docker
+# containers dir → loki) is NOT part of this collector: it lives in
+# otelcol.logs.yaml behind the PENDING VERIFICATION overlay
+# docker-compose.observability.logs.yml (`observability-logs` profile).
+# Loki itself stays in the compose overlay (idle until that overlay is
+# enabled).
+#
+# Component names are the NON-deprecated forms (`otlp_http`): 0.165.0
+# still accepts the `otlphttp` alias but logs a deprecation warning; a
+# future upgrade may remove the aliases.
 #
 # Field-cleaning split (ADR-028 D4): the APPLICATION owns secret/URL/SQL
 # redaction before export (logRedaction.ts, UrlScrubSpanProcessor, closed
-# metric label sets); the collector below only adds deployment-level
-# service identity. It intentionally does NOT parse or rewrite bodies.
+# metric label sets); this collector only carries app-exported OTLP. It
+# intentionally does NOT parse or rewrite bodies.
 #
 # Bound contract: every exporter queue and retry is explicitly bounded —
 # an unreachable backend degrades to bounded in-memory queuing then data
@@ -31,53 +37,8 @@ receivers:
       # exports OTLP/HTTP).
       http:
         endpoint: 0.0.0.0:4318
-  # The ONE remote log ingestion path for this deployment mode (ADR-028 D3:
-  # stdout collection, not application-side OTLP logs). The app keeps
-  # writing pino JSON to stdout; Docker's json-file driver serializes it as
-  # {"log","stream","time"} which the container operator unwraps, then the
-  # json parser lifts the pino fields so they stay queryable in Loki.
-  # Selection is by the `tag` log-opt the compose file stamps on the app
-  # container only (see the filter/examapp processor) — other host
-  # containers' files may be tailed read-only but are dropped here.
-  # Content redaction already happened in the app (REDACT_CONFIG +
-  # serializers); this pipeline never gains body-rewriting operators.
-  file_log/app:
-    include: [/var/lib/docker/containers/*/*-json.log]
-    start_at: end
-    poll_interval: 1s
-    # Keep the source path as a provenance attribute.
-    include_file_path: true
-    operators:
-      - type: container
-        format: docker
-        # 0.165.0's add_metadata_from_filepath parses ONLY Kubernetes pod
-        # paths (/var/log/pods/<ns>_<pod>_<uid>/<container>/<restart>.log).
-        # With its default `true`, every Docker json-file entry logs
-        # "failed to detect a valid log path" (W6.R F2). Deployment
-        # identity comes from resource/examapp, not the file path.
-        add_metadata_from_filepath: false
-      - type: json_parser
-        parse_from: body
 
 processors:
-  # Log selection by the app container's `tag` log-opt (docker json-file
-  # serializes it as attrs.tag; the container operator keeps it in
-  # attributes.attrs). Filter-processor conditions are DROP rules: keep
-  # only entries whose tag IS exam-app by dropping everything else.
-  filter/examapp:
-    logs:
-      log_record:
-        - 'attributes["attrs"]["tag"] != "exam-app"'
-  # Deployment-level service identity for the file_log pipeline: the app's
-  # stdout lines carry no OTel resource, so the collector stamps
-  # service.name — Loki's default OTLP mapping turns it into the
-  # service_name index label ({service_name="exam-app"}). This is the ONLY
-  # field the collector adds; secret/URL/SQL redaction stays in the app.
-  resource/examapp:
-    attributes:
-      - key: service.name
-        value: exam-app
-        action: upsert
   # Bound the collector's own memory FIRST in every pipeline (upstream
   # convention: memory_limiter precedes batch). ~500 MiB hard limit with a
   # 100 MiB spike margin for the single-host LAN profile.
@@ -94,17 +55,6 @@ exporters:
   # Tempo OTLP/HTTP ingestion (traces). Tempo appends /v1/traces.
   otlp_http/traces:
     endpoint: http://tempo:4318
-    sending_queue:
-      queue_size: 2000
-      num_consumers: 4
-    retry_on_failure:
-      enabled: true
-      initial_interval: 1s
-      max_interval: 10s
-      max_elapsed_time: 60s
-  # Loki native OTLP ingestion (logs). Endpoint base; Loki serves /otlp/v1/*.
-  otlp_http/logs:
-    endpoint: http://loki:3100/otlp
     sending_queue:
       queue_size: 2000
       num_consumers: 4
@@ -134,10 +84,6 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [prometheus]
-    logs:
-      receivers: [file_log/app]
-      processors: [filter/examapp, resource/examapp, memory_limiter, batch]
-      exporters: [otlp_http/logs]
 
 extensions:
   health_check:
