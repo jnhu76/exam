@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/shared/PageContainer";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -502,6 +503,7 @@ export function AuditLogPage() {
             { role: "action-label", key: "action" },
             { role: "short-id", key: "target" },
             { role: "short-id", key: "detail" },
+            { role: "actions", key: "row-expand" },
           ]}
         >
           <TableHeader>
@@ -521,12 +523,15 @@ export function AuditLogPage() {
               <DataTableHead role="short-id">
                 {t("admin.audit.columns.detail")}
               </DataTableHead>
+              <DataTableHead role="actions">
+                {t("common.rowActions")}
+              </DataTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 && (
               <TableRow>
-                <DataTableSpanCell colSpan={5} className="h-32">
+                <DataTableSpanCell colSpan={6} className="h-32">
                   <div className="flex flex-col items-center gap-2 text-center">
                     <div className="text-muted-foreground" aria-hidden="true">
                       <AppIcon icon={ScrollText} size="state" />
@@ -542,13 +547,7 @@ export function AuditLogPage() {
               </TableRow>
             )}
             {items.map((item) => (
-              <TableRow
-                key={item.id}
-                className="cursor-pointer"
-                onClick={() =>
-                  setExpandedId(expandedId === item.id ? null : item.id)
-                }
-              >
+              <TableRow key={item.id}>
                 <DataTableCell role="date" className="type-secondary">
                   {formatDateTime(item.createdAt)}
                 </DataTableCell>
@@ -590,6 +589,38 @@ export function AuditLogPage() {
                     value={item.targetId}
                   />
                 </DataTableCell>
+                <DataTableCell role="actions">
+                  {/* Real expansion control (keyboard/AT reachable), bound to
+                      the detail region below via aria-expanded/aria-controls.
+                      The mouse-only row onClick it replaces could not focus,
+                      collapsed nothing, and announced nothing. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-expanded={expandedId === item.id}
+                    aria-controls={`audit-log-detail-${item.id}`}
+                    aria-label={t("admin.audit.detailToggle", {
+                      action: isAuditAction(item.action)
+                        ? t(`admin.audit.filterActions.${item.action}`)
+                        : item.action,
+                      target: item.targetId,
+                    })}
+                    onClick={() =>
+                      setExpandedId(expandedId === item.id ? null : item.id)
+                    }
+                  >
+                    <AppIcon
+                      icon={ChevronDown}
+                      size="inline"
+                      className={
+                        expandedId === item.id
+                          ? "rotate-180 transition-transform"
+                          : "transition-transform"
+                      }
+                    />
+                  </Button>
+                </DataTableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -600,7 +631,12 @@ export function AuditLogPage() {
           const item = items.find((i) => i.id === expandedId);
           if (!item) return null;
           return (
-            <div className="rounded-md border p-4">
+            <div
+              id={`audit-log-detail-${item.id}`}
+              role="region"
+              aria-label={t("admin.audit.detailRegion")}
+              className="rounded-md border p-4"
+            >
               <h3 className="mb-2 text-sm font-medium">
                 {t("admin.audit.columns.detail")}
               </h3>
