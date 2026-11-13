@@ -6,10 +6,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRef } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TakeExamPage } from "./TakeExamPage";
 import { ExamLayout } from "@/components/layout/ExamLayout";
+import { useGuardedExit } from "@/components/layout/leaveGuard";
 import type {
   CandidateTakeSnapshot,
   SaveAnswerResponseDTO,
@@ -96,6 +98,35 @@ function LocationProbe() {
   return <span data-testid="current-path">{location.pathname}</span>;
 }
 
+/**
+ * Records every distinct router location. `location.key` changes on each
+ * push, so two navigations to the SAME path are distinguishable (unlike a
+ * pathname comparison).
+ */
+function PathHistoryProbe({ log }: { log: string[] }) {
+  const location = useLocation();
+  const lastKey = useRef<string | null>(null);
+  if (lastKey.current !== location.key) {
+    lastKey.current = location.key;
+    log.push(location.pathname);
+  }
+  return null;
+}
+
+/**
+ * A SECOND guarded exit inside the same shell provider, aimed at a
+ * different destination. Concurrent-intent arbitration is observable because
+ * the two exits would land on different pages.
+ */
+function GuardedExitProbe() {
+  const exit = useGuardedExit();
+  return (
+    <button type="button" onClick={() => void exit("/exam/settings")}>
+      去设置
+    </button>
+  );
+}
+
 function NavProbe({
   register,
 }: {
@@ -105,7 +136,7 @@ function NavProbe({
   return null;
 }
 
-function renderShell() {
+function renderShell({ pathLog }: { pathLog?: string[] } = {}) {
   const navigateRef: { current: ((to: string) => void) | null } = {
     current: null,
   };
@@ -115,6 +146,7 @@ function renderShell() {
       children: (
         <>
           <LocationProbe />
+          {pathLog ? <PathHistoryProbe log={pathLog} /> : null}
           <NavProbe register={(n) => (navigateRef.current = n)} />
           <Routes>
             <Route path="/login" element={<span>登录页</span>} />
@@ -123,7 +155,12 @@ function renderShell() {
               <Route path="settings" element={<span>设置页</span>} />
               <Route
                 path=":examId/take/:attemptId"
-                element={<TakeExamPage />}
+                element={
+                  <>
+                    <TakeExamPage />
+                    <GuardedExitProbe />
+                  </>
+                }
               />
               <Route path=":attemptId/result" element={<span>结果页</span>} />
             </Route>
@@ -273,7 +310,7 @@ describe("controlled leave-page save (#971 F-01)", () => {
     expect(input2).toHaveValue("答案甲");
   });
 
-  it("duplicate exit clicks start ONE drain and navigate once", async () => {
+  it("only the FIRST leave intent is accepted: a second guarded exit during the save wait is rejected and never navigates", async () => {
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
         takeHandler(path);
@@ -298,12 +335,22 @@ describe("controlled leave-page save (#971 F-01)", () => {
     renderShell();
     const input = await screen.findByLabelText("第1空答案");
     fireEvent.change(input, { target: { value: "答案甲" } });
-    const exit = screen.getByRole("link", { name: "我的考试" });
-    fireEvent.click(exit);
-    fireEvent.click(exit);
 
-    expect(answerPostCalls()).toHaveLength(1);
+    // First exit: the exam-list NavLink starts the save drain and holds.
+    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    expect(screen.getByTestId("leave-saving-dialog")).toBeInTheDocument();
 
+    // Second exit (a different destination) while the wait is in progress:
+    // it must be rejected at the exit seam, NOT join the first intent.
+    // (Text query: the open modal marks sibling content aria-hidden, so a
+    // role query would not see the probe.)
+    fireEvent.click(screen.getByText("去设置"));
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-1",
+    );
+    expect(screen.queryByText("设置页")).not.toBeInTheDocument();
+
+    // One ACK releases the wait → exactly ONE exit action (the first).
     await act(async () => {
       ack.resolve(acceptedSave());
       await Promise.resolve();
@@ -311,6 +358,8 @@ describe("controlled leave-page save (#971 F-01)", () => {
       await Promise.resolve();
     });
     expect(await screen.findByText("列表页")).toBeInTheDocument();
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/exam/list");
+    expect(screen.queryByText("设置页")).not.toBeInTheDocument();
     expect(answerPostCalls()).toHaveLength(1);
   });
 
@@ -632,5 +681,272 @@ describe("controlled leave-page save (#971 F-01)", () => {
     expect(postPaths.findIndex((p) => p.includes("/answers/"))).toBeLessThan(
       postPaths.findIndex((p) => p.includes("/submit")),
     );
+  });
+
+  it("a leave request waiting when the deadline episode takes ownership never executes: the submit flow owns the next location", async () => {
+    const T0 = new Date("2026-07-04T10:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const NEAR = new Date(T0.getTime() + 3_000).toISOString();
+    let episodeInFlight = false;
+    let submitted = false;
+    const verify = deferred<CandidateTakeSnapshot>();
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        if (episodeInFlight) return verify.promise;
+        if (submitted) {
+          return snapshotWith(
+            [singleChoiceQuestion("q1", { prompt: "选择一项" })],
+            {
+              serverNow: new Date(T0.getTime() + 3_100).toISOString(),
+              isEditable: false,
+              canSave: false,
+              canSubmit: false,
+              lockReason: "deadline",
+              attemptStatus: "submitted",
+              submittedAt: new Date(T0.getTime() + 3_000).toISOString(),
+              effectiveDeadline: NEAR,
+            },
+          );
+        }
+        return snapshotWith(
+          [singleChoiceQuestion("q1", { prompt: "选择一项" })],
+          {
+            serverNow: T0.toISOString(),
+            effectiveDeadline: NEAR,
+          },
+        );
+      }
+      if (
+        typeof path === "string" &&
+        path.includes("/api/notifications/unread-count")
+      ) {
+        return { count: 0 };
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const answerAck = deferred<SaveAnswerResponseDTO>();
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return answerAck.promise;
+      }
+      if (typeof path === "string" && path.includes("/submit")) {
+        submitted = true;
+        return { ok: true, serverNow: NOW };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    const pathLog: string[] = [];
+    renderShell({ pathLog });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The candidate asks to leave FIRST; the save drain is held on its ACK.
+    fireEvent.click(screen.getByRole("radio", { name: "B" }));
+    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    expect(answerPostCalls()).toHaveLength(1);
+    expect(screen.getByTestId("leave-saving-dialog")).toBeInTheDocument();
+
+    // The deadline crosses WHILE the leave wait is still pending: the
+    // auto-submit episode declares and becomes the sole owner of the page's
+    // next location.
+    episodeInFlight = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_500);
+    });
+    expect(screen.queryByText("列表页")).not.toBeInTheDocument();
+
+    // The save ACK now releases the leave wait. The old exit must NOT run:
+    // the episode owns the navigation to the result page.
+    await act(async () => {
+      answerAck.resolve(acceptedSave());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-1",
+    );
+
+    episodeInFlight = false;
+    await act(async () => {
+      verify.resolve(
+        snapshotWith([singleChoiceQuestion("q1", { prompt: "选择一项" })], {
+          serverNow: new Date(T0.getTime() + 3_100).toISOString(),
+          isEditable: false,
+          canSave: false,
+          canSubmit: false,
+          lockReason: "deadline",
+          attemptStatus: "submitted",
+          submittedAt: new Date(T0.getTime() + 3_000).toISOString(),
+          effectiveDeadline: NEAR,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(200);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(screen.getByText("结果页")).toBeInTheDocument();
+    // The old leave exit never executed: the list was never visited.
+    expect(pathLog).not.toContain("/exam/list");
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/att-1/result",
+    );
+  });
+
+  it("a save that settles after the attempt switched never triggers the OLD attempt's exit", async () => {
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        if (path.includes("att-2")) {
+          return snapshotWith([fillBlankQuestion("q2")], {
+            attemptId: "att-2",
+            examId: "exam-2",
+          });
+        }
+        return snapshotWith([fillBlankQuestion("q1")]);
+      }
+      if (
+        typeof path === "string" &&
+        path.includes("/api/notifications/unread-count")
+      ) {
+        return { count: 0 };
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const ack = deferred<SaveAnswerResponseDTO>();
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return ack.promise;
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    const { navigate } = renderShell();
+    const input = await screen.findByLabelText("第1空答案");
+    fireEvent.change(input, { target: { value: "答案甲" } });
+    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    expect(answerPostCalls()).toHaveLength(1);
+
+    // The route moves to another attempt while the save is still held. The
+    // exit intent belonged to att-1 and must not navigate the att-2 page.
+    act(() => {
+      navigate("/exam/exam-2/take/att-2");
+    });
+    await screen.findByText("填空 q2");
+
+    await act(async () => {
+      ack.resolve(acceptedSave());
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-2/take/att-2",
+    );
+    expect(screen.queryByText("列表页")).not.toBeInTheDocument();
+    expect(screen.getByText("填空 q2")).toBeInTheDocument();
+  });
+
+  it("modified clicks on the exam-list NavLink keep native browser behavior — no guard, no preventDefault", async () => {
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return snapshotWith([fillBlankQuestion("q1")]);
+      }
+      if (
+        typeof path === "string" &&
+        path.includes("/api/notifications/unread-count")
+      ) {
+        return { count: 0 };
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    apiPost.mockResolvedValue({ ok: true, serverNow: NOW });
+
+    renderShell();
+    const input = await screen.findByLabelText("第1空答案");
+    fireEvent.change(input, { target: { value: "答案甲" } });
+    const link = screen.getByRole("link", { name: "我的考试" });
+
+    // Ctrl/Cmd/Shift/Alt click means "open elsewhere" — the shell must let
+    // the native link behavior run instead of intercepting navigation.
+    expect(fireEvent.click(link, { ctrlKey: true })).toBe(true);
+    expect(fireEvent.click(link, { metaKey: true })).toBe(true);
+    expect(fireEvent.click(link, { shiftKey: true })).toBe(true);
+    expect(fireEvent.click(link, { altKey: true })).toBe(true);
+
+    expect(answerPostCalls()).toHaveLength(0);
+    expect(screen.queryByTestId("leave-saving-dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-1",
+    );
+  });
+
+  it("a business STALE_VERSION on the leaving revision keeps the page and demands the explicit decision; the preserved edit can be retried and only an ACK releases the exit", async () => {
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        takeHandler(path);
+        return snapshotWith([fillBlankQuestion("q1")]);
+      }
+      if (
+        typeof path === "string" &&
+        path.includes("/api/notifications/unread-count")
+      ) {
+        return { count: 0 };
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    let acceptAnswers = false;
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        if (acceptAnswers) {
+          return { accepted: true, serverVersion: 2, savedAt: NOW };
+        }
+        return {
+          accepted: false,
+          reason: "STALE_VERSION",
+          message: "stale",
+          serverVersion: 1,
+          savedAt: NOW,
+          details: { serverAnswer: "服务器旧答案" },
+        };
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderShell();
+    const input = await screen.findByLabelText("第1空答案");
+    fireEvent.change(input, { target: { value: "答案甲" } });
+    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+
+    // STALE_VERSION is a business NON-acceptance: the leave wait does not
+    // release silently — the candidate must decide explicitly.
+    expect(
+      await screen.findByTestId("leave-abandon-dialog"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/exam-1/take/att-1",
+    );
+    expect(screen.queryByText("列表页")).not.toBeInTheDocument();
+    // The candidate's edit is preserved (not replaced by serverAnswer).
+    expect(screen.getByLabelText("第1空答案")).toHaveValue("答案甲");
+    expect(screen.getByText("保存失败")).toBeInTheDocument();
+
+    // Stay, retry the preserved edit, then leave: only the ACK releases.
+    clickDialogButton("leave-abandon-dialog", "留在本页");
+    await waitForGone("leave-abandon-dialog");
+    acceptAnswers = true;
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    await waitFor(() => {
+      expect(screen.getByText("已保存")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    expect(await screen.findByText("列表页")).toBeInTheDocument();
+    const [, retryBody] = answerPostCalls()[1]!;
+    expect(retryBody.answer).toBe("答案甲");
+    expect(retryBody.baseVersion).toBe(1);
   });
 });

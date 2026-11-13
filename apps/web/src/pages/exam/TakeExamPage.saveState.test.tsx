@@ -25,8 +25,9 @@ import {
  * Save-state chip (SaveIndicator) mapping over every setSaveState write path
  * in TakeExamPage:
  *   P1 initial idle / P2 route reset / P3 edit → saving / P4 canSave=false
- *   skip → error / P5 ACK → saved / P6 stale reconcile → saved /
- *   P7 server rejection → error / P8 network failure → error.
+ *   skip → error / P5 ACK → saved / P6 STALE_VERSION (this revision NOT
+ *   accepted) → error with the edit preserved / P7 server rejection → error /
+ *   P8 network failure → error.
  *
  * Established by S3.1 characterization and carried through the S3.2 idle
  * remediation. The idle copy is 已保存 (idle = no pending edit and the
@@ -272,7 +273,7 @@ describe("save-state chip mapping (real timers)", () => {
     expect(screen.getByLabelText("第1空答案")).not.toBeDisabled();
   });
 
-  it("maps a stale-version reconcile to saved and applies the server answer (P6)", async () => {
+  it("a STALE_VERSION on the current revision is a business NON-acceptance: the chip stays failed, the candidate's edit is preserved, and retry replays it against the advanced server version", async () => {
     installTakeRoute([
       buildSnapshot({}, [
         {
@@ -292,52 +293,65 @@ describe("save-state chip mapping (real timers)", () => {
         },
       ]),
     ]);
+    let call = 0;
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/answers/")) {
-        return {
-          accepted: false,
-          reason: "STALE_VERSION",
-          message: "stale",
-          serverVersion: 3,
-          savedAt: NOW,
-          details: { serverAnswer: ["a", "b"] },
-        };
+        call += 1;
+        if (call === 1) {
+          return {
+            accepted: false,
+            reason: "STALE_VERSION",
+            message: "stale",
+            serverVersion: 3,
+            savedAt: NOW,
+            details: { serverAnswer: ["a", "b"] },
+          };
+        }
+        return { accepted: true, serverVersion: 4, savedAt: NOW };
       }
       return { ok: true, serverNow: NOW };
     });
-    // #924: the rejection response carries an x-request-id header — the
-    // reconcile branch must be unchanged by its presence (no failure fact,
-    // no rejection alert; the captured id is simply unused on this path).
-    postMeta.requestId = "req-p6-stale-865";
+    postMeta.requestId = "req-stale-current-865";
 
     renderPage();
     const checkboxes = await screen.findAllByRole("checkbox");
     const user = userEvent.setup();
     await user.click(checkboxes[0]!);
 
+    // BUSINESS NON-ACCEPTANCE: only the server's accepted:true is a
+    // confirmed save. The chip must read 保存失败 and the existing failure
+    // surfaces (rejection alert + retry banner) apply.
+    await waitFor(
+      () => {
+        expect(screen.getByText("保存失败")).toBeInTheDocument();
+      },
+      { timeout: 4000 },
+    );
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+    expect(screen.getByTestId("save-rejection-alert")).toHaveTextContent(
+      "服务器上存在更新的答案版本",
+    );
+    expect(screen.getByText("部分答案尚未保存成功")).toBeInTheDocument();
+    // The candidate's pending edit is PRESERVED — the server's existing
+    // answer must not replace input that was never accepted.
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
+
+    // Retry reuses the existing orchestration: the candidate's edit replays
+    // against the serverVersion the stale reply taught this scope.
+    await user.click(screen.getByRole("button", { name: "重试保存" }));
     await waitFor(
       () => {
         expect(screen.getByText("已保存")).toBeInTheDocument();
       },
       { timeout: 4000 },
     );
-    // The reconciled server answer is applied and the chip reads saved —
-    // the server ACKed (with its own content), so 已保存 is true here.
-    const boxes = screen.getAllByRole("checkbox");
-    expect(boxes[0]).toBeChecked();
-    expect(boxes[1]).toBeChecked();
-    expect(
-      screen.queryByTestId("save-rejection-alert"),
-    ).not.toBeInTheDocument();
-    // R6: a reconciled reply is NOT "this edit was accepted". The page
-    // states that the server's existing answer is now displayed — this edit
-    // was replaced, not accepted (STALE_VERSION distinction).
-    expect(screen.getByTestId("stale-reconcile-notice")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "已显示服务器上已保存的答案；你本次修改未被保存，可重新编辑。",
-      ),
-    ).toBeInTheDocument();
+    expect(answersPostCalls()).toHaveLength(2);
+    const [, retryBody] = answersPostCalls()[1]!;
+    expect(retryBody.answer).toEqual(["a"]);
+    expect(retryBody.baseVersion).toBe(3);
+    expect(screen.getAllByRole("checkbox")[0]).toBeChecked();
   });
 
   it("a stale reply that arrives while a NEWER unconfirmed edit exists does not clobber the editor: it advances version knowledge only, and the newer save replays against the advanced server version (R6)", async () => {
@@ -421,9 +435,6 @@ describe("save-state chip mapping (real timers)", () => {
     expect(after[0]).toBeChecked();
     expect(after[1]).toBeChecked();
     expect(after[2]).not.toBeChecked();
-    expect(
-      screen.queryByTestId("stale-reconcile-notice"),
-    ).not.toBeInTheDocument();
 
     // The newer revision replays with the ADVANCED baseVersion (3 from the
     // stale reply's serverVersion), so it is accepted by the server.

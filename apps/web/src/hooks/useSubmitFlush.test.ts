@@ -217,9 +217,9 @@ describe("useSubmitFlush", () => {
     expect(flushResult.failedQuestionIds).toEqual([]);
   });
 
-  // ====== F-01 (#971): unmount drains pending saves as best-effort sends ======
-  it("on unmount, pending saves fire ONCE as best-effort drains; no zombie timer fires afterwards", async () => {
-    const save = vi.fn(async (_opts?: { bestEffort?: boolean }) => {});
+  // ====== #971 F-01: the leave guard is the ONLY controlled-exit save path ======
+  it("unmount and pagehide only cancel pending sends — they never fire a save on their own", async () => {
+    const save = vi.fn(async () => {});
     const { result, unmount } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
@@ -227,61 +227,42 @@ describe("useSubmitFlush", () => {
     });
     expect(save).not.toHaveBeenCalled();
 
-    // Unmount drains the pending edit immediately — the typed answer is not
-    // silently discarded (F-01). The drain is marked best-effort so the
-    // transport can use keepalive.
-    unmount();
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ bestEffort: true }),
-    );
-
-    // The debounce timer was cleared with the drain: advancing timers must
-    // not fire the save again (no post-unmount zombie work).
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(save).toHaveBeenCalledTimes(1);
-  });
-
-  it("pagehide drains pending saves ONCE as best-effort sends (hard-unload fallback)", async () => {
-    const save = vi.fn(async (_opts?: { bestEffort?: boolean }) => {});
-    const { result } = renderHook(() => useSubmitFlush("att-1"));
-
-    act(() => {
-      result.current.scheduleSave("q1", save);
-    });
-    expect(save).not.toHaveBeenCalled();
-
+    // A hard unload is NOT an Exam-controlled save path: the queue must not
+    // invent a send that no caller awaits or can attribute (#971 F-01 leaves
+    // hard-unload persistence to #827).
     await act(async () => {
       window.dispatchEvent(new Event("pagehide"));
       await Promise.resolve();
     });
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ bestEffort: true }),
-    );
+    expect(save).not.toHaveBeenCalled();
 
-    // The drained entry is gone: neither its debounce timer nor a second
-    // pagehide fires the save again.
+    // Unmount restores the scope-cleanup contract: pending timers are
+    // cancelled, not drained. No post-unmount zombie work either.
+    unmount();
     await act(async () => {
-      window.dispatchEvent(new Event("pagehide"));
       await vi.advanceTimersByTimeAsync(5000);
     });
-    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
   });
 
-  it("a scheduled save invoked through flush() is NOT marked best-effort", async () => {
-    const save = vi.fn(async (_opts?: { bestEffort?: boolean }) => {});
+  it("hands each save the queue's per-question revision so old responses are identifiable", async () => {
+    const save = vi.fn(async () => {});
     const { result } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
     });
+    expect(result.current.getQuestionRevision("q1")).toBe(1);
+
     await act(async () => {
       await result.current.flush();
     });
-    expect(save).toHaveBeenCalledWith(undefined);
+    expect(save).toHaveBeenCalledWith(1);
+
+    act(() => {
+      result.current.scheduleSave("q1", save);
+    });
+    expect(result.current.getQuestionRevision("q1")).toBe(2);
   });
 
   // ====== Reviewer I2: ordering-strict assertion (already covered above by callOrder; this is a complement) ======

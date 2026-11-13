@@ -256,7 +256,7 @@ describe("save-rejection requestId correlation (#924, TASK-CONTRACT §3.6)", () 
     expect(meta.requestId).toBe("req-conflict-865");
   });
 
-  it("STALE_VERSION reconciliation is unchanged by a present header id: server answer applied, zero failure telemetry", async () => {
+  it("a STALE_VERSION on the current revision is a business failure: the rejection alert carries the header id and failure telemetry records it", async () => {
     const send = installRecordingBuffer();
     installTakeRoute([
       buildSnapshot({}, [
@@ -297,28 +297,28 @@ describe("save-rejection requestId correlation (#924, TASK-CONTRACT §3.6)", () 
     const user = userEvent.setup();
     await user.click(checkboxes[0]!);
 
-    // Reconcile still wins: chip saved, server answer applied, no rejection
-    // alert — the captured id must NOT turn a reconcile into a failure fact.
+    // This revision was NOT accepted: the failure surface applies (alert +
+    // id + failed chip), and the candidate's input is preserved.
     await waitFor(
       () => {
-        expect(screen.getByText("已保存")).toBeInTheDocument();
+        expect(screen.getByText("保存失败")).toBeInTheDocument();
       },
       { timeout: 4000 },
     );
+    const alert = screen.getByTestId("save-rejection-alert");
+    expect(alert).toHaveTextContent("服务器上存在更新的答案版本");
+    expect(alert).toHaveTextContent("请求编号：req-stale-865");
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes[0]).toBeChecked();
-    expect(boxes[1]).toBeChecked();
-    expect(
-      screen.queryByTestId("save-rejection-alert"),
-    ).not.toBeInTheDocument();
+    expect(boxes[1]).not.toBeChecked();
 
     await flushAll();
-    expect(telemetryEvents(send, "answer_autosave_failed")).toHaveLength(0);
-    const success = telemetryEvents(send, "answer_autosave_success");
-    expect(success).toHaveLength(1);
-    // Case A guard applies to the reconcile success too: no requestId in
-    // success telemetry, header or not.
-    expect(success[0]!.metadata).not.toHaveProperty("requestId");
+    expect(telemetryEvents(send, "answer_autosave_success")).toHaveLength(0);
+    const failed = telemetryEvents(send, "answer_autosave_failed");
+    expect(failed).toHaveLength(1);
+    const meta = failed[0]!.metadata as Record<string, unknown>;
+    expect(meta.errorCode).toBe("STALE_VERSION");
+    expect(meta.requestId).toBe("req-stale-865");
   });
 
   it("a save 401 keeps the 4xx three-way contract and records the envelope requestId (no rejection id)", async () => {

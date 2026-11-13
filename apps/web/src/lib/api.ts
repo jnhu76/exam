@@ -426,17 +426,10 @@ export const api = {
   postWithMeta<T, TBody = unknown>(
     path: string,
     body?: TBody,
-    opts?: { keepalive?: boolean },
   ): Promise<ApiResultWithMeta<T>> {
     return requestWithMeta<T>(path, {
       method: "POST",
       body: body === undefined ? undefined : JSON.stringify(body),
-      // F-01 (#971): best-effort drains (unmount / pagehide fallback) must
-      // survive the document unloading. Deliberately opt-in, never the
-      // default: keepalive requests carry a browser-enforced 64KB body cap,
-      // and a large answer must not be converted into a permanent transport
-      // failure just because it uses the normal autosave path.
-      ...(opts?.keepalive ? { keepalive: true } : {}),
     });
   },
 };

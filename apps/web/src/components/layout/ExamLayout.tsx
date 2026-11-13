@@ -83,6 +83,19 @@ function ExamLayoutContent() {
                 cn(isActive && "font-medium text-primary")
               }
               onClick={(event) => {
+                // Modified and non-primary clicks mean "open elsewhere"
+                // (new tab/window): keep the native link behavior instead of
+                // intercepting it. Only a plain primary click is an
+                // Exam-controlled in-app exit.
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                ) {
+                  return;
+                }
                 event.preventDefault();
                 void exit(routes.exam.list);
               }}

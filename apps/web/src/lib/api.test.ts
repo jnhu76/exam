@@ -832,29 +832,6 @@ describe("api client — X-Request-Id success-path consumption (#865)", () => {
     expect(navigateMock).toHaveBeenCalledWith("/login");
   });
 
-  // F-01 (#971): best-effort drain sends (unmount/pagehide fallback) must
-  // survive the document going away — the keepalive opt reaches fetch's
-  // RequestInit. Default calls stay keepalive-free (large bodies would fail
-  // the 64KB keepalive cap).
-  it("postWithMeta forwards the keepalive opt to fetch; the default omits it", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockImplementation(async () => okResponse({ accepted: true }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await api.postWithMeta("/api/attempts/att-1/answers/q1", { answer: "x" });
-    const [, defaultInit] = fetchMock.mock.calls[0]!;
-    expect(defaultInit).not.toHaveProperty("keepalive");
-
-    await api.postWithMeta(
-      "/api/attempts/att-1/answers/q1",
-      { answer: "x" },
-      { keepalive: true },
-    );
-    const [, keepaliveInit] = fetchMock.mock.calls[1]!;
-    expect(keepaliveInit).toMatchObject({ keepalive: true });
-  });
-
   it("envelope/header requestId mismatch: envelope stays authoritative, header is captured, one bounded warn records the inconsistency (#924 Case D)", async () => {
     const mismatchResponse = () =>
       new Response(
