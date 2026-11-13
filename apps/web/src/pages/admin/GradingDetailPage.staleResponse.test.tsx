@@ -380,4 +380,72 @@ describe("GradingDetailPage stale-read ownership (F-11)", () => {
     expect(screen.getByTestId("grading-submitted-meta-q1")).toBeInTheDocument();
     expect(screen.getByTestId("grading-score-input-q2")).toBeEnabled();
   });
+
+  it("a known-success POST whose refresh GET fails reports saved-without-refresh (not unknown) and re-reads through the page entry", async () => {
+    const user = userEvent.setup();
+    // Sequential mocks: initial load, then the POST-success refresh. Only two
+    // reads may happen — a third would be the ambiguous-outcome reconciliation
+    // GET that a KNOWN-success POST must never start.
+    getMock.mockReset();
+    getMock.mockResolvedValueOnce(detail(null, null, "pending_manual"));
+    getMock.mockRejectedValueOnce(new Error("refresh failed"));
+
+    renderPage();
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+
+    // Keep an operator draft on the sibling question.
+    await user.type(screen.getByTestId("grading-score-input-q2"), "5");
+
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q1",
+      score: 8,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q1", "8");
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "评分已保存，但页面刷新失败，请重试刷新以查看最新状态。",
+      ),
+    );
+    // A known POST success must not be reclassified as an unknown outcome.
+    expect(toastErrorMock).not.toHaveBeenCalledWith(
+      "无法确认评分是否已提交，请刷新页面核对。",
+    );
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    // Exactly one POST (never retried) and exactly one post-POST read.
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledTimes(2);
+
+    // The committed question is presented as saved: locked (no duplicate POST
+    // affordance) without fabricating gradedBy/gradedAt.
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("grading-saved-pending-refresh-q1"),
+    ).toHaveTextContent("已保存 8 分（等待刷新）");
+    // The sibling draft survives the known-failure refresh.
+    expect(screen.getByTestId("grading-score-input-q2")).toHaveValue(5);
+    expect(screen.getByTestId("grading-score-input-q2")).toBeEnabled();
+
+    // The banner's re-read is the page's existing authoritative read entry.
+    getMock.mockResolvedValueOnce(detail(entry(8), null, "pending_manual"));
+    await user.click(screen.getByRole("button", { name: "重试刷新" }));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("grading-submitted-meta-q1"),
+      ).toBeInTheDocument(),
+    );
+    expect(getMock).toHaveBeenCalledTimes(3);
+    expect(
+      screen.queryByTestId("grading-saved-pending-refresh-q1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("grading-refresh-failed-banner"),
+    ).not.toBeInTheDocument();
+  });
 });
