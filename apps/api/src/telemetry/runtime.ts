@@ -43,9 +43,13 @@ interface DbTelemetryHandle {
  * - **Off** (`TELEMETRY_ENABLED` unset/empty/false — the deployment default):
  *   {@link initTelemetry} returns before ANY telemetry module is loaded.
  *   The dynamic `import("./sdkBundle.js")` never executes, so no OTel
- *   package, instrumentation, export task, or network surface exists in the
- *   process (W1.1 measured the Off state: zero spans, zero connections to
- *   the collector port, unmodified exit).
+ *   SDK/instrumentation package, export task, or network surface exists in
+ *   the process (W1.1 measured the Off state: zero spans, zero connections to
+ *   the collector port, unmodified exit). Since W3, the business operation
+ *   spans (businessOperationSpan.ts) statically import the API-only facade
+ *   `@opentelemetry/api` — already an apps/api dependency since W1 — which is
+ *   inert without a registered provider: ProxyTracer → NonRecordingSpans, no
+ *   task, no network. The SDK bundle itself stays dynamic-import-only.
  * - **On**: the SDK is assembled from granular OTel packages with explicit
  *   per-signal configuration (sdkBundle.ts startTracing — no auto-configure
  *   facade), and every signal's exporter env is additionally pinned to

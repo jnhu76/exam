@@ -20,6 +20,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverSource = readFileSync(join(__dirname, "../server.ts"), "utf8");
 const runtimeSource = readFileSync(join(__dirname, "./runtime.ts"), "utf8");
 const bundleSource = readFileSync(join(__dirname, "./sdkBundle.ts"), "utf8");
+const businessSpanSource = readFileSync(
+  join(__dirname, "./businessOperationSpan.ts"),
+  "utf8",
+);
+
+/**
+ * The production files allowed to reference the business span helper (the
+ * wired critical-operation boundaries, #964 W3). Any NEW span-creation site
+ * must extend this list — and the vocabulary — deliberately, not silently.
+ */
+const BUSINESS_SPAN_CALLER_FILES = [
+  "../routes/attempts.candidate.ts",
+  "../routes/attempts.admin.ts",
+  "../routes/gradingQueue.ts",
+  "../plugins/deadlineScanner.ts",
+];
 
 describe("server.ts telemetry wiring", () => {
   it("initializes telemetry before the Fastify instance is constructed", () => {
@@ -116,8 +132,8 @@ describe("telemetry runtime construction contract", () => {
   it("loads the DB telemetry plugin only inside the On-path SDK start, before fastify exists", () => {
     // #964 W2: the plugin installs a driver prototype patch (reversible
     // since #974) — the Off deployment must never even import it. The only
-    // reference is the dynamic import inside startSdk (after the granular
-    // SDK start — bundle.startTracing — before the fastify plugin is
+    // reference is the dynamic import inside startSdk (after the SDK is up —
+    // the granular `bundle.startTracing(` — before the fastify plugin is
     // built), and its seam registration must sit in the same On-path block.
     const dynamicImportIndex = runtimeSource.indexOf(
       'await import("@exam/otel-drizzle-postgresjs")',
@@ -147,5 +163,41 @@ describe("telemetry runtime construction contract", () => {
     expect(seamClearIndex).toBeGreaterThan(-1);
     expect(disableIndex).toBeLessThan(flushIndex);
     expect(seamClearIndex).toBeLessThan(flushIndex);
+  });
+});
+
+describe("business operation span wiring (#964 W3)", () => {
+  it("creates spans only through the single helper — no second span-creation site", () => {
+    // The only startActiveSpan/startSpan call sites in production src are the
+    // business helper (below) and the W1 sdkBundle/W2 plugin internals. Route
+    // code must never create spans directly — it wires the helper at the
+    // existing boundaries.
+    expect(businessSpanSource).toContain("tracer.startActiveSpan(");
+    expect(businessSpanSource).not.toContain('from "./sdkBundle.js"');
+    expect(businessSpanSource).not.toContain(
+      'import("@exam/otel-drizzle-postgresjs")',
+    );
+  });
+
+  it("wires the critical operations at the existing HTTP/background boundaries", () => {
+    for (const caller of BUSINESS_SPAN_CALLER_FILES) {
+      const source = readFileSync(join(__dirname, caller), "utf8");
+      expect(
+        source.includes("withBusinessOperationSpan("),
+        `${caller} must wire business spans through the shared helper`,
+      ).toBe(true);
+      expect(
+        source.includes("startActiveSpan("),
+        `${caller} must not create spans directly`,
+      ).toBe(false);
+    }
+  });
+
+  it("keeps the API-facade import contained to the business span helper", () => {
+    // Off-state module-graph contract (businessOperationSpan.ts header): the
+    // API-only @opentelemetry/api facade is imported by exactly ONE
+    // production module consumed by routes; runtime.ts and the routes never
+    // import it statically.
+    expect(runtimeSource).not.toMatch(/from ["']@opentelemetry\/api["']/);
   });
 });

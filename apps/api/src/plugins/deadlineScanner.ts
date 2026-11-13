@@ -26,6 +26,16 @@ import {
   createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { withBusinessOperationSpan } from "../telemetry/businessOperationSpan.js";
+import {
+  ATTR_OP_ATTEMPT_ID,
+  ATTR_OP_OUTCOME,
+  ATTR_OP_RESULT,
+  AUTO_SUBMIT_RESULT_SKIPPED,
+  AUTO_SUBMIT_RESULT_SUBMITTED,
+  OUTCOME_NO_OP,
+  SPAN_ATTEMPT_DEADLINE_AUTO_SUBMIT,
+} from "../telemetry/businessOperationVocabulary.js";
 
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
 
@@ -189,6 +199,13 @@ function createSystemContext(organizationId: string): RequestContext {
  * interruption terminalization (`terminalized.occurredAt`).
  *
  * @returns true iff the attempt was submitted+graded by this call.
+ *
+ * #964 W3: the background entry is observed by ONE business span per attempt
+ * (`exam.attempt.deadline_auto_submit`). There is no ambient server context on
+ * this loop, so the span roots its own trace (observability contract §Background
+ * work — no HTTP requestId is fabricated; a future W4 loop root would parent
+ * these automatically). A stale-discovery candidate that fails the under-lock
+ * recheck is a legitimate `no_op`, not a rejection.
  */
 export async function autoSubmitAndGrade(
   db: Database,
@@ -196,154 +213,173 @@ export async function autoSubmitAndGrade(
   attemptId: string,
   now: Date,
 ): Promise<boolean> {
-  const stateChanged = await executeInTransaction(db, async (tx) => {
-    // EA lock-order protocol: build the engine repo pair once, mint the
-    // EA capability
-    // via the canonical seam BEFORE the Exam FOR UPDATE. The resulting
-    // scanner-local lock order is Enrollment → Attempt → Exam (the seam's
-    // E→A followed by the Exam lock). Documented here only as the audited
-    // scanner ordering; NOT promoted to a global invariant.
-    const txAttemptRepo = createAttemptRepo(tx);
-    const txEnrollmentRepo = createEnrollmentRepo(tx);
-    const txExamRepo = createExamRepo(tx);
-    const { exams, enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: txExamRepo,
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: txEnrollmentRepo,
-      },
-      ctx,
-    );
-    const cap = await lockEnrollmentAndAttempt(
-      enrollments,
-      attempts,
-      attemptId,
-    );
-    const locked = await attempts.findById(attemptId);
-    if (!locked) return false;
-    if (locked.status !== "in_progress" && locked.status !== "disrupted") {
-      return false;
-    }
+  return withBusinessOperationSpan(
+    SPAN_ATTEMPT_DEADLINE_AUTO_SUBMIT,
+    { [ATTR_OP_ATTEMPT_ID]: attemptId },
+    async (span) => {
+      const stateChanged = await executeInTransaction(db, async (tx) => {
+        // EA lock-order protocol: build the engine repo pair once, mint the
+        // EA capability
+        // via the canonical seam BEFORE the Exam FOR UPDATE. The resulting
+        // scanner-local lock order is Enrollment → Attempt → Exam (the seam's
+        // E→A followed by the Exam lock). Documented here only as the audited
+        // scanner ordering; NOT promoted to a global invariant.
+        const txAttemptRepo = createAttemptRepo(tx);
+        const txEnrollmentRepo = createEnrollmentRepo(tx);
+        const txExamRepo = createExamRepo(tx);
+        const { exams, enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: txExamRepo,
+            attemptRepo: txAttemptRepo,
+            enrollmentRepo: txEnrollmentRepo,
+          },
+          ctx,
+        );
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
+          attemptId,
+        );
+        const locked = await attempts.findById(attemptId);
+        if (!locked) return false;
+        if (locked.status !== "in_progress" && locked.status !== "disrupted") {
+          return false;
+        }
 
-    // Authoritative Exam read under FOR UPDATE — serialization point vs
-    // extendExam (Decision B). Lock order Enrollment → Attempt → Exam here.
-    const lockedExam = await txExamRepo.findByIdForUpdate(ctx, locked.examId);
-    if (!lockedExam) return false;
+        // Authoritative Exam read under FOR UPDATE — serialization point vs
+        // extendExam (Decision B). Lock order Enrollment → Attempt → Exam here.
+        const lockedExam = await txExamRepo.findByIdForUpdate(
+          ctx,
+          locked.examId,
+        );
+        if (!lockedExam) return false;
 
-    // CANONICAL AUTHORITY: the ONLY "is this attempt expired?" decision that
-    // triggers mutation. Never re-derive deadlineAt<=now || closeAt<=now here;
-    // that OR predicate exists ONLY in the DB discovery query. Cast the locked
-    // DB rows to domain types (status string -> Exam/AttemptStatus), matching
-    // createExamRepoAdapter's cast — the canonical seam needs the union types.
-    if (
-      !isAttemptDeadlineExpired(lockedExam as Exam, locked as ExamAttempt, now)
-    ) {
-      // Discovery was a superset / stale snapshot (extended, or already
-      // reconciled): no-op this tick. Not an error.
-      return false;
-    }
+        // CANONICAL AUTHORITY: the ONLY "is this attempt expired?" decision that
+        // triggers mutation. Never re-derive deadlineAt<=now || closeAt<=now here;
+        // that OR predicate exists ONLY in the DB discovery query. Cast the locked
+        // DB rows to domain types (status string -> Exam/AttemptStatus), matching
+        // createExamRepoAdapter's cast — the canonical seam needs the union types.
+        if (
+          !isAttemptDeadlineExpired(
+            lockedExam as Exam,
+            locked as ExamAttempt,
+            now,
+          )
+        ) {
+          // Discovery was a superset / stale snapshot (extended, or already
+          // reconciled): no-op this tick. Not an error.
+          return false;
+        }
 
-    // The scanner bypasses minSubmitAfterStartMinutes (ADR-005) and marks the
-    // submission source/reason so the frozen submitted_answers carry the
-    // deadline-trigger marker. Grading workset materialization is owned by
-    // submitAttempt, not by this caller.
-    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-      createAttemptGradingEntryRepo(tx),
-      ctx,
-    );
+        // The scanner bypasses minSubmitAfterStartMinutes (ADR-005) and marks the
+        // submission source/reason so the frozen submitted_answers carry the
+        // deadline-trigger marker. Grading workset materialization is owned by
+        // submitAttempt, not by this caller.
+        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(tx),
+          ctx,
+        );
 
-    // The deadline submission's business valid submittedAt is the canonical
-    // effective deadline D, not the scan tick (same semantic as the lazy
-    // on-read reconciliation path; exam-runtime.md §5.4). A positive
-    // `isAttemptDeadlineExpired` above implies D is non-null (null never
-    // expires); the guard keeps that fact type-honest and fails safe as a
-    // no-op instead of freezing an attempt that has no deadline. The tick
-    // `now` stays the actual-execution instant for grading below.
-    const effectiveDeadline = computeEffectiveDeadline(
-      lockedExam as Exam,
-      locked as ExamAttempt,
-    );
-    if (effectiveDeadline === null) {
-      return false;
-    }
+        // The deadline submission's business valid submittedAt is the canonical
+        // effective deadline D, not the scan tick (same semantic as the lazy
+        // on-read reconciliation path; exam-runtime.md §5.4). A positive
+        // `isAttemptDeadlineExpired` above implies D is non-null (null never
+        // expires); the guard keeps that fact type-honest and fails safe as a
+        // no-op instead of freezing an attempt that has no deadline. The tick
+        // `now` stays the actual-execution instant for grading below.
+        const effectiveDeadline = computeEffectiveDeadline(
+          lockedExam as Exam,
+          locked as ExamAttempt,
+        );
+        if (effectiveDeadline === null) {
+          return false;
+        }
 
-    // R1/R9: build the interruption resolution based on the locked attempt's
-    // status. The deadline scanner handles both in_progress and disrupted
-    // attempts. For disrupted attempts, the resolution terminalizes the active
-    // interruption episode with a deadline_terminalization reason code.
-    const episodeRepo = createInterruptionEpisodeRepoAdapter(
-      createAttemptInterruptionRepo(tx),
-      ctx,
-    );
-    const eventRepo = createInterruptionEventRepoAdapter(
-      createAttemptInterruptionEventRepo(tx),
-      ctx,
-    );
+        // R1/R9: build the interruption resolution based on the locked attempt's
+        // status. The deadline scanner handles both in_progress and disrupted
+        // attempts. For disrupted attempts, the resolution terminalizes the active
+        // interruption episode with a deadline_terminalization reason code.
+        const episodeRepo = createInterruptionEpisodeRepoAdapter(
+          createAttemptInterruptionRepo(tx),
+          ctx,
+        );
+        const eventRepo = createInterruptionEventRepoAdapter(
+          createAttemptInterruptionEventRepo(tx),
+          ctx,
+        );
 
-    let resolution: SubmitInterruptionResolution;
-    if (locked.status === "disrupted") {
-      // Disrupted: terminalize with the attempt's policy snapshot.
-      // eligibleSeconds is null because the scanner does not make a
-      // compensation decision — it directly terminalizes.
-      const policy =
-        (locked as ExamAttempt).interruptionTimingPolicySnapshot?.policy ??
-        "strict";
-      resolution = {
-        mode: "active_interruption",
-        episodeRepo,
-        eventRepo,
-        hint: {
-          policy,
-          eligibleSeconds: null,
-          adjustmentId: null,
-          reasonCode: "deadline_terminalization",
-        },
-      };
-    } else {
-      // in_progress: no active interruption to resolve.
-      resolution = {
-        mode: "none",
-        episodeRepo,
-        eventRepo,
-      };
-    }
+        let resolution: SubmitInterruptionResolution;
+        if (locked.status === "disrupted") {
+          // Disrupted: terminalize with the attempt's policy snapshot.
+          // eligibleSeconds is null because the scanner does not make a
+          // compensation decision — it directly terminalizes.
+          const policy =
+            (locked as ExamAttempt).interruptionTimingPolicySnapshot?.policy ??
+            "strict";
+          resolution = {
+            mode: "active_interruption",
+            episodeRepo,
+            eventRepo,
+            hint: {
+              policy,
+              eligibleSeconds: null,
+              adjustmentId: null,
+              reasonCode: "deadline_terminalization",
+            },
+          };
+        } else {
+          // in_progress: no active interruption to resolve.
+          resolution = {
+            mode: "none",
+            episodeRepo,
+            eventRepo,
+          };
+        }
 
-    await submitAttempt(
-      attempts,
-      gradingWorksetRepo,
-      attemptId,
-      effectiveDeadline,
-      {
-        source: "deadline_scanner",
-        submissionReason: "deadline",
-        resolution,
-        // Two distinct instants: the submit is backdated to the business
-        // effective deadline D, while an interruption terminalization must
-        // record when this tick actually observed/processed it. Passing D
-        // there could place `terminalized.occurredAt` before the episode's
-        // detected event.
-        terminalizationObservedAt: now,
-      },
-    );
+        await submitAttempt(
+          attempts,
+          gradingWorksetRepo,
+          attemptId,
+          effectiveDeadline,
+          {
+            source: "deadline_scanner",
+            submissionReason: "deadline",
+            resolution,
+            // Two distinct instants: the submit is backdated to the business
+            // effective deadline D, while an interruption terminalization must
+            // record when this tick actually observed/processed it. Passing D
+            // there could place `terminalized.occurredAt` before the episode's
+            // detected event.
+            terminalizationObservedAt: now,
+          },
+        );
 
-    // Grade in the same transaction from the workset entries submitAttempt just
-    // materialized; `cap` is the EA (enrollment+attempt) protocol authority
-    // minted under the lock above.
-    await gradeAttemptIdempotent(
-      exams,
-      enrollments,
-      attempts,
-      gradingWorksetRepo,
-      cap,
-      now,
-    );
+        // Grade in the same transaction from the workset entries submitAttempt just
+        // materialized; `cap` is the EA (enrollment+attempt) protocol authority
+        // minted under the lock above.
+        await gradeAttemptIdempotent(
+          exams,
+          enrollments,
+          attempts,
+          gradingWorksetRepo,
+          cap,
+          now,
+        );
 
-    return true;
-  });
+        return true;
+      });
 
-  if (!stateChanged) return false;
-
-  return true;
+      // Stale discovery (extended between tick and lock, or already
+      // reconciled): a legitimate nothing-to-do result, not a rejection.
+      if (!stateChanged) {
+        span.setAttribute(ATTR_OP_OUTCOME, OUTCOME_NO_OP);
+        span.setAttribute(ATTR_OP_RESULT, AUTO_SUBMIT_RESULT_SKIPPED);
+        return false;
+      }
+      span.setAttribute(ATTR_OP_RESULT, AUTO_SUBMIT_RESULT_SUBMITTED);
+      return true;
+    },
+  );
 }
 
 export async function scanDatabaseForExpiredAttempts(

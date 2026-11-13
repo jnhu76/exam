@@ -79,6 +79,26 @@ import {
   createTimeAdjustmentRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
+import { withBusinessOperationSpan } from "../telemetry/businessOperationSpan.js";
+import {
+  ATTR_OP_ATTEMPT_ID,
+  ATTR_OP_CLIENT_SEQ,
+  ATTR_OP_EXAM_ID,
+  ATTR_OP_OUTCOME,
+  ATTR_OP_QUESTION_ID,
+  ATTR_OP_RESULT,
+  OUTCOME_REJECTED,
+  RECONCILE_RESULT_FROZEN,
+  RECONCILE_RESULT_UNCHANGED,
+  SAVE_RESULT_ACCEPTED,
+  SPAN_ATTEMPT_ANSWER_SAVE,
+  SPAN_ATTEMPT_DEADLINE_RECONCILE,
+  SPAN_ATTEMPT_RESTORE,
+  SPAN_ATTEMPT_START,
+  SPAN_ATTEMPT_SUBMIT,
+  START_RESULT_NEW,
+  START_RESULT_RESTORED,
+} from "../telemetry/businessOperationVocabulary.js";
 import { formatZodError, getRequestContext } from "./helpers.js";
 import { reconcileExamForRead } from "./reconciliation.js";
 // #301 §21: the frozen snapshot question is the authority for the answer
@@ -117,6 +137,22 @@ function toQueueStatusResponse(
     waitCount: view.waitCount,
     estimatedWaitSeconds: view.estimatedWaitSeconds,
   });
+}
+
+/**
+ * Observability projection for the read-time deadline reconcile span: mirrors
+ * the engine's own freeze semantics (an autosubmittable pre-read status that
+ * came back submitted/graded was frozen during THIS read). Pure projection of
+ * engine behavior — it never re-derives the deadline decision itself.
+ */
+function wasFrozenByReadReconcile(
+  preStatus: ExamAttempt["status"] | undefined,
+  postStatus: ExamAttempt["status"],
+): boolean {
+  const autosubmittable =
+    preStatus === "in_progress" || preStatus === "disrupted";
+  const frozen = postStatus === "submitted" || postStatus === "graded";
+  return autosubmittable && frozen;
 }
 
 /**
@@ -674,80 +710,91 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const { exam } = statusResult;
       // #292: admission is enforced INSIDE startOrRestoreAttempt (engine
       // authority, same transaction as the attempt create).
-      let attempt: ExamAttempt;
-      let isNew: boolean;
-      try {
-        const started = await executeInTransaction(
-          fastify.db,
-          async (tx) => {
-            const { exams, enrollments, attempts } = createExamEngineRepos(
-              {
-                examRepo: createExamRepo(tx),
-                attemptRepo: createAttemptRepo(tx),
-                enrollmentRepo: createEnrollmentRepo(tx),
-              },
-              ctx,
-            );
+      // #964 W3: the business execution span observes the EXISTING command
+      // boundary; the try/catch retake mapping below stays the operation's
+      // own rejection authority (ConflictError → rejected classification).
+      const { attempt, isNew } = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_START,
+        { [ATTR_OP_EXAM_ID]: examId },
+        async (span) => {
+          try {
+            const started = await executeInTransaction(
+              fastify.db,
+              async (tx) => {
+                const { exams, enrollments, attempts } = createExamEngineRepos(
+                  {
+                    examRepo: createExamRepo(tx),
+                    attemptRepo: createAttemptRepo(tx),
+                    enrollmentRepo: createEnrollmentRepo(tx),
+                  },
+                  ctx,
+                );
 
-            const episodeRepo = createInterruptionEpisodeRepoAdapter(
-              createAttemptInterruptionRepo(tx),
-              ctx,
-            );
-            const eventRepo = createInterruptionEventRepoAdapter(
-              createAttemptInterruptionEventRepo(tx),
-              ctx,
-            );
-            const adjustmentRepo = createTimeAdjustmentRepoAdapter(
-              createAttemptTimeAdjustmentRepo(tx),
-              ctx,
-            );
-            const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-              createAttemptGradingEntryRepo(tx),
-              ctx,
-            );
+                const episodeRepo = createInterruptionEpisodeRepoAdapter(
+                  createAttemptInterruptionRepo(tx),
+                  ctx,
+                );
+                const eventRepo = createInterruptionEventRepoAdapter(
+                  createAttemptInterruptionEventRepo(tx),
+                  ctx,
+                );
+                const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+                  createAttemptTimeAdjustmentRepo(tx),
+                  ctx,
+                );
+                const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+                  createAttemptGradingEntryRepo(tx),
+                  ctx,
+                );
 
-            const result = await startOrRestoreAttempt(
-              exams,
-              enrollments,
-              attempts,
-              examId,
-              candidateId,
-              now,
-              {
-                unassignedErrorFactory: (message) =>
-                  new PermissionDeniedError(message),
-                episodeRepo,
-                eventRepo,
-                adjustmentRepo,
-                gradingWorksetRepo,
-                admission: {
-                  repo: createExamAdmissionRepoAdapter(
-                    createExamAdmissionRepo(tx),
-                    ctx,
-                  ),
-                },
+                const result = await startOrRestoreAttempt(
+                  exams,
+                  enrollments,
+                  attempts,
+                  examId,
+                  candidateId,
+                  now,
+                  {
+                    unassignedErrorFactory: (message) =>
+                      new PermissionDeniedError(message),
+                    episodeRepo,
+                    eventRepo,
+                    adjustmentRepo,
+                    gradingWorksetRepo,
+                    admission: {
+                      repo: createExamAdmissionRepoAdapter(
+                        createExamAdmissionRepo(tx),
+                        ctx,
+                      ),
+                    },
+                  },
+                );
+                return result;
               },
+              "read committed",
             );
-            return result;
-          },
-          "read committed",
-        );
-        attempt = started.attempt;
-        isNew = started.isNew;
-      } catch (error) {
-        // #324: the engine decides retake deferral UNDER the
-        // enrollment lock (the same serialization boundary as the grading
-        // finalizer), so the pass/fail fact can no longer race past a
-        // pre-transaction read. The wire contract stays opaque — a deferral
-        // is surfaced as a generic conflict so passed and failed candidates
-        // see the identical body.
-        if (error instanceof RetakeDeferredError) {
-          throw new ConflictError(
-            "Cannot start a new attempt for this exam at this time",
-          );
-        }
-        throw error;
-      }
+            span.setAttribute(ATTR_OP_ATTEMPT_ID, started.attempt.id);
+            span.setAttribute(
+              ATTR_OP_RESULT,
+              started.isNew ? START_RESULT_NEW : START_RESULT_RESTORED,
+            );
+            return started;
+          } catch (error) {
+            // #324: the engine decides retake deferral UNDER the
+            // enrollment lock (the same serialization boundary as the grading
+            // finalizer), so the pass/fail fact can no longer race past a
+            // pre-transaction read. The wire contract stays opaque — a deferral
+            // is surfaced as a generic conflict so passed and failed candidates
+            // see the identical body.
+            if (error instanceof RetakeDeferredError) {
+              throw new ConflictError(
+                "Cannot start a new attempt for this exam at this time",
+              );
+            }
+            throw error;
+          }
+        },
+      );
 
       if (isNew) {
         return reply
@@ -849,64 +896,80 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // primary entry point; run reconciliation inside a locked tx so an
       // expired attempt is frozen before the snapshot is built. This is a
       // command-style GET with side effects — Cache-Control: no-store below.
-      const attempt = (await executeInTransaction(fastify.db, async (tx) => {
-        const { exams, enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: createAttemptRepo(tx),
-            enrollmentRepo: createEnrollmentRepo(tx),
-          },
-          ctx,
-        );
-        // Mint the EA capability via the canonical seam and
-        // thread it (plus the same repo pair) into the reconciliation path.
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
-          parsed.data.attemptId,
-        );
-        const preRead = await attempts.findById(parsed.data.attemptId);
-        const episodeRepo = createInterruptionEpisodeRepoAdapter(
-          createAttemptInterruptionRepo(tx),
-          ctx,
-        );
-        const eventRepo = createInterruptionEventRepoAdapter(
-          createAttemptInterruptionEventRepo(tx),
-          ctx,
-        );
-        const resolution: SubmitInterruptionResolution =
-          preRead?.status === "disrupted"
-            ? {
-                mode: "active_interruption",
-                episodeRepo,
-                eventRepo,
-                hint: {
-                  policy:
-                    preRead.interruptionTimingPolicySnapshot?.policy ??
-                    "strict",
-                  eligibleSeconds: null,
-                  adjustmentId: null,
-                  reasonCode: "deadline_terminalization",
-                },
-              }
-            : { mode: "none", episodeRepo, eventRepo };
-        const reconciled = await ensureAttemptDeadlineReconciled(
-          exams,
-          enrollments,
-          attempts,
-          createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          ),
-          cap,
-          fastify.now(),
-          resolution,
-        );
-        if (reconciled.candidateId !== candidateProfile.id) {
-          throw new NotFoundError("Attempt not found");
-        }
-        return reconciled;
-      })) as ExamAttempt;
+      // #964 W3: the read-time reconcile entry is observed by its own span;
+      // the frozen/unchanged projection mirrors the engine's own freeze
+      // semantics (pre-read autosubmittable → post-read submitted/graded) and
+      // changes neither the reconciliation's time, judgment, nor submit
+      // behavior.
+      const attempt = (await withBusinessOperationSpan(
+        SPAN_ATTEMPT_DEADLINE_RECONCILE,
+        { [ATTR_OP_ATTEMPT_ID]: parsed.data.attemptId },
+        async (span) =>
+          await executeInTransaction(fastify.db, async (tx) => {
+            const { exams, enrollments, attempts } = createExamEngineRepos(
+              {
+                examRepo: createExamRepo(tx),
+                attemptRepo: createAttemptRepo(tx),
+                enrollmentRepo: createEnrollmentRepo(tx),
+              },
+              ctx,
+            );
+            // Mint the EA capability via the canonical seam and
+            // thread it (plus the same repo pair) into the reconciliation path.
+            const cap = await lockEnrollmentAndAttempt(
+              enrollments,
+              attempts,
+              parsed.data.attemptId,
+            );
+            const preRead = await attempts.findById(parsed.data.attemptId);
+            const episodeRepo = createInterruptionEpisodeRepoAdapter(
+              createAttemptInterruptionRepo(tx),
+              ctx,
+            );
+            const eventRepo = createInterruptionEventRepoAdapter(
+              createAttemptInterruptionEventRepo(tx),
+              ctx,
+            );
+            const resolution: SubmitInterruptionResolution =
+              preRead?.status === "disrupted"
+                ? {
+                    mode: "active_interruption",
+                    episodeRepo,
+                    eventRepo,
+                    hint: {
+                      policy:
+                        preRead.interruptionTimingPolicySnapshot?.policy ??
+                        "strict",
+                      eligibleSeconds: null,
+                      adjustmentId: null,
+                      reasonCode: "deadline_terminalization",
+                    },
+                  }
+                : { mode: "none", episodeRepo, eventRepo };
+            const reconciled = await ensureAttemptDeadlineReconciled(
+              exams,
+              enrollments,
+              attempts,
+              createGradingWorksetRepoAdapter(
+                createAttemptGradingEntryRepo(tx),
+                ctx,
+              ),
+              cap,
+              fastify.now(),
+              resolution,
+            );
+            span.setAttribute(
+              ATTR_OP_RESULT,
+              wasFrozenByReadReconcile(preRead?.status, reconciled.status)
+                ? RECONCILE_RESULT_FROZEN
+                : RECONCILE_RESULT_UNCHANGED,
+            );
+            if (reconciled.candidateId !== candidateProfile.id) {
+              throw new NotFoundError("Attempt not found");
+            }
+            return reconciled;
+          }),
+      )) as ExamAttempt;
 
       const examRepo = createExamRepo(fastify.db);
       const examRow = await examRepo.findById(ctx, attempt.examId);
@@ -989,119 +1052,138 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new ValidationError("Path and body identifiers must match");
       }
 
-      const saved = await executeInTransaction(fastify.db, async (tx) => {
-        const txRepo = createAttemptRepo(tx);
-        const candidateProfile = await createCandidateRepo(tx).findByUserId(
-          ctx,
-          ctx.actorId,
-        );
-        if (!candidateProfile) {
-          // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
-          throw new NotFoundError("候选人资料不存在");
-        }
-
-        const { exams, enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: txRepo,
-            enrollmentRepo: createEnrollmentRepo(tx),
-          },
-          ctx,
-        );
-        // Mint the EA capability via the canonical seam
-        // (Enrollment → Attempt order). The canonical seam's locator read
-        // doubles as the existence check; the ownership check runs against the
-        // post-preparation attempt below.
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
-          attemptId,
-        );
-        // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0: the canonical preparation seam
-        // establishes the external preconditions a local Attempt mutation
-        // requires — EA lock provenance (verified against these exact repos),
-        // canonical deadline reconciliation (preserving freeze/grade behavior),
-        // and the canonical effective deadline (computeEffectiveDeadline). It
-        // mints the narrow opaque mutation evidence saveAnswer consumes. The
-        // route no longer owns question-membership legality, effective-deadline
-        // computation, or attempt.deadlineAt read-for-save — those live in
-        // saveAnswer / the preparation seam.
-        const preAttempt = await attempts.findById(attemptId);
-        const saveEpisodeRepo = createInterruptionEpisodeRepoAdapter(
-          createAttemptInterruptionRepo(tx),
-          ctx,
-        );
-        const saveEventRepo = createInterruptionEventRepoAdapter(
-          createAttemptInterruptionEventRepo(tx),
-          ctx,
-        );
-        const saveResolution: SubmitInterruptionResolution =
-          preAttempt?.status === "disrupted"
-            ? {
-                mode: "active_interruption",
-                episodeRepo: saveEpisodeRepo,
-                eventRepo: saveEventRepo,
-                hint: {
-                  policy:
-                    preAttempt.interruptionTimingPolicySnapshot?.policy ??
-                    "strict",
-                  eligibleSeconds: null,
-                  adjustmentId: null,
-                  reasonCode: "deadline_terminalization",
-                },
-              }
-            : {
-                mode: "none",
-                episodeRepo: saveEpisodeRepo,
-                eventRepo: saveEventRepo,
-              };
-        const { attempt: currentAttempt, mutationContext } =
-          await prepareReconciledAttemptMutation(
-            exams,
-            enrollments,
-            attempts,
-            createGradingWorksetRepoAdapter(
-              createAttemptGradingEntryRepo(tx),
+      const saved = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_ANSWER_SAVE,
+        {
+          [ATTR_OP_ATTEMPT_ID]: attemptId,
+          [ATTR_OP_QUESTION_ID]: questionId,
+          [ATTR_OP_CLIENT_SEQ]: body.clientSeq,
+        },
+        async (span) => {
+          const saved = await executeInTransaction(fastify.db, async (tx) => {
+            const txRepo = createAttemptRepo(tx);
+            const candidateProfile = await createCandidateRepo(tx).findByUserId(
               ctx,
-            ),
-            cap,
-            now,
-            saveResolution,
-          );
-        if (currentAttempt.candidateId !== candidateProfile.id) {
-          // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
-          throw new NotFoundError("尝试不存在");
-        }
+              ctx.actorId,
+            );
+            if (!candidateProfile) {
+              // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
+              throw new NotFoundError("候选人资料不存在");
+            }
 
-        // #301 §21 + canonical Save ordering (#301 §5, order
-        // clarified in round 2): the route delegates the WHOLE Save Answer
-        // action to the engine, whose actual order is
-        //   attempt identity → frozen question membership (P1)
-        //     → reconstruct AnswerState → status guards → effective-deadline
-        //     guard → answer canonicalization (frozen-question-bound) →
-        //     idempotency/version semantics → persist.
-        // Question membership therefore precedes the status/deadline guards
-        // (it is a ValidationError in saveAnswer, not a protocol rejection).
-        // The route supplies only the frozen-question-bound canonicalizer and
-        // inspects the returned semantic result to translate it to the wire
-        // contract. It does NOT gate validation on attempt status, does NOT
-        // validate membership, compute the effective deadline, reconstruct
-        // AnswerState, or write attempt.answers itself.
-        const saved = await saveAnswer(
-          attempts,
-          mutationContext,
-          {
-            attemptId,
-            questionId,
-            answer: body.answer,
-            clientSeq: body.clientSeq,
-            clientSavedAt: body.clientSavedAt,
-            baseVersion: body.baseVersion,
-          },
-          validateAnswerForQuestion,
-        );
-        return saved;
-      });
+            const { exams, enrollments, attempts } = createExamEngineRepos(
+              {
+                examRepo: createExamRepo(tx),
+                attemptRepo: txRepo,
+                enrollmentRepo: createEnrollmentRepo(tx),
+              },
+              ctx,
+            );
+            // Mint the EA capability via the canonical seam
+            // (Enrollment → Attempt order). The canonical seam's locator read
+            // doubles as the existence check; the ownership check runs against the
+            // post-preparation attempt below.
+            const cap = await lockEnrollmentAndAttempt(
+              enrollments,
+              attempts,
+              attemptId,
+            );
+            // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0: the canonical preparation seam
+            // establishes the external preconditions a local Attempt mutation
+            // requires — EA lock provenance (verified against these exact repos),
+            // canonical deadline reconciliation (preserving freeze/grade behavior),
+            // and the canonical effective deadline (computeEffectiveDeadline). It
+            // mints the narrow opaque mutation evidence saveAnswer consumes. The
+            // route no longer owns question-membership legality, effective-deadline
+            // computation, or attempt.deadlineAt read-for-save — those live in
+            // saveAnswer / the preparation seam.
+            const preAttempt = await attempts.findById(attemptId);
+            const saveEpisodeRepo = createInterruptionEpisodeRepoAdapter(
+              createAttemptInterruptionRepo(tx),
+              ctx,
+            );
+            const saveEventRepo = createInterruptionEventRepoAdapter(
+              createAttemptInterruptionEventRepo(tx),
+              ctx,
+            );
+            const saveResolution: SubmitInterruptionResolution =
+              preAttempt?.status === "disrupted"
+                ? {
+                    mode: "active_interruption",
+                    episodeRepo: saveEpisodeRepo,
+                    eventRepo: saveEventRepo,
+                    hint: {
+                      policy:
+                        preAttempt.interruptionTimingPolicySnapshot?.policy ??
+                        "strict",
+                      eligibleSeconds: null,
+                      adjustmentId: null,
+                      reasonCode: "deadline_terminalization",
+                    },
+                  }
+                : {
+                    mode: "none",
+                    episodeRepo: saveEpisodeRepo,
+                    eventRepo: saveEventRepo,
+                  };
+            const { attempt: currentAttempt, mutationContext } =
+              await prepareReconciledAttemptMutation(
+                exams,
+                enrollments,
+                attempts,
+                createGradingWorksetRepoAdapter(
+                  createAttemptGradingEntryRepo(tx),
+                  ctx,
+                ),
+                cap,
+                now,
+                saveResolution,
+              );
+            if (currentAttempt.candidateId !== candidateProfile.id) {
+              // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
+              throw new NotFoundError("尝试不存在");
+            }
+
+            // #301 §21 + canonical Save ordering (#301 §5, order
+            // clarified in round 2): the route delegates the WHOLE Save Answer
+            // action to the engine, whose actual order is
+            //   attempt identity → frozen question membership (P1)
+            //     → reconstruct AnswerState → status guards → effective-deadline
+            //     guard → answer canonicalization (frozen-question-bound) →
+            //     idempotency/version semantics → persist.
+            // Question membership therefore precedes the status/deadline guards
+            // (it is a ValidationError in saveAnswer, not a protocol rejection).
+            // The route supplies only the frozen-question-bound canonicalizer and
+            // inspects the returned semantic result to translate it to the wire
+            // contract. It does NOT gate validation on attempt status, does NOT
+            // validate membership, compute the effective deadline, reconstruct
+            // AnswerState, or write attempt.answers itself.
+            const saved = await saveAnswer(
+              attempts,
+              mutationContext,
+              {
+                attemptId,
+                questionId,
+                answer: body.answer,
+                clientSeq: body.clientSeq,
+                clientSavedAt: body.clientSavedAt,
+                baseVersion: body.baseVersion,
+              },
+              validateAnswerForQuestion,
+            );
+            return saved;
+          });
+          // Value-shaped rejection: the save protocol's own closed reason
+          // union is the operation's result fact (no exception was thrown).
+          if (!saved.accepted) {
+            span.setAttribute(ATTR_OP_OUTCOME, OUTCOME_REJECTED);
+            span.setAttribute(ATTR_OP_RESULT, saved.conflict.reason);
+          } else {
+            span.setAttribute(ATTR_OP_RESULT, SAVE_RESULT_ACCEPTED);
+          }
+          return saved;
+        },
+      );
 
       if (saved.accepted) {
         return SaveAnswerAcceptedSchema.parse({
@@ -1190,13 +1272,22 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       }
 
       const now = fastify.now();
-      const { attempt } = await submitAndGradeAttempt(
-        fastify.db,
-        ctx,
-        attemptId,
-        candidateProfile.id,
-        now,
-        { request },
+      // #964 W3: the submit span observes the orchestrator boundary. The
+      // lazy deadline reconciliation inside the orchestrator's transaction is
+      // part of THIS operation (client-entry reconcile — single measurement
+      // under the submit span; no separate reconcile span).
+      const { attempt } = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_SUBMIT,
+        { [ATTR_OP_ATTEMPT_ID]: attemptId },
+        async () =>
+          await submitAndGradeAttempt(
+            fastify.db,
+            ctx,
+            attemptId,
+            candidateProfile.id,
+            now,
+            { request },
+          ),
       );
       const exam = (await createExamRepo(fastify.db).findById(
         ctx,
@@ -1315,57 +1406,67 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // threaded through the entire restore transaction.
       const now = fastify.now();
 
-      const restoreResult = await executeInTransaction(
-        fastify.db,
-        async (tx) => {
-          const { exams, attempts, enrollments } = createExamEngineRepos(
-            {
-              examRepo: createExamRepo(tx),
-              attemptRepo: createAttemptRepo(tx),
-              enrollmentRepo: createEnrollmentRepo(tx),
+      const restoreResult = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_RESTORE,
+        { [ATTR_OP_ATTEMPT_ID]: attemptId },
+        async (span) => {
+          const restoreResult = await executeInTransaction(
+            fastify.db,
+            async (tx) => {
+              const { exams, attempts, enrollments } = createExamEngineRepos(
+                {
+                  examRepo: createExamRepo(tx),
+                  attemptRepo: createAttemptRepo(tx),
+                  enrollmentRepo: createEnrollmentRepo(tx),
+                },
+                ctx,
+              );
+              const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+                createAttemptGradingEntryRepo(tx),
+                ctx,
+              );
+
+              // Mint the EA capability via the canonical seam.
+              const cap = await lockEnrollmentAndAttempt(
+                enrollments,
+                attempts,
+                attemptId,
+              );
+
+              // Build interruption repos (R12: restore uses EA seam, these are
+              // the additional repos needed by restoreInterruptedAttempt).
+              const episodeRepo = createInterruptionEpisodeRepoAdapter(
+                createAttemptInterruptionRepo(tx),
+                ctx,
+              );
+              const eventRepo = createInterruptionEventRepoAdapter(
+                createAttemptInterruptionEventRepo(tx),
+                ctx,
+              );
+              const adjustmentRepo = createTimeAdjustmentRepoAdapter(
+                createAttemptTimeAdjustmentRepo(tx),
+                ctx,
+              );
+
+              // Composed restore: handles policy evaluation, deadline
+              // reconciliation, time grant (bounded_grace), and lifecycle.
+              return restoreInterruptedAttempt(
+                exams,
+                attempts,
+                enrollments,
+                episodeRepo,
+                eventRepo,
+                adjustmentRepo,
+                gradingWorksetRepo,
+                cap,
+                now,
+              );
             },
-            ctx,
           );
-          const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          );
-
-          // Mint the EA capability via the canonical seam.
-          const cap = await lockEnrollmentAndAttempt(
-            enrollments,
-            attempts,
-            attemptId,
-          );
-
-          // Build interruption repos (R12: restore uses EA seam, these are
-          // the additional repos needed by restoreInterruptedAttempt).
-          const episodeRepo = createInterruptionEpisodeRepoAdapter(
-            createAttemptInterruptionRepo(tx),
-            ctx,
-          );
-          const eventRepo = createInterruptionEventRepoAdapter(
-            createAttemptInterruptionEventRepo(tx),
-            ctx,
-          );
-          const adjustmentRepo = createTimeAdjustmentRepoAdapter(
-            createAttemptTimeAdjustmentRepo(tx),
-            ctx,
-          );
-
-          // Composed restore: handles policy evaluation, deadline
-          // reconciliation, time grant (bounded_grace), and lifecycle.
-          return restoreInterruptedAttempt(
-            exams,
-            attempts,
-            enrollments,
-            episodeRepo,
-            eventRepo,
-            adjustmentRepo,
-            gradingWorksetRepo,
-            cap,
-            now,
-          );
+          // The engine's own lifecycle union is the operation's result fact;
+          // all three outcomes are legitimate 200 results (see contract).
+          span.setAttribute(ATTR_OP_RESULT, restoreResult.lifecycle);
+          return restoreResult;
         },
       );
 
