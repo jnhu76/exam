@@ -61,7 +61,7 @@ import { installOtelDbTelemetry } from "@exam/otel-drizzle-postgresjs";
 const handle = installOtelDbTelemetry();     // one decision per process; idempotent
 handle.registerRootConnection(sql);          // tag a root pool (lazy marker query, executes nothing)
 setTransactionSeam(handle.transactionSeam);  // hand the @exam/db seam over (API runtime does this)
-handle.disable(); handle.enable();           // stop/resume recording; patch stays, inert
+handle.disable(); handle.enable();           // stop/resume recording; disable also restores the pristine patch
 handle.diagnostics();                        // raw counters (benchmark evidence)
 ```
 
@@ -71,10 +71,16 @@ any process).
 
 ## Lifecycle and safety contracts
 
-- **One-way install** (W2.1 §5 constraint 1): the prototype patch is
-  installed once per process and is irreversible, the same one-decision
-  shape as the OTel API's `registerGlobal`. Enable/disable only swap the
-  recording observer; the inert patch is a pure forwarder. Off deployments
+- **One install decision, reversible patch** (W2.1 §5 constraint 1;
+  reversibility per #974): install happens once per process and captures the
+  pristine `Query.prototype` references — the same one-decision shape as the
+  OTel API's `registerGlobal`; they are never re-captured, so every restore
+  is exact. `disable()` stops recording AND restores the pristine methods —
+  a pure value swap on the five patched keys (own writable data properties,
+  so descriptor attributes never change and no other property is touched),
+  pinned structurally against a pre-install descriptor baseline.
+  `enable()` re-applies the captured wrappers and resumes recording; both
+  directions are idempotent and the cycle is repeatable. Off deployments
   never import the module (the structural test in `apps/api` pins the
   dynamic-import boundary).
 - **Measurement neutrality** (W2.1 §5 constraint 2): patched methods
@@ -123,7 +129,8 @@ pnpm --filter @exam/otel-drizzle-postgresjs bench     # writes one JSONL line pe
 ```
 
 One process: **phase A baseline (no install) → phase B enabled** — the
-one-way patch forces this order. Fixed workload (400 selects + 40
+baseline must run before the install that turns recording on. Fixed
+workload (400 selects + 40
 transactions × 6 statements), per-phase p50/p95/mean/max, and the raw count
 cross-check (phase B submissions = the workload's exact statement count).
 Output goes to `out/otel-w964/W2.2/artifacts/benchmark.jsonl` by default,
@@ -144,5 +151,8 @@ Files: `otelDbTelemetry.test.ts` (lifecycle, statement semantics,
 attribution, attribute safety, rollback, READ COMMITTED, failure
 isolation, forEach boundary), `otelDbTelemetryRetry.test.ts` (real 40001 +
 real 40P01 retry observability), `offNoSideEffects.test.ts` (import ≠
-patch; install is the single decision), `benchmark.test.ts` (guarded
+patch; install is the single decision),
+`driverStatementSeamLifecycle.test.ts` (the reversible install → disable →
+enable cycle: structural descriptor-baseline restore proof + healthy real
+queries through the disabled window), `benchmark.test.ts` (guarded
 entry).

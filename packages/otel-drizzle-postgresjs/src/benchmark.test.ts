@@ -6,8 +6,9 @@
  * Guarded by EXAM_DB_TELEMETRY_BENCHMARK=1 so ordinary `pnpm test` never
  * executes it (it shows as skipped). One process, two phases IN ORDER:
  *
- *   A baseline  — the prototype patch is NOT installed (one-way install:
- *                 baseline must run first in the same process);
+ *   A baseline  — the plugin is NOT installed yet (the install turns
+ *                 recording on, so the baseline must run first in the same
+ *                 process);
  *   B enabled   — the plugin is installed, the pool registered, the same
  *                 workload re-run, spans recorded through a batch processor.
  *
@@ -179,7 +180,7 @@ bench("db telemetry benchmark (baseline vs enabled, raw counts)", () => {
       maxMs: Math.round(baselineSorted.at(-1)! * 1000) / 1000,
     });
 
-    // ---- Phase B: enabled (one-way install; baseline already ran) ----
+    // ---- Phase B: enabled (installed after the baseline already ran) ----
     const provider = new TracerProvider({
       spanProcessors: [
         new BatchSpanProcessor({

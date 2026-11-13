@@ -23,11 +23,14 @@
  * message; SQLSTATE travels as `db.response.status_code` read from the
  * error's cause chain via `@exam/db`'s authoritative walk.
  *
- * Lifecycle: ONE install per process (the prototype patch is a one-way
- * decision — driverStatementSeam.ts). `disable()`/`enable()` only swap the
- * recording observer; the inert patch stays a pure forwarder. The Off
- * deployment never imports this module (the API runtime loads it behind the
- * telemetry-enabled gate), so Off installs nothing at all.
+ * Lifecycle: ONE install per process — the first install captures the
+ * pristine Query.prototype references (driverStatementSeam.ts) and starts
+ * recording. `disable()` stops recording AND restores the pristine prototype
+ * methods (the patch is removed, not merely inert); `enable()` re-applies
+ * the captured wrappers and resumes recording; both directions are
+ * idempotent and the cycle is repeatable (#974). The Off deployment never
+ * imports this module (the API runtime loads it behind the telemetry-enabled
+ * gate), so Off installs nothing at all.
  */
 import {
   metrics,
@@ -40,7 +43,9 @@ import {
 import type { TransactionSeam } from "@exam/db/observation";
 import { findPostgresSqlState } from "@exam/db/types";
 import {
+  applyStatementSeamPatch,
   installStatementSeam,
+  restoreStatementSeamPatch,
   setStatementSeamObserver,
   type InstrumentedQuery,
 } from "./driverStatementSeam.js";
@@ -98,10 +103,17 @@ export interface OtelDbTelemetryHandle {
   /** The seam implementation for `setTransactionSeam` (@exam/db/observation). */
   readonly transactionSeam: TransactionSeam;
 
-  /** Stops recording (inert forwarding patch; @exam/db seam output unchanged). */
+  /**
+   * Stops recording AND restores the pristine prototype methods (#974 — the
+   * patch is removed, not merely inert; @exam/db seam output unchanged).
+   * Idempotent.
+   */
   disable(): void;
 
-  /** Resumes recording after {@link disable}. Idempotent. */
+  /**
+   * Resumes recording after {@link disable}: re-applies the prototype patch
+   * and restores the observer. Idempotent.
+   */
   enable(): void;
 
   /** Whether the observer is currently recording. */
@@ -126,7 +138,8 @@ export function isOtelDbTelemetryInstalled(): boolean {
 }
 
 /**
- * Installs the plugin: the one-way driver prototype patch plus the
+ * Installs the plugin: captures the pristine driver prototype references
+ * (one decision per process), installs the prototype patch, and builds the
  * transaction seam. Idempotent — a second call returns the SAME handle
  * (repeat-install must not double-patch or double-count; pinned by test).
  *
@@ -272,9 +285,11 @@ export function installOtelDbTelemetry(
     disable(): void {
       recording = false;
       setStatementSeamObserver(null);
+      restoreStatementSeamPatch();
     },
     enable(): void {
       recording = true;
+      applyStatementSeamPatch();
       setStatementSeamObserver(observeStatement);
     },
     isEnabled(): boolean {

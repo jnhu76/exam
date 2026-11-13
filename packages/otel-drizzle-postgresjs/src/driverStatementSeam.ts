@@ -18,13 +18,15 @@
  * runs synchronously in the consuming call frame, before `handle()`'s
  * microtask hop).
  *
- * LIFECYCLE CONTRACT (W2.1 §5 constraint 1): the prototype patch is installed
- * ONCE per process and is IRREVERSIBLE — the same one-decision shape as the
- * OTel API `registerGlobal` the W1.2 runtime builds on. Enable/disable only
- * swaps the OBSERVER: with no observer the patched methods are pure
- * forwarders, so a mid-process disable stops recording without touching
- * query behavior. A process that never installs (telemetry Off — the API
- * runtime imports this module behind the enabled gate) never runs this code.
+ * LIFECYCLE CONTRACT (W2.1 §5 constraint 1; reversibility per #974): install
+ * is ONE decision per process — the first install captures the pristine
+ * Query.prototype references of the target methods and never re-captures
+ * them, the same one-decision shape as the OTel API `registerGlobal` the W1.2
+ * runtime builds on. The prototype MUTATION itself is reversible:
+ * restoreStatementSeamPatch() puts the pristine references back and
+ * applyStatementSeamPatch() re-installs the captured wrappers. A process
+ * that never installs (telemetry Off — the API runtime imports this module
+ * behind the enabled gate) never runs this code.
  *
  * MEASUREMENT NEUTRALITY (W2.1 §5 constraint 2): every patched method only
  * (1) consults the observer BEFORE forwarding — synchronously, in the same
@@ -67,10 +69,22 @@ export interface InstrumentedQuery {
  */
 export type StatementSeamObserver = (query: InstrumentedQuery) => void;
 
+type QueryProto = Record<
+  "then" | "catch" | "finally" | "execute" | "forEach",
+  (...args: unknown[]) => unknown
+>;
+
+// INVARIANT: `pristine` holds the target method references as they were
+// BEFORE the first install; it is captured once per process and never
+// mutated, so every disable() restore is exact regardless of how many
+// enable/disable cycles ran.
+let seamProto: QueryProto | null = null;
+let pristine: QueryProto | null = null;
+let wrapped: QueryProto | null = null;
 let patched = false;
 let observer: StatementSeamObserver | null = null;
 
-/** Whether this process has the one-way prototype patch installed. */
+/** Whether the prototype patch (the observer wrappers) is currently installed. */
 export function isStatementSeamPatched(): boolean {
   return patched;
 }
@@ -82,34 +96,69 @@ export function setStatementSeamObserver(
   observer = next;
 }
 
-type QueryProto = Record<
-  "then" | "catch" | "finally" | "execute" | "forEach",
-  (...args: unknown[]) => unknown
->;
+/**
+ * Puts the captured wrappers back on the prototype (the enable() half of the
+ * cycle). No-op when the patch is already installed or install never ran.
+ */
+export function applyStatementSeamPatch(): void {
+  const proto = seamProto;
+  const next = wrapped;
+  if (patched || !proto || !next) return;
+  proto.then = next.then;
+  proto.catch = next.catch;
+  proto.finally = next.finally;
+  proto.execute = next.execute;
+  proto.forEach = next.forEach;
+  patched = true;
+}
 
 /**
- * Installs the prototype patch (idempotent — later calls are no-ops). The
- * prototype is reached through a NEVER-CONNECTED marker client, the W2.1
- * probe's proven zero-network shape: `postgres()` opens nothing until the
- * first statement is handled, the marker Query is created but never consumed
- * (lazy — creation is not submission), and the client is ended with
- * `timeout: 0` before anything could dial.
+ * Restores the pristine method references captured at install (#974) — the
+ * exact pre-patch prototype state. The five keys are own writable data
+ * properties of the prototype, so the restore is a pure value swap:
+ * descriptor attributes never change and no other property is touched.
+ * No-op when the patch is not installed.
+ */
+export function restoreStatementSeamPatch(): void {
+  const proto = seamProto;
+  const orig = pristine;
+  if (!patched || !proto || !orig) return;
+  proto.then = orig.then;
+  proto.catch = orig.catch;
+  proto.finally = orig.finally;
+  proto.execute = orig.execute;
+  proto.forEach = orig.forEach;
+  patched = false;
+}
+
+/**
+ * Installs the prototype patch (idempotent — later calls are no-ops; the
+ * pristine capture happens exactly once). The prototype is reached through
+ * a NEVER-CONNECTED marker client, the W2.1 probe's proven zero-network
+ * shape: `postgres()` opens nothing until the first statement is handled,
+ * the marker Query is created but never consumed (lazy — creation is not
+ * submission), and the client is ended with `timeout: 0` before anything
+ * could dial.
  */
 export function installStatementSeam(): void {
-  if (patched) return;
+  if (pristine) return;
 
   const markerClient = postgres("postgres://127.0.0.1:1/none");
   const marker = markerClient.unsafe("select 1");
   const proto = Object.getPrototypeOf(marker) as unknown as QueryProto;
   markerClient.end({ timeout: 0 });
 
-  const orig = {
+  seamProto = proto;
+  // One capture per process: these references are the restore target of
+  // every later disable() (#974).
+  const orig: QueryProto = {
     then: proto.then,
     catch: proto.catch,
     finally: proto.finally,
     execute: proto.execute,
     forEach: proto.forEach,
   };
+  pristine = orig;
 
   // Containment (ADR-028 D1): an observer bug degrades to no-telemetry. It
   // must never reach the query path — neither synchronously here, nor as an
@@ -124,26 +173,31 @@ export function installStatementSeam(): void {
     }
   };
 
-  proto.then = function (this: InstrumentedQuery, ...args: unknown[]) {
-    if (!this.executed) consult(this);
-    return orig.then.apply(this, args);
-  };
-  proto.catch = function (this: InstrumentedQuery, ...args: unknown[]) {
-    if (!this.executed) consult(this);
-    return orig.catch.apply(this, args);
-  };
-  proto.finally = function (this: InstrumentedQuery, ...args: unknown[]) {
-    if (!this.executed) consult(this);
-    return orig.finally.apply(this, args);
-  };
-  proto.execute = function (this: InstrumentedQuery) {
-    if (!this.executed) consult(this);
-    return orig.execute.call(this);
-  };
-  proto.forEach = function (this: InstrumentedQuery, fn: unknown) {
-    if (!this.executed) consult(this);
-    return orig.forEach.call(this, fn);
+  // The wrappers are built ONCE and re-used by every enable() re-patch — a
+  // cycle only ever swaps prototype VALUES between `pristine` and `wrapped`,
+  // never rebuilds closures.
+  wrapped = {
+    then: function (this: InstrumentedQuery, ...args: unknown[]) {
+      if (!this.executed) consult(this);
+      return orig.then.apply(this, args);
+    },
+    catch: function (this: InstrumentedQuery, ...args: unknown[]) {
+      if (!this.executed) consult(this);
+      return orig.catch.apply(this, args);
+    },
+    finally: function (this: InstrumentedQuery, ...args: unknown[]) {
+      if (!this.executed) consult(this);
+      return orig.finally.apply(this, args);
+    },
+    execute: function (this: InstrumentedQuery) {
+      if (!this.executed) consult(this);
+      return orig.execute.call(this);
+    },
+    forEach: function (this: InstrumentedQuery, fn: unknown) {
+      if (!this.executed) consult(this);
+      return orig.forEach.call(this, fn);
+    },
   };
 
-  patched = true;
+  applyStatementSeamPatch();
 }
