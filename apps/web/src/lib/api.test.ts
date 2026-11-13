@@ -414,6 +414,24 @@ describe("api client", () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
+    // W5.1: pins the cancellation control flow — an aborted request is
+    // intentional supersede (the caller's stale check is the sole arbiter).
+    // The client re-throws the SAME AbortError instance: never the ApiError(0)
+    // network wrap, never a toast, never an api.network_failed warn.
+    it("re-throws the AbortError itself on cancel — no ApiError wrap, no toast, no network warn", async () => {
+      const abortError = new DOMException("aborted", "AbortError");
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abortError));
+
+      await expect(
+        api.get("/api/attempts/att-1/answers/q1", {
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toBe(abortError);
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
     it("wraps unknown errors as ApiError with status 0", async () => {
       vi.stubGlobal(
         "fetch",

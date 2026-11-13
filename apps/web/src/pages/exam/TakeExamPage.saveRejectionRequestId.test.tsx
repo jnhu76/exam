@@ -488,6 +488,75 @@ describe("save-rejection requestId correlation (#924, TASK-CONTRACT §3.6)", () 
     expect(telemetryEvents(send, "answer_autosave_success")).toHaveLength(0);
   }, 10_000);
 
+  // W5.1: the SUCCESS variant of the same stale-response guard — a delayed
+  // accepted:true response from the OLD attempt settles after the route
+  // change and must not write the new attempt's chip, version map, or
+  // telemetry (the post-await saveStale() scope guard returns before every
+  // write; the started row already emitted belongs to the old attempt).
+  it("an old attempt's delayed save SUCCESS (with header id) never writes the new attempt's state or telemetry", async () => {
+    const send = installRecordingBuffer();
+    const snap1 = buildSnapshot({ attemptId: "att-1" }, [
+      fillBlankQuestion("q1"),
+    ]);
+    const snap2 = buildSnapshot({ attemptId: "att-2" }, [
+      fillBlankQuestion("q2"),
+    ]);
+    apiGet.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/candidate/attempts/")) {
+        if (path.includes("att-1")) return snap1;
+        if (path.includes("att-2")) return snap2;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+    postMeta.requestId = "req-att1-late-ok";
+    let resolveAtt1Save: ((value: unknown) => void) | null = null;
+    apiPost.mockImplementation(
+      (path: string) =>
+        new Promise((resolve) => {
+          if (typeof path === "string" && path.includes("/answers/")) {
+            resolveAtt1Save = resolve;
+            return;
+          }
+          resolve({ ok: true, serverNow: NOW });
+        }),
+    );
+
+    const { navigate } = renderPage();
+    await editAnswer();
+    // The att-1 save is IN FLIGHT (debounce fired, response pending).
+    await waitFor(
+      () => {
+        expect(resolveAtt1Save).not.toBeNull();
+      },
+      { timeout: 4000 },
+    );
+
+    act(() => {
+      navigate("/exam/exam-1/take/att-2");
+    });
+    await screen.findByText("填空 q2");
+
+    // The old attempt's accepted:true settles AFTER the route change.
+    await act(async () => {
+      resolveAtt1Save!({ accepted: true, serverVersion: 1, savedAt: NOW });
+    });
+
+    // The new attempt's chip stays on its own idle claim; no stale editing
+    // state, no rejection surface from the old attempt's episode.
+    expect(screen.getByText("已保存")).toBeInTheDocument();
+    expect(screen.queryByText("保存中...")).not.toBeInTheDocument();
+    expect(screen.queryByText("保存失败")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("save-rejection-alert"),
+    ).not.toBeInTheDocument();
+
+    await flushAll();
+    // Neither a success row (the late ACK belongs to the old attempt) nor a
+    // failure row (an ACK is not a failure) lands on the new attempt.
+    expect(telemetryEvents(send, "answer_autosave_success")).toHaveLength(0);
+    expect(telemetryEvents(send, "answer_autosave_failed")).toHaveLength(0);
+  }, 10_000);
+
   it("a later successful save clears both rejection states (alert and id) from the prior rejection", async () => {
     const send = installRecordingBuffer();
     installTakeRoute([
