@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
@@ -41,7 +41,6 @@ interface GradingQueueResponse {
 export function GradingQueuePage() {
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
-  const navigate = useNavigate();
   const [data, setData] = useState<GradingQueueResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,13 +91,28 @@ export function GradingQueuePage() {
   const totalPages = Math.ceil(data.total / pageSize);
 
   // Single-source column declarations (issue 457): desktop table and mobile
-  // cards render from the same array; rows activate on click in both.
+  // cards render from the same array. Row activation is a REAL link in the
+  // candidate cell (its accessible name names candidate + exam), so both
+  // representations open an entry by keyboard (Tab + Enter) and assistive
+  // technology — the removed row-level onClick was a mouse-only, unfocusable
+  // activation path and a nested-interactive hazard on top of the link.
   const columns: DataViewColumnDef<GradingQueueItem>[] = [
     {
       id: "candidate",
       meta: { role: "primary-text" },
       header: t("admin.grading.columns.candidate"),
-      cell: ({ row }) => row.original.candidateName,
+      cell: ({ row }) => (
+        <Link
+          to={`/admin/grading-queue/${row.original.attemptId}`}
+          aria-label={t("admin.grading.openDetail", {
+            candidate: row.original.candidateName,
+            exam: row.original.examTitle,
+          })}
+          className="text-primary underline-offset-4 hover:underline"
+        >
+          {row.original.candidateName}
+        </Link>
+      ),
     },
     {
       id: "exam",
@@ -156,9 +170,6 @@ export function GradingQueuePage() {
             columns={columns}
             rows={data.items}
             getRowId={(i) => i.attemptId}
-            onRowClick={(item) =>
-              navigate(`/admin/grading-queue/${item.attemptId}`)
-            }
           />
         }
       >
@@ -170,9 +181,6 @@ export function GradingQueuePage() {
           pageSize={pageSize}
           getRowId={(i) => i.attemptId}
           getRowTestId={(i) => `grading-queue-row-${i.attemptId}`}
-          onRowClick={(item) =>
-            navigate(`/admin/grading-queue/${item.attemptId}`)
-          }
         />
       </DataTableShell>
     </PageContainer>

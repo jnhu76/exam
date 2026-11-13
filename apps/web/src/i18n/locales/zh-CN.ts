@@ -307,6 +307,14 @@ const zhCN = {
     rowActions: "行操作",
     /** RowActions overflow-menu (kebab) trigger label. */
     moreActions: "更多操作",
+    /**
+     * Per-row composed accessible names (audit #971 F-07): an icon-only
+     * action or kebab trigger named only by its generic action copy reads
+     * identically on every row; the row entity's localized display name is
+     * composed at the RowActions call site.
+     */
+    rowActionNamed: "{{action}}：{{name}}",
+    moreActionsNamed: "{{name}}的更多操作",
     /** SearchInput defaults. */
     search: {
       placeholder: "搜索",
@@ -1184,6 +1192,10 @@ const zhCN = {
       exporting: "导出中…",
       exportFailed: "导出失败",
       pageInfo: "当前页 {{count}} 条",
+      /** Row expansion toggle (audit #971 F-02): real button bound to the
+       * detail region; the name carries the row's own action + target id. */
+      detailToggle: "{{action}}（{{target}}）的日志详情",
+      detailRegion: "日志详情",
       columns: {
         time: "时间",
         actor: "操作者",
@@ -1385,6 +1397,9 @@ const zhCN = {
         pendingCount: "待评题数",
         status: "状态",
       },
+      /** Grading-detail link accessible name (audit #971 F-02): the link must
+       * name its target, not read as the bare candidate cell text. */
+      openDetail: "查看 {{candidate}}（{{exam}}）的评分详情",
     },
     candidateFields: {
       title: "考生字段配置",
@@ -2005,6 +2020,10 @@ const zhCN = {
         updated: "更新",
         errors: "错误",
       },
+      /** Row expansion toggle (audit #971 F-02), named by the row's own
+       * type + time; real button bound to the detail region. */
+      detailToggle: "{{type}}（{{time}}）的导入详情",
+      detailRegion: "导入详情",
       details: {
         errorDetail: "错误详情",
         metadata: "元数据",
