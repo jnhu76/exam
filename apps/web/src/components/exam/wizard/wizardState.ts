@@ -10,6 +10,7 @@
 // `buildWizardPolicyPreview` — the frontend NEVER re-implements precedence.
 
 import type { ExamProfilePolicyDefaults } from "@exam/domain";
+import { localInputToInstant } from "@/lib/dateTime";
 import { buildExplicitOverridesPayload } from "@/lib/wizardPolicyPreview";
 
 /** Code defaults mirroring the contract's canonical CreateExamRequest defaults. */
@@ -150,6 +151,46 @@ export function goToStep(state: WizardState, step: number): WizardState {
   return { ...state, step: clamped as WizardStep };
 }
 
+/** Schedule instants the caller resolved through the scheduling seam. */
+export interface WizardScheduleInstants {
+  /** ISO instant for openAt. */
+  openAt: string;
+  /** ISO instant for closeAt; null only for untimed (open-ended). */
+  closeAt: string | null;
+}
+
+/** Per-field resolution of the wizard's schedule wall clocks. */
+export interface ResolvedWizardScheduleField {
+  status: "empty" | "ok" | "dst-gap" | "ambiguous" | "invalid";
+  /** ISO instant when status === "ok"; otherwise null. */
+  instant: string | null;
+}
+
+export interface ResolvedWizardSchedule {
+  open: ResolvedWizardScheduleField;
+  close: ResolvedWizardScheduleField;
+}
+
+/**
+ * Resolves the wizard's schedule wall clocks through the scheduling seam in
+ * the given zone. Validation, the review preview, and the POST payload must
+ * all consume this one result (F-20): no surface re-parses the wall clock
+ * under the browser zone.
+ */
+export function resolveWizardSchedule(
+  schedule: Pick<WizardState, "openAt" | "closeAt">,
+  timeZone: string,
+): ResolvedWizardSchedule {
+  const field = (raw: string): ResolvedWizardScheduleField => {
+    if (!raw) return { status: "empty", instant: null };
+    const resolution = localInputToInstant(raw, timeZone);
+    return resolution.kind === "unique"
+      ? { status: "ok", instant: resolution.instant }
+      : { status: resolution.kind, instant: null };
+  };
+  return { open: field(schedule.openAt), close: field(schedule.closeAt) };
+}
+
 /**
  * Build the final POST /api/exams payload from wizard state. Sends:
  *   - instance fields (title/description/course/schedule/score/questions)
@@ -165,7 +206,9 @@ export function goToStep(state: WizardState, step: number): WizardState {
  * default must never overwrite a profile value (explicit > profile > default).
  *
  * The schedule is a required user decision — missing openAt/closeAt FAILS
- * CLOSED instead of silently inventing "now" / "now + 24h" authority.
+ * CLOSED instead of silently inventing "now" / "now + 24h" authority. The
+ * caller supplies the resolved instants (same conversion result the
+ * validation and preview used); wall strings are never re-parsed here.
  *
  * When a profile supplies resultPublicationMode, the wizard does NOT send
  * controlFlags.showResultImmediately (it sends no controlFlags at all — control
@@ -173,7 +216,8 @@ export function goToStep(state: WizardState, step: number): WizardState {
  */
 export function buildCreateExamPayload(
   state: WizardState,
-  resolved: ExamProfilePolicyDefaults = WIZARD_CODE_DEFAULTS,
+  resolved: ExamProfilePolicyDefaults,
+  schedule: WizardScheduleInstants,
 ): Record<string, unknown> {
   // Resolved timing mode (override > profile > code default) decides which
   // schedule/duration fields are legal on the wire (Phase A2 (Issue 291)).
@@ -183,16 +227,20 @@ export function buildCreateExamPayload(
       "Exam schedule (openAt/closeAt) is required before creating an exam",
     );
   }
+  if (!schedule?.openAt || (!untimed && !schedule.closeAt)) {
+    throw new Error(
+      "Exam schedule must be resolved to instants before creating an exam",
+    );
+  }
   const payload: Record<string, unknown> = {
     title: state.title.trim(),
     description: state.description,
     courseId: state.courseId,
     timingMode: resolved.timingMode,
     questionSelectionMode: "manual",
-    openAt: new Date(state.openAt).toISOString(),
+    openAt: schedule.openAt,
     // Untimed is open-ended: explicit semantic null, never a fabricated date.
-    closeAt:
-      untimed || !state.closeAt ? null : new Date(state.closeAt).toISOString(),
+    closeAt: untimed || !state.closeAt ? null : schedule.closeAt,
     passingScore: state.passingScore,
     totalScore: state.totalScore,
     questionIds: state.questionIds,
