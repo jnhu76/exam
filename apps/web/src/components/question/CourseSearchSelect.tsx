@@ -52,8 +52,9 @@ const SEARCH_PAGE_SIZE = 100;
  * INVARIANT: only the most recently issued query (latest seq) may update
  * results, truncation, loading, or failure fallback. Typing a new term,
  * clearing, closing, selecting, and an initial-list (scope) change all
- * invalidate in-flight queries immediately, so a slow stale response can never
- * land inside a newer query's debounce window.
+ * invalidate in-flight queries immediately, and a scope change also cancels a
+ * pending debounced commit, so neither a stale response nor a stale term can
+ * land inside a newer scope or query.
  *
  * Keyboard interaction follows the WAI-ARIA combobox/listbox pattern:
  * ArrowDown/ArrowUp move the active option, Home/End jump to first/last,
@@ -81,17 +82,6 @@ export function CourseSearchSelect({
   const listRef = useRef<HTMLDivElement>(null);
   // Query ownership token: see the INVARIANT in the component docstring.
   const searchSeq = useRef(0);
-
-  // A new initial list is a scope change (e.g. the edit page finishing its
-  // course load): searches issued under the previous list must never land.
-  // Loading resets too, because an invalidated response skips its own
-  // finally-branch cleanup.
-  useEffect(() => {
-    searchSeq.current += 1;
-    setResults(initialCourses);
-    setTruncated(false);
-    setLoading(false);
-  }, [initialCourses]);
 
   // The commit hook cancels its own timer on unmount; only the popover focus
   // delay needs manual teardown.
@@ -162,6 +152,20 @@ export function CourseSearchSelect({
     onChange: setSearch,
     onCommit: doSearch,
   });
+
+  // A new initial list is a scope change (e.g. the edit page finishing its
+  // course load): a term typed against the old list must never be sent, and
+  // searches already issued under it must never land. clear() is the same
+  // reset path as close/select: it cancels a pending debounced commit and
+  // commits "" through doSearch, which bumps the seq token and repopulates
+  // results/truncation/loading from the new initialCourses (an invalidated
+  // response skips its own finally cleanup, so loading must not wait on it).
+  // doSearch is rebuilt whenever initialCourses changes, so commit.clear
+  // changes with the scope; keying on it runs exactly on a scope change
+  // (and mount), never on a keystroke.
+  useEffect(() => {
+    commit.clear();
+  }, [initialCourses, commit.clear]);
 
   /** Close and restore the pre-search state. commit.clear() cancels a pending
    * debounced commit and, via doSearch(""), invalidates in-flight queries. */

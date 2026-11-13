@@ -612,6 +612,35 @@ describe("CourseSearchSelect query ownership (controlled clock)", () => {
     expect(screen.queryByText(/仅显示前/)).not.toBeInTheDocument();
   });
 
+  it("a scope change during the debounce window cancels the pending search", async () => {
+    vi.useFakeTimers(FAKE);
+    const scopeA = makeCourses(3, "范围A");
+    const { rerender } = render(
+      <CourseSearchSelect courses={scopeA} value="" onChange={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    const input = getComboboxInput();
+
+    // Type a term, but leave the 300ms debounce pending — no request yet.
+    fireEvent.change(input, { target: { value: "a" } });
+    expect(apiGet).not.toHaveBeenCalled();
+
+    // The parent supplies a new initial list before the commit is due.
+    const scopeB = makeCourses(2, "范围B");
+    rerender(
+      <CourseSearchSelect courses={scopeB} value="" onChange={() => {}} />,
+    );
+    expect(screen.getByText("范围B0")).toBeInTheDocument();
+
+    // The superseded term belongs to the old scope and must never be sent,
+    // neither by the stale debounce nor by a late in-flight continuation.
+    await advanceDebounce();
+    expect(apiGet).not.toHaveBeenCalled();
+    expect(getComboboxInput()).toHaveValue("");
+    expect(screen.getByText("范围B0")).toBeInTheDocument();
+    expect(screen.getByText("范围B1")).toBeInTheDocument();
+  });
+
   it("a failed current query restores the initial list; a superseded failure changes nothing", async () => {
     vi.useFakeTimers(FAKE);
     const input = openForOwnership();
