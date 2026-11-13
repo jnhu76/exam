@@ -327,4 +327,61 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toContain("width: 0.5rem");
     expect(tableCss).toContain("var(--text-muted) 4%");
   });
+
+  it("keeps the keyboard focus ring at or above the 3:1 non-text contrast floor", () => {
+    // WCAG 1.4.11: the focus indicator must contrast ≥3:1 with the colors it
+    // paints against. The ring (--color-ring → --primary-focus) renders on
+    // white surfaces, the canvas and the soft primary tint — every documented
+    // adjacent background must clear the floor. The token may alias another
+    // (--primary-focus: var(--primary)); the guard resolves the chain so an
+    // alias to a failing value reds exactly like a literal one.
+    const cssVar = (name: string): string | null => {
+      const alias = new RegExp(`${name}:\\s*var\\(--([a-z-]+)\\)`).exec(
+        indexCss,
+      );
+      return alias ? cssHexVar(indexCss, alias[1]!) : cssHexVar(indexCss, name);
+    };
+    const focusHex = cssVar("--primary-focus");
+    expect(
+      focusHex,
+      "--primary-focus (resolved) must be a concrete hex color",
+    ).not.toBeNull();
+    const lin = (channel: number) =>
+      channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    const luminance = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      const [r, g, b] = [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff].map((c) =>
+        lin(c / 255),
+      );
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const contrast = (a: string, b: string) => {
+      const sorted = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (sorted[0]! + 0.05) / (sorted[1]! + 0.05);
+    };
+    for (const neighbor of ["--surface", "--bg", "--primary-soft"]) {
+      const hex = cssVar(neighbor) as string;
+      expect(hex, `${neighbor} must resolve to a hex color`).not.toBeNull();
+      const ratio = contrast(focusHex as string, hex);
+      expect(
+        ratio,
+        `focus ring on ${neighbor} must be ≥3:1 (measured ${ratio.toFixed(2)})`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("renders the control-family focus ring at full strength (no alpha dilution)", () => {
+    // A `ring-ring/NN` alpha modifier blends the ring toward the background —
+    // even a 3:1 token measured 1.43:1 at 25% opacity on white. The control
+    // family must paint the ring solid; state layers live on the token, not
+    // in per-control alpha.
+    const uiDir = join(here, "../components/ui");
+    const diluted: string[] = [];
+    for (const entry of readdirSync(uiDir)) {
+      if (!/\.tsx$/.test(entry) || /\.test\./.test(entry)) continue;
+      const text = readFileSync(join(uiDir, entry), "utf8");
+      if (/ring-ring\/\d+/.test(text)) diluted.push(entry);
+    }
+    expect(diluted).toEqual([]);
+  });
 });
