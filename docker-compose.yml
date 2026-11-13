@@ -75,6 +75,15 @@ services:
       HEARTBEAT_TIMEOUT_MS: ${HEARTBEAT_TIMEOUT_MS:-}
       # Unset → defaults to HEARTBEAT_SCAN_INTERVAL_MS inside the app.
       DEADLINE_SCAN_INTERVAL_MS: ${DEADLINE_SCAN_INTERVAL_MS:-}
+      # Technical telemetry (ADR-028, default Off): every forward resolves to
+      # the Off/no-export posture when unset — no SDK, no export task, no
+      # telemetry network. Enabling is a deployment-level opt-in.
+      TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-}
+      TELEMETRY_SERVICE_NAME: ${TELEMETRY_SERVICE_NAME:-}
+      TELEMETRY_SAMPLE_RATIO: ${TELEMETRY_SAMPLE_RATIO:-}
+      TELEMETRY_EXPORTER: ${TELEMETRY_EXPORTER:-}
+      # Memory-exporter witness only; empty in real deployments.
+      TELEMETRY_MEMORY_DUMP_FILE: ${TELEMETRY_MEMORY_DUMP_FILE:-}
     depends_on:
       db:
         condition: service_healthy

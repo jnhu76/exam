@@ -411,6 +411,47 @@ function nonNegIntLeaf(
 }
 
 /**
+ * Strict sampling ratio in [0, 1] (fraction digits allowed). A ratio outside
+ * the closed interval or non-numeric is a misconfiguration and fails fast
+ * instead of silently clamping (clamping would widen or zero the sampled
+ * population without the operator noticing).
+ */
+function ratioLeaf(
+  defaultValue: number,
+  opts: LeafOptions = {},
+): SettingLeaf<number> {
+  const {
+    requiredInProduction = false,
+    secret = false,
+    binding = "operator",
+  } = opts;
+  return {
+    kind: "strict-ratio",
+    resolve: (raw, ctx) => {
+      if (isEmpty(raw)) {
+        if (requiredInProduction && ctx.isProduction) {
+          throw new SettingsError(requiredMessage(ctx.envName));
+        }
+        return defaultValue;
+      }
+      const trimmed = (raw as string).trim();
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 0 || n > 1 || trimmed === "") {
+        throw new SettingsError(
+          `${ctx.envName} must be a ratio between 0 and 1 (got: ${raw})`,
+        );
+      }
+      return n;
+    },
+    defaultRaw: String(defaultValue),
+
+    requiredInProduction,
+    secret,
+    binding,
+  };
+}
+
+/**
  * Strict enum. Without `defaultValue` the resolved value is `undefined`
  * when unset — the derived default then belongs to runtime policy
  * (e.g. REDIS_MODE derives from REDIS_URL presence).
@@ -785,6 +826,26 @@ export const SETTINGS = {
     EMAIL_WORKER_LOCK_TIMEOUT_MS: posIntLeaf(300000),
     EMAIL_WORKER_HEARTBEAT_STALE_MS: posIntLeaf(60000),
     EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: posIntLeaf(8000),
+  },
+  telemetry: {
+    // Technical telemetry (ADR-028, default Off). Every leaf resolves to the
+    // Off/no-export posture when unset: a bare deployment keeps the offline
+    // LAN contract — no SDK, no exporter task, no telemetry network.
+    TELEMETRY_ENABLED: truthyLeaf(),
+    TELEMETRY_SERVICE_NAME: stringLeaf("exam-api", { trim: true }),
+    // Root-sampler ratio; 1 samples every server-created trace (the default
+    // diagnostic posture — sampling narrows volume, never identity).
+    TELEMETRY_SAMPLE_RATIO: ratioLeaf(1),
+    // Export target. `none` = On with in-process signals only (no export
+    // task, no network). `memory` = bounded in-process buffer for local
+    // observation. OTLP export is a W6 deployment concern, not a runtime
+    // leaf yet.
+    TELEMETRY_EXPORTER: enumLeaf(["none", "memory"] as const, "none"),
+    // Memory-exporter witness seam: when non-empty, graceful shutdown writes
+    // the retained spans as JSONL to this path (best-effort, exit-neutral).
+    // Empty = disabled; production deployments never set it. Mirrors the
+    // EMAIL_FAKE_SEND_ENTERED_FILE witness pattern.
+    TELEMETRY_MEMORY_DUMP_FILE: stringLeaf("", { trim: true }),
   },
 } as const satisfies SettingsTree;
 

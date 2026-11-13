@@ -5,3 +5,8 @@ allowBuilds:
   argon2: true
   esbuild: true
   msw: true
+  # Transitive of @opentelemetry/sdk-node's OTLP-gRPC exporter packages
+  # (never imported by the API runtime — the exporter decision is explicit
+  # in apps/api/src/telemetry/). Its postinstall only regenerates a local
+  # light build; the published runtime works without executing it.
+  protobufjs: false
