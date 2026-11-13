@@ -75,6 +75,12 @@ describe("schedule seam — instant → datetime-local wall clock", () => {
       instantToLocalInput("2026-11-20T01:00:30.500Z", "Asia/Shanghai"),
     ).toBe("2026-11-20T09:00");
   });
+
+  it("fails closed to an empty value for an unparseable instant", () => {
+    // The seam owns the guard: callers pass wire instants straight in.
+    expect(instantToLocalInput("not-a-date", "Asia/Shanghai")).toBe("");
+    expect(instantToLocalInput("", "Asia/Shanghai")).toBe("");
+  });
 });
 
 describe("schedule seam — datetime-local wall clock → instant", () => {
@@ -85,12 +91,15 @@ describe("schedule seam — datetime-local wall clock → instant", () => {
     });
   });
 
-  it("keeps user-entered seconds in the instant", () => {
+  it("declares the datetime-local control's minute precision only", () => {
+    // The authoring controls are minute-granularity datetime-local inputs, so
+    // a seconds-bearing value is a FORMAT error — never a DST-gap. In
+    // particular ":00" must not be misreported as non-existent.
+    expect(localInputToInstant("2026-11-20T09:00:00", "Asia/Shanghai")).toEqual(
+      { kind: "invalid" },
+    );
     expect(localInputToInstant("2026-11-20T09:00:30", "Asia/Shanghai")).toEqual(
-      {
-        kind: "unique",
-        instant: "2026-11-20T01:00:30.000Z",
-      },
+      { kind: "invalid" },
     );
   });
 

@@ -36,6 +36,7 @@ describe("ExamConfigForm totalScore", () => {
     const onChange = vi.fn();
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -56,6 +57,7 @@ describe("ExamConfigForm totalScore", () => {
   it("shows totalScore as read-only when questions are selected", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -74,6 +76,7 @@ describe("ExamConfigForm totalScore", () => {
   it("shows editable totalScore when no questions are selected", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -89,6 +92,7 @@ describe("ExamConfigForm totalScore", () => {
     const onChange = vi.fn();
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -108,6 +112,7 @@ describe("ExamConfigForm totalScore", () => {
   it("shows warning in manual mode when totalScore does not match question score sum", async () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -131,6 +136,7 @@ describe("ExamConfigForm totalScore", () => {
     const onChange = vi.fn();
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -154,6 +160,7 @@ describe("ExamConfigForm totalScore", () => {
     const onChange = vi.fn();
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -179,6 +186,7 @@ describe("ExamConfigForm fields", () => {
   it("renders title, duration fields", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -193,6 +201,7 @@ describe("ExamConfigForm fields", () => {
     const onChange = vi.fn();
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -204,9 +213,12 @@ describe("ExamConfigForm fields", () => {
     expect(onChange).toHaveBeenCalled();
   });
 
-  it("shows time error when closeAt is before openAt", () => {
+  it("renders the schedule ordering error the owning page resolved", () => {
+    // Ordering is decided by the owning page's single wall-clock resolution
+    // (in the form session's zone); this form only renders that verdict.
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -215,6 +227,7 @@ describe("ExamConfigForm fields", () => {
         }}
         questions={[]}
         onChange={() => {}}
+        timeInvalid
       />,
     );
     expect(screen.getByText(/结束时间必须晚于开始时间/)).toBeInTheDocument();
@@ -223,6 +236,7 @@ describe("ExamConfigForm fields", () => {
   it("shows score error when passingScore > totalScore", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -236,31 +250,27 @@ describe("ExamConfigForm fields", () => {
     expect(screen.getByText(/及格分不能超过总分/)).toBeInTheDocument();
   });
 
-  it("clears the time validation error once closeAt is after openAt", () => {
+  it("clears the schedule ordering error when the owning page reports a valid order", () => {
     const { rerender } = render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
-        data={{
-          ...baseConfig,
-          openAt: "2026-06-01T11:00",
-          closeAt: "2026-06-01T09:00",
-        }}
+        data={baseConfig}
         questions={[]}
         onChange={() => {}}
+        timeInvalid
       />,
     );
     expect(screen.getByText(/结束时间必须晚于开始时间/)).toBeInTheDocument();
 
     rerender(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
-        data={{
-          ...baseConfig,
-          openAt: "2026-06-01T09:00",
-          closeAt: "2026-06-01T11:00",
-        }}
+        data={baseConfig}
         questions={[]}
         onChange={() => {}}
+        timeInvalid={false}
       />,
     );
     expect(
@@ -271,6 +281,7 @@ describe("ExamConfigForm fields", () => {
   it("clears the score validation error once passingScore is within total", () => {
     const { rerender } = render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -285,6 +296,7 @@ describe("ExamConfigForm fields", () => {
 
     rerender(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{
           ...baseConfig,
@@ -301,6 +313,7 @@ describe("ExamConfigForm fields", () => {
   it("does not expose Phase 2 runtime controls", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -321,6 +334,7 @@ describe("ExamConfigForm fields", () => {
     // rejects their activation server-side).
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -334,6 +348,7 @@ describe("ExamConfigForm fields", () => {
   it("renders retake policy section", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -346,6 +361,7 @@ describe("ExamConfigForm fields", () => {
   it("renders max attempts field", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -358,6 +374,7 @@ describe("ExamConfigForm fields", () => {
   it("renders result publication mode selector with default immediate", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -371,6 +388,7 @@ describe("ExamConfigForm fields", () => {
   it("renders manual mode option when resultPublicationMode is manual", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{ ...baseConfig, resultPublicationMode: "manual" }}
         questions={[]}
@@ -385,6 +403,7 @@ describe("ExamConfigForm passing-score invariant (EXAM-SCORE-INV-1)", () => {
   it("passing-score input exposes min=0", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -398,6 +417,7 @@ describe("ExamConfigForm passing-score invariant (EXAM-SCORE-INV-1)", () => {
   it("total-score input remains min=1", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={baseConfig}
         questions={[]}
@@ -411,6 +431,7 @@ describe("ExamConfigForm passing-score invariant (EXAM-SCORE-INV-1)", () => {
   it("passingScore > totalScore shows validation error", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{ ...baseConfig, passingScore: 120, totalScore: 100 }}
         questions={[]}
@@ -423,6 +444,7 @@ describe("ExamConfigForm passing-score invariant (EXAM-SCORE-INV-1)", () => {
   it("passingScore = totalScore does not show error", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{ ...baseConfig, passingScore: 100, totalScore: 100 }}
         questions={[]}
@@ -435,6 +457,7 @@ describe("ExamConfigForm passing-score invariant (EXAM-SCORE-INV-1)", () => {
   it("passingScore = 0 does not produce a lower-bound UI error", () => {
     render(
       <ExamConfigForm
+        scheduleTimeZone="Asia/Shanghai"
         courses={[{ id: "course-1", name: "Course 1" }]}
         data={{ ...baseConfig, passingScore: 0, totalScore: 100 }}
         questions={[]}

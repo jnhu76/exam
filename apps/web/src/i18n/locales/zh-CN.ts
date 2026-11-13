@@ -1914,6 +1914,7 @@ const zhCN = {
         manualPublication: "管理员手动公布",
         timeInvalid: "结束时间必须晚于开始时间",
         timeZoneHint: "以下时间按 {{timeZone}} 时区填写与保存。",
+        timeZoneLoading: "正在读取组织时区，读取完成后即可填写排期。",
         scheduleDstGap:
           "该时间在 {{timeZone}} 的夏令时切换中不存在，请选择其他时间。",
         scheduleDstAmbiguous:

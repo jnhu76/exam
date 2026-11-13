@@ -14,8 +14,6 @@ import { FormSection } from "@/components/shared/FormSection";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/shared/FieldError";
 import { Field, FieldGroup, FieldRow } from "@/components/shared/FieldGroup";
-import { useProductDateTime } from "@/contexts/DateTimeContext";
-import { localInputToInstant } from "@/lib/dateTime";
 
 /** A question's ID and its configured score value. */
 interface QuestionScore {
@@ -83,6 +81,10 @@ interface ExamConfigFormProps {
   data: ExamConfigData;
   onChange: (data: ExamConfigData) => void;
   scheduleFieldErrors?: ExamScheduleFieldErrors;
+  /** The form session's frozen scheduling zone (owning page owns it). */
+  scheduleTimeZone: string;
+  /** True when the owning page's single resolution says closeAt <= openAt. */
+  timeInvalid?: boolean;
 }
 
 /**
@@ -95,9 +97,10 @@ export function ExamConfigForm({
   data,
   onChange,
   scheduleFieldErrors,
+  scheduleTimeZone,
+  timeInvalid = false,
 }: ExamConfigFormProps) {
   const { t } = useTranslation();
-  const { timeZone: scheduleTimeZone } = useProductDateTime();
   const [manualTotalScore, setManualTotalScore] = useState(false);
 
   const computedTotal = questions
@@ -106,20 +109,6 @@ export function ExamConfigForm({
   const hasQuestions = data.questionIds.length > 0;
   const showWarning =
     hasQuestions && manualTotalScore && data.totalScore !== computedTotal;
-  // Ordering compares instants in the scheduling zone (never the browser
-  // zone) via the shared seam; a wall clock that does not resolve uniquely
-  // is reported by the owning page, not here.
-  const openInstant = data.openAt
-    ? localInputToInstant(data.openAt, scheduleTimeZone)
-    : null;
-  const closeInstant = data.closeAt
-    ? localInputToInstant(data.closeAt, scheduleTimeZone)
-    : null;
-  const timeError = Boolean(
-    openInstant?.kind === "unique" &&
-    closeInstant?.kind === "unique" &&
-    closeInstant.instant <= openInstant.instant,
-  );
   const scoreError = data.totalScore > 0 && data.passingScore > data.totalScore;
 
   useEffect(() => {
@@ -254,7 +243,7 @@ export function ExamConfigForm({
               </Field>
             )}
           </FieldRow>
-          {timeError && (
+          {timeInvalid && (
             <FieldError>{t("admin.forms.exam.timeInvalid")}</FieldError>
           )}
           {data.timingMode === "timed_window" && (

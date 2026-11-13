@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DateTimeProvider,
   useProductDateTime,
+  useScheduleSessionTimeZone,
 } from "@/contexts/DateTimeContext";
 import { permissionsForRole } from "@exam/authz";
 import type { MeResponse } from "@exam/contracts";
@@ -59,6 +60,15 @@ function Probe() {
   return <div data-testid="tz-probe">{formatter.timeZone}</div>;
 }
 
+/**
+ * The form-session zone: null while the first settings read is pending (the
+ * schedule inputs stay closed), then the frozen zone the whole session uses.
+ */
+function SessionProbe() {
+  const sessionTimeZone = useScheduleSessionTimeZone();
+  return <div data-testid="session-probe">{sessionTimeZone ?? "pending"}</div>;
+}
+
 const FALLBACK_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 beforeEach(() => {
@@ -77,6 +87,7 @@ function renderProvider() {
   return render(
     <DateTimeProvider>
       <Probe />
+      <SessionProbe />
     </DateTimeProvider>,
   );
 }
@@ -87,6 +98,7 @@ function switchUser(user: unknown, rerender: (ui: React.ReactNode) => void) {
     rerender(
       <DateTimeProvider>
         <Probe />
+        <SessionProbe />
       </DateTimeProvider>,
     );
   });
@@ -191,6 +203,155 @@ describe("DateTimeProvider — organization settings ownership (R9)", () => {
     expect(screen.getByTestId("tz-probe")).toHaveTextContent(FALLBACK_TZ);
     expect(screen.getByTestId("tz-probe")).not.toHaveTextContent(
       "Europe/Paris",
+    );
+  });
+});
+
+/**
+ * #971 W3 review (A/C): a FORM SESSION gets exactly one scheduling zone.
+ * While the first organization-settings read is pending the session zone is
+ * unknown (schedule inputs stay closed); once it settles the zone is frozen
+ * for the whole session, and an identity switch drops it before paint.
+ */
+describe("DateTimeProvider — one scheduling zone per form session", () => {
+  it("keeps the session closed until the first settings read settles, then freezes the organization zone", async () => {
+    useAuthMock.mockReturnValue({ user: userFor("a"), isLoading: false });
+    deferredSettings(0);
+    renderProvider();
+
+    // No session zone yet: no schedule input may open on the fallback.
+    expect(screen.getByTestId("session-probe")).toHaveTextContent("pending");
+
+    await act(async () => {
+      deferreds[0]!.resolve({ timezone: "Asia/Shanghai" });
+    });
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(
+      "Asia/Shanghai",
+    );
+  });
+
+  it("freezes the session zone: a later settings refresh cannot change it", async () => {
+    useAuthMock.mockReturnValue({ user: userFor("a"), isLoading: false });
+    apiGet.mockResolvedValueOnce({ timezone: "Asia/Shanghai" });
+    renderProvider();
+    await waitFor(() => {
+      expect(screen.getByTestId("session-probe")).toHaveTextContent(
+        "Asia/Shanghai",
+      );
+    });
+
+    // A branding refresh re-reads settings and moves the PRODUCT display zone…
+    apiGet.mockResolvedValueOnce({ timezone: "Europe/Paris" });
+    await act(async () => {
+      window.dispatchEvent(new Event("branding:refresh"));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("tz-probe")).toHaveTextContent("Europe/Paris");
+    });
+    // …but the open form session keeps interpreting/echoing Shanghai.
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(
+      "Asia/Shanghai",
+    );
+  });
+
+  it("opens the session on the allowed fallback when the identity cannot read settings", () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        ...userFor("candidate"),
+        role: "Candidate",
+        capabilities: [...permissionsForRole("Candidate")],
+      },
+      isLoading: false,
+    });
+    renderProvider();
+
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(FALLBACK_TZ);
+    expect(apiGet).not.toHaveBeenCalled();
+  });
+
+  it("opens the session on the fallback after the first settings read fails", async () => {
+    useAuthMock.mockReturnValue({ user: userFor("a"), isLoading: false });
+    deferredSettings(0);
+    renderProvider();
+    expect(screen.getByTestId("session-probe")).toHaveTextContent("pending");
+
+    await act(async () => {
+      deferreds[0]!.reject(new Error("settings unavailable"));
+    });
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(FALLBACK_TZ);
+  });
+
+  it("drops a superseded identity's session zone; its late success cannot reopen the old zone", async () => {
+    useAuthMock.mockReturnValue({ user: userFor("a"), isLoading: false });
+    apiGet.mockResolvedValueOnce({ timezone: "Asia/Shanghai" });
+    const { rerender } = renderProvider();
+    await waitFor(() => {
+      expect(screen.getByTestId("session-probe")).toHaveTextContent(
+        "Asia/Shanghai",
+      );
+    });
+
+    // A branding refresh under identity A is still in flight when the
+    // identity switches to B.
+    deferredSettings(1);
+    await act(async () => {
+      window.dispatchEvent(new Event("branding:refresh"));
+    });
+    deferredSettings(2);
+    switchUser(userFor("b"), rerender);
+    // The previous identity's frozen zone is gone before B's read settles.
+    expect(screen.getByTestId("session-probe")).toHaveTextContent("pending");
+    expect(screen.getByTestId("session-probe")).not.toHaveTextContent(
+      "Asia/Shanghai",
+    );
+
+    // A's late refresh success must not write the old organization's zone.
+    await act(async () => {
+      deferreds[1]!.resolve({ timezone: "Europe/Paris" });
+    });
+    expect(screen.getByTestId("session-probe")).toHaveTextContent("pending");
+
+    // B's own read settles the new session.
+    await act(async () => {
+      deferreds[2]!.resolve({ timezone: "Asia/Shanghai" });
+    });
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(
+      "Asia/Shanghai",
+    );
+  });
+
+  it("never lets a superseded identity's late failure reopen a fallback session", async () => {
+    useAuthMock.mockReturnValue({ user: userFor("a"), isLoading: false });
+    apiGet.mockResolvedValueOnce({ timezone: "Asia/Shanghai" });
+    const { rerender } = renderProvider();
+    await waitFor(() => {
+      expect(screen.getByTestId("session-probe")).toHaveTextContent(
+        "Asia/Shanghai",
+      );
+    });
+
+    deferredSettings(1);
+    await act(async () => {
+      window.dispatchEvent(new Event("branding:refresh"));
+    });
+    deferredSettings(2);
+    switchUser(userFor("b"), rerender);
+    expect(screen.getByTestId("session-probe")).toHaveTextContent("pending");
+
+    // B's read succeeds first…
+    await act(async () => {
+      deferreds[2]!.resolve({ timezone: "Asia/Shanghai" });
+    });
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(
+      "Asia/Shanghai",
+    );
+
+    // …then A's late refresh FAILS: it must not clobber the session.
+    await act(async () => {
+      deferreds[1]!.reject(new Error("late failure"));
+    });
+    expect(screen.getByTestId("session-probe")).toHaveTextContent(
+      "Asia/Shanghai",
     );
   });
 });

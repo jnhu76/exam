@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { fetchAllPickerQuestions } from "@/lib/allQuestions";
 import { getApiErrorMessage } from "@/lib/apiErrors";
-import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { useScheduleSessionTimeZone } from "@/contexts/DateTimeContext";
 import { instantToLocalInput } from "@/lib/dateTime";
 import { resolveScheduleField, scheduleFieldHint } from "@/lib/scheduleInput";
 import { toast } from "sonner";
@@ -88,18 +88,10 @@ interface ExamDetailResponse {
 }
 
 /**
- * Converts an ISO instant into the scheduling-zone datetime-local fill-back
- * (F-20): the wall clock the stored instant represents in the ORGANIZATION
- * zone, never the browser zone.
+ * Maps a GET exam response into the ExamConfigData form state, filling the
+ * schedule back as the wall clock of the ORGANIZATION zone (F-20), never the
+ * browser zone.
  */
-function isoToScheduleInput(iso: string, timeZone: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return instantToLocalInput(d, timeZone);
-}
-
-/** Maps a GET exam response into the ExamConfigData form state. */
 function examToConfig(
   exam: ExamDetailResponse,
   timeZone: string,
@@ -110,8 +102,8 @@ function examToConfig(
     courseId: exam.courseId ?? "",
     timingMode: exam.timingMode ?? "timed_window",
     durationMinutes: exam.durationMinutes,
-    openAt: isoToScheduleInput(exam.openAt, timeZone),
-    closeAt: exam.closeAt ? isoToScheduleInput(exam.closeAt, timeZone) : null,
+    openAt: instantToLocalInput(exam.openAt, timeZone),
+    closeAt: exam.closeAt ? instantToLocalInput(exam.closeAt, timeZone) : null,
     passingScore: exam.passingScore ?? 60,
     totalScore: exam.totalScore ?? 100,
     questionSelectionMode:
@@ -141,7 +133,8 @@ export function ExamEditPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { timeZone: scheduleTimeZone } = useProductDateTime();
+  /** The form session's frozen scheduling zone; null until settings settle. */
+  const sessionTimeZone = useScheduleSessionTimeZone();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [examStatus, setExamStatus] = useState<string>("draft");
@@ -151,6 +144,7 @@ export function ExamEditPage() {
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadedExam, setLoadedExam] = useState<ExamDetailResponse | null>(null);
   const [config, setConfig] = useState<ExamConfigData | null>(null);
   /** Stored schedule instants from the GET response — the preservation
    * baseline: an untouched field sends these verbatim (F-20). */
@@ -158,8 +152,6 @@ export function ExamEditPage() {
     openAt: string;
     closeAt: string | null;
   } | null>(null);
-  /** Zone the current wall-clock fill-backs were produced in. */
-  const [fillTimeZone, setFillTimeZone] = useState<string | null>(null);
 
   /** Loads the exam (for prefill), available courses, and questions in parallel. */
   const loadData = useCallback(async () => {
@@ -171,9 +163,8 @@ export function ExamEditPage() {
         api.get<PaginatedResponse<CourseRow>>("/api/courses"),
         fetchAllPickerQuestions(),
       ]);
-      setConfig(examToConfig(exam, scheduleTimeZone));
+      setLoadedExam(exam);
       setOriginalSchedule({ openAt: exam.openAt, closeAt: exam.closeAt });
-      setFillTimeZone(scheduleTimeZone);
       setExamStatus(exam.status);
       setCourses(cData.items);
       setQuestions(questions);
@@ -182,45 +173,21 @@ export function ExamEditPage() {
     } finally {
       setIsLoading(false);
     }
-    // scheduleTimeZone is read once per load; the effect below re-fills
-    // untouched fields when the resolved zone changes afterwards.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Organization settings can land after the exam GET (independent
-  // requests). When the resolved scheduling zone changes, re-fill only the
-  // UNTOUCHED schedule fields so the form keeps displaying the same stored
-  // instants in the new zone; user edits stay exactly as typed.
+  // The schedule prefill opens only once the form session's zone is fixed
+  // (first settings read settled). Until then the schedule inputs are not
+  // rendered at all, so a late settings response can never reinterpret a
+  // wall clock the user already typed (F-20 review A). There is deliberately
+  // no "re-fill when the zone changes" effect: the session zone is frozen.
   useEffect(() => {
-    if (!config || !originalSchedule || !fillTimeZone) return;
-    if (scheduleTimeZone === fillTimeZone) return;
-    setConfig((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev };
-      const openFillOld = originalSchedule.openAt
-        ? instantToLocalInput(originalSchedule.openAt, fillTimeZone)
-        : "";
-      if (prev.openAt === openFillOld) {
-        next.openAt = originalSchedule.openAt
-          ? instantToLocalInput(originalSchedule.openAt, scheduleTimeZone)
-          : "";
-      }
-      const closeFillOld = originalSchedule.closeAt
-        ? instantToLocalInput(originalSchedule.closeAt, fillTimeZone)
-        : "";
-      if ((prev.closeAt ?? "") === closeFillOld) {
-        next.closeAt = originalSchedule.closeAt
-          ? instantToLocalInput(originalSchedule.closeAt, scheduleTimeZone)
-          : null;
-      }
-      return next;
-    });
-    setFillTimeZone(scheduleTimeZone);
-  }, [scheduleTimeZone, config, originalSchedule, fillTimeZone]);
+    if (!loadedExam || !sessionTimeZone) return;
+    setConfig(examToConfig(loadedExam, sessionTimeZone));
+  }, [loadedExam, sessionTimeZone]);
 
   /** Adds a question to the selected question list if not already present. */
   function addQuestion(qId: string) {
@@ -237,58 +204,60 @@ export function ExamEditPage() {
     });
   }
 
+  /**
+   * ONE resolution of the schedule fields per form state (F-20): the live
+   * field hints and the save validation/payload all consume this result —
+   * no surface re-parses the wall clocks under another zone.
+   */
+  const schedule = useMemo(() => {
+    if (!config || !sessionTimeZone) return null;
+    return {
+      open: resolveScheduleField(
+        config.openAt,
+        originalSchedule?.openAt ?? null,
+        sessionTimeZone,
+      ),
+      close: resolveScheduleField(
+        config.closeAt ?? "",
+        originalSchedule?.closeAt ?? null,
+        sessionTimeZone,
+      ),
+    };
+  }, [config, originalSchedule, sessionTimeZone]);
+
   /** Live schedule hints for the form fields (DST gap/overlap on edited
    * wall clocks; untouched preserved instants never produce a hint). */
   const scheduleFieldErrors = useMemo(() => {
-    if (!config) return undefined;
-    const open = resolveScheduleField(
-      config.openAt,
-      originalSchedule?.openAt ?? null,
-      scheduleTimeZone,
-    );
-    const close = resolveScheduleField(
-      config.closeAt ?? "",
-      originalSchedule?.closeAt ?? null,
-      scheduleTimeZone,
-    );
+    if (!schedule || !sessionTimeZone) return undefined;
     return {
-      openAt: scheduleFieldHint(open.status, scheduleTimeZone, t),
-      closeAt: scheduleFieldHint(close.status, scheduleTimeZone, t),
+      openAt: scheduleFieldHint(schedule.open.status, sessionTimeZone, t),
+      closeAt: scheduleFieldHint(schedule.close.status, sessionTimeZone, t),
     };
-  }, [config, originalSchedule, scheduleTimeZone, t]);
+  }, [schedule, sessionTimeZone, t]);
+
+  const timeInvalid =
+    schedule !== null &&
+    schedule.open.instant !== null &&
+    schedule.close.instant !== null &&
+    schedule.close.instant <= schedule.open.instant;
 
   /** Validates the form, PATCHes the exam, and navigates to the detail page. */
   async function handleSave() {
-    if (!id || !config || saving) return;
-    // Schedule fields resolve through the seam in the scheduling zone; an
-    // untouched field keeps the stored instant (seconds and DST-overlap
+    if (!id || !config || !schedule || saving) return;
+    // Schedule fields resolve through the seam in the form session's zone;
+    // an untouched field keeps the stored instant (seconds and DST-overlap
     // side included) instead of re-converting its wall clock.
-    const open = resolveScheduleField(
-      config.openAt,
-      originalSchedule?.openAt ?? null,
-      scheduleTimeZone,
-    );
-    const close = resolveScheduleField(
-      config.closeAt ?? "",
-      originalSchedule?.closeAt ?? null,
-      scheduleTimeZone,
-    );
+    const { open, close } = schedule;
     const errors: Record<string, string> = {};
     if (!config.title.trim())
       errors.title = t("admin.examEdit.validation.titleRequired");
     if (!config.courseId)
       errors.courseId = t("admin.examEdit.validation.courseRequired");
-    const openHint = scheduleFieldHint(open.status, scheduleTimeZone, t);
+    const openHint = scheduleFieldErrors?.openAt;
     if (openHint) errors.openAt = openHint;
-    const closeHint = scheduleFieldHint(close.status, scheduleTimeZone, t);
+    const closeHint = scheduleFieldErrors?.closeAt;
     if (closeHint) errors.closeAt = closeHint;
-    if (
-      !openHint &&
-      !closeHint &&
-      open.instant &&
-      close.instant &&
-      close.instant <= open.instant
-    ) {
+    if (!openHint && !closeHint && timeInvalid) {
       errors.time = t("admin.examEdit.validation.timeInvalid");
     }
     if (config.passingScore > config.totalScore) {
@@ -333,13 +302,17 @@ export function ExamEditPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
-  if (!config)
+  if (!loadedExam)
     return (
       <ErrorState
         message={t("admin.examEdit.feedback.loadConfigFailed")}
         onRetry={loadData}
       />
     );
+  // The schedule inputs (and the rest of the prefilled form) open only once
+  // the form session's zone is fixed; until then a late settings response
+  // could still change the zone under the user's wall clocks.
+  if (!sessionTimeZone || !config) return <LoadingState />;
 
   const selectedQuestions = questions.filter((q) =>
     config.questionIds.includes(q.id),
@@ -369,6 +342,8 @@ export function ExamEditPage() {
             data={config}
             onChange={setConfig}
             scheduleFieldErrors={scheduleFieldErrors}
+            scheduleTimeZone={sessionTimeZone}
+            timeInvalid={timeInvalid}
           />
         </div>
 

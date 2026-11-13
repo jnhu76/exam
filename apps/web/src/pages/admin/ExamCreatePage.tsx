@@ -6,7 +6,8 @@ import { fetchAllPickerQuestions } from "@/lib/allQuestions";
 import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
 import { resolveListReturnPath } from "@/lib/listReturnNavigation";
 import { routes } from "@/lib/routes";
-import { useProductDateTime } from "@/contexts/DateTimeContext";
+import { useScheduleSessionTimeZone } from "@/contexts/DateTimeContext";
+import { createProductDateTimeFormatter } from "@/lib/dateTime";
 import {
   buildWizardPolicyPreview,
   type WizardProfileLike,
@@ -191,7 +192,16 @@ export function ExamCreatePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const summaryLabels = useSummaryLabels();
-  const { formatDateTime, timeZone: scheduleTimeZone } = useProductDateTime();
+  /** The form session's frozen scheduling zone; null until settings settle. */
+  const sessionTimeZone = useScheduleSessionTimeZone();
+  // Review/preview rendering must use the SAME zone as the wire conversion,
+  // so it is derived from the frozen session zone rather than the live
+  // product formatter (which a branding refresh can move mid-session).
+  const sessionFormatter = useMemo(
+    () =>
+      sessionTimeZone ? createProductDateTimeFormatter(sessionTimeZone) : null,
+    [sessionTimeZone],
+  );
 
   const [state, setState] = useState<WizardState>(initialWizardState);
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -269,19 +279,25 @@ export function ExamCreatePage() {
     [selectedProfile, state.overrides],
   );
 
-  // One schedule resolution per state/timezone change: step-4 validation,
-  // the step-5 review preview, and the POST payload all consume this result
-  // (F-20 — no surface re-parses the wall clock under the browser zone).
+  // One schedule resolution per state/session-zone change: step-4
+  // validation, the step-5 review preview, and the POST payload all consume
+  // this result (F-20 — no surface re-parses the wall clock under the
+  // browser zone). Null while the session zone is not yet fixed: the
+  // schedule inputs stay closed, never interpreting wall clocks on a
+  // fallback zone a late settings response could replace.
   const schedule = useMemo(
-    () => resolveWizardSchedule(state, scheduleTimeZone),
-    [state.openAt, state.closeAt, scheduleTimeZone],
+    () =>
+      sessionTimeZone ? resolveWizardSchedule(state, sessionTimeZone) : null,
+    [state.openAt, state.closeAt, sessionTimeZone],
   );
-  const openHint = scheduleFieldHint(schedule.open.status, scheduleTimeZone, t);
-  const closeHint = scheduleFieldHint(
-    schedule.close.status,
-    scheduleTimeZone,
-    t,
-  );
+  const openHint =
+    schedule && sessionTimeZone
+      ? scheduleFieldHint(schedule.open.status, sessionTimeZone, t)
+      : null;
+  const closeHint =
+    schedule && sessionTimeZone
+      ? scheduleFieldHint(schedule.close.status, sessionTimeZone, t)
+      : null;
 
   // ── state mutators (thin wrappers over wizardState helpers) ──
   const setStep = (step: number) => setState((s) => goToStep(s, step));
@@ -357,23 +373,30 @@ export function ExamCreatePage() {
         errors.score = t("admin.examWizard.validation.scoreInvalid");
     }
     if (state.step === 4) {
-      const untimed = preview.resolved.timingMode === "untimed";
-      if (
-        !untimed &&
-        (schedule.open.status === "empty" || schedule.close.status === "empty")
-      )
-        errors.time = t("admin.examWizard.validation.timeRequired");
-      else if (openHint) errors.openAt = openHint;
-      // A stale closeAt typed under another timing mode never participates
-      // while untimed (the field is not even rendered).
-      else if (!untimed && closeHint) errors.closeAt = closeHint;
-      else if (
-        !untimed &&
-        schedule.open.instant &&
-        schedule.close.instant &&
-        schedule.close.instant <= schedule.open.instant
-      )
-        errors.time = t("admin.examWizard.validation.timeInvalid");
+      if (!schedule) {
+        // The session zone is still being resolved: the schedule inputs are
+        // closed, so advancing would submit nothing meaningful.
+        errors.time = t("admin.forms.exam.timeZoneLoading");
+      } else {
+        const untimed = preview.resolved.timingMode === "untimed";
+        if (
+          !untimed &&
+          (schedule.open.status === "empty" ||
+            schedule.close.status === "empty")
+        )
+          errors.time = t("admin.examWizard.validation.timeRequired");
+        else if (openHint) errors.openAt = openHint;
+        // A stale closeAt typed under another timing mode never participates
+        // while untimed (the field is not even rendered).
+        else if (!untimed && closeHint) errors.closeAt = closeHint;
+        else if (
+          !untimed &&
+          schedule.open.instant &&
+          schedule.close.instant &&
+          schedule.close.instant <= schedule.open.instant
+        )
+          errors.time = t("admin.examWizard.validation.timeInvalid");
+      }
     }
     // Drop this step's stale errors (local + server field names) before
     // merging the fresh result, so a fixed field never keeps a ghost error.
@@ -397,6 +420,12 @@ export function ExamCreatePage() {
   }
 
   async function handleCreate() {
+    if (!schedule) {
+      // Fail closed: no POST until the form session's zone has resolved the
+      // wall clocks to instants.
+      setSaveError(t("admin.forms.exam.timeZoneLoading"));
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setFieldErrors({});
@@ -799,49 +828,63 @@ export function ExamCreatePage() {
       {/* Step 4 — schedule */}
       {state.step === 4 && (
         <FormSection title={t("admin.examWizard.steps.schedule")}>
-          {/* F-20: the wall clocks below are interpreted in the scheduling
-              zone — state which IANA zone that is, explicitly. */}
-          <p className="type-secondary">
-            {t("admin.forms.exam.timeZoneHint", { timeZone: scheduleTimeZone })}
-          </p>
-          <FieldRow>
-            <Field>
-              <Label htmlFor="wiz-openAt">
-                {t("admin.examWizard.schedule.startTime")}
-              </Label>
-              <Input
-                id="wiz-openAt"
-                type="datetime-local"
-                value={state.openAt}
-                onChange={(e) =>
-                  setState((s) => ({ ...s, openAt: e.target.value }))
-                }
-              />
-              <FieldError>{openHint}</FieldError>
-            </Field>
-            {/* Untimed (Phase A2 (Issue 291)) is open-ended — no close time to pick. */}
-            {preview.resolved.timingMode !== "untimed" && (
-              <Field>
-                <Label htmlFor="wiz-closeAt">
-                  {t("admin.examWizard.schedule.endTime")}
-                </Label>
-                <Input
-                  id="wiz-closeAt"
-                  type="datetime-local"
-                  value={state.closeAt}
-                  onChange={(e) =>
-                    setState((s) => ({ ...s, closeAt: e.target.value }))
-                  }
-                />
-                <FieldError>{closeHint}</FieldError>
-              </Field>
-            )}
-            {preview.resolved.timingMode === "untimed" && (
+          {sessionTimeZone ? (
+            <>
+              {/* F-20: the wall clocks below are interpreted in the form
+                  session's scheduling zone — state which IANA zone it is,
+                  explicitly. */}
               <p className="type-secondary">
-                {t("admin.examWizard.schedule.untimedHint")}
+                {t("admin.forms.exam.timeZoneHint", {
+                  timeZone: sessionTimeZone,
+                })}
               </p>
-            )}
-          </FieldRow>
+              <FieldRow>
+                <Field>
+                  <Label htmlFor="wiz-openAt">
+                    {t("admin.examWizard.schedule.startTime")}
+                  </Label>
+                  <Input
+                    id="wiz-openAt"
+                    type="datetime-local"
+                    value={state.openAt}
+                    onChange={(e) =>
+                      setState((s) => ({ ...s, openAt: e.target.value }))
+                    }
+                  />
+                  <FieldError>{openHint}</FieldError>
+                </Field>
+                {/* Untimed (Phase A2 (Issue 291)) is open-ended — no close time to pick. */}
+                {preview.resolved.timingMode !== "untimed" && (
+                  <Field>
+                    <Label htmlFor="wiz-closeAt">
+                      {t("admin.examWizard.schedule.endTime")}
+                    </Label>
+                    <Input
+                      id="wiz-closeAt"
+                      type="datetime-local"
+                      value={state.closeAt}
+                      onChange={(e) =>
+                        setState((s) => ({ ...s, closeAt: e.target.value }))
+                      }
+                    />
+                    <FieldError>{closeHint}</FieldError>
+                  </Field>
+                )}
+                {preview.resolved.timingMode === "untimed" && (
+                  <p className="type-secondary">
+                    {t("admin.examWizard.schedule.untimedHint")}
+                  </p>
+                )}
+              </FieldRow>
+            </>
+          ) : (
+            // The form session's zone is not fixed yet (first organization
+            // settings read still pending): keep the inputs closed so no
+            // wall clock is ever interpreted on a zone that could change.
+            <p role="status" className="type-secondary">
+              {t("admin.forms.exam.timeZoneLoading")}
+            </p>
+          )}
           {/* Local validation key + server-routed field names both render. */}
           <FieldError>{fieldErrors.time}</FieldError>
           <FieldError>{fieldErrors.openAt}</FieldError>
@@ -892,25 +935,32 @@ export function ExamCreatePage() {
                   {
                     label: t("admin.examWizard.schedule.startTime"),
                     // Render the RESOLVED instant (same conversion the
-                    // payload uses), so the preview shows the scheduling
-                    // zone's wall clock of the exact stored moment.
-                    value: schedule.open.instant
-                      ? formatDateTime(schedule.open.instant)
-                      : "—",
+                    // payload uses) through the SESSION zone's formatter, so
+                    // the preview shows exactly the wall clock the wire
+                    // instant was derived from.
+                    value:
+                      schedule?.open.instant && sessionFormatter
+                        ? sessionFormatter.formatDateTime(schedule.open.instant)
+                        : "—",
                   },
                   {
                     label: t("admin.examWizard.schedule.endTime"),
-                    value: schedule.close.instant
-                      ? formatDateTime(schedule.close.instant)
-                      : "—",
+                    value:
+                      schedule?.close.instant && sessionFormatter
+                        ? sessionFormatter.formatDateTime(
+                            schedule.close.instant,
+                          )
+                        : "—",
                   },
                 ]}
               />
-              <p className="mt-1 type-secondary">
-                {t("admin.forms.exam.timeZoneHint", {
-                  timeZone: scheduleTimeZone,
-                })}
-              </p>
+              {sessionTimeZone && (
+                <p className="mt-1 type-secondary">
+                  {t("admin.forms.exam.timeZoneHint", {
+                    timeZone: sessionTimeZone,
+                  })}
+                </p>
+              )}
             </div>
             <Separator />
             <div>
@@ -993,7 +1043,12 @@ export function ExamCreatePage() {
             </Button>
           )}
           {state.step < WIZARD_TOTAL_STEPS && (
-            <Button onClick={next}>{t("admin.examWizard.next")}</Button>
+            <Button
+              onClick={next}
+              disabled={state.step === 4 && !sessionTimeZone}
+            >
+              {t("admin.examWizard.next")}
+            </Button>
           )}
           {state.step === WIZARD_TOTAL_STEPS && (
             <Button onClick={() => void handleCreate()} disabled={saving}>

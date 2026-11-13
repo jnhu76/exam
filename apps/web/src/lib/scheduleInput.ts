@@ -1,8 +1,8 @@
+import type { TFunction } from "i18next";
 import { instantToLocalInput, localInputToInstant } from "./dateTime";
 
-/** Minimal translation function shape — accepts i18next's TFunction. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ScheduleFieldTranslateFn = (...args: any[]) => string;
+/** i18next's translation function; callers pass `t` straight through. */
+export type ScheduleFieldTranslateFn = TFunction;
 
 /**
  * Resolution of one schedule wall clock for exam authoring (#971 F-20).

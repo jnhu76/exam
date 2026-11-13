@@ -115,8 +115,7 @@ export type WallClockResolution =
   /** Malformed input or an impossible calendar date (e.g. 02-30). */
   | { kind: "invalid" };
 
-const LOCAL_INPUT_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
+const LOCAL_INPUT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 const DAY_MS = 86_400_000;
 
@@ -143,22 +142,16 @@ function zoneOffsetMs(utcMillis: number, timeZone: string): number {
   );
 }
 
-function wallInputOf(
-  utcMillis: number,
-  timeZone: string,
-  includeSeconds: boolean,
-): string {
+function wallInputOf(utcMillis: number, timeZone: string): string {
   const p = parts(utcMillis, timeZone, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    ...(includeSeconds ? { second: "2-digit" as const } : {}),
     hourCycle: "h23",
   });
-  const base = `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
-  return includeSeconds ? `${base}:${p.second}` : base;
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
 
 /**
@@ -166,19 +159,24 @@ function wallInputOf(
  * (minute precision — the input's display granularity). Use the untouched-
  * original-instant rule at the caller for saving, so seconds and DST-overlap
  * instants survive round trips without the input needing second precision.
+ * An unparseable value fails closed to the empty input value.
  */
 export function instantToLocalInput(
   value: DateTimeInput,
   timeZone: string,
 ): string {
-  return wallInputOf(new Date(value).getTime(), timeZone, false);
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return "";
+  return wallInputOf(instant.getTime(), timeZone);
 }
 
 /**
- * Resolves a `datetime-local` wall clock to a unique instant in `timeZone`.
+ * Resolves a minute-precision `datetime-local` wall clock (the format the
+ * authoring controls emit — no seconds) to a unique instant in `timeZone`.
  * DST gaps and overlaps have no unique resolution — the caller must surface
  * them as field hints and require a uniquely resolvable time; ambiguous and
- * nonexistent wall clocks are never silently snapped to one side.
+ * nonexistent wall clocks are never silently snapped to one side. Any other
+ * shape (seconds included) is a format error, not a DST outcome.
  */
 export function localInputToInstant(
   input: string,
@@ -191,7 +189,6 @@ export function localInputToInstant(
   const day = Number(match[3]);
   const hour = Number(match[4]);
   const minute = Number(match[5]);
-  const second = Number(match[6] ?? "0");
 
   // Calendar validity — Date.UTC rolls impossible dates over silently, so
   // check ranges before trusting it. Local date-time strings never carry an
@@ -204,15 +201,14 @@ export function localInputToInstant(
     day < 1 ||
     day > daysInMonth ||
     hour > 23 ||
-    minute > 59 ||
-    second > 59
+    minute > 59
   ) {
     return { kind: "invalid" };
   }
 
-  const guess = Date.UTC(year, month - 1, day, hour, minute, second);
+  const guess = Date.UTC(year, month - 1, day, hour, minute);
   const matchesInput = (utcMillis: number) =>
-    wallInputOf(utcMillis, timeZone, second > 0) === input;
+    wallInputOf(utcMillis, timeZone) === input;
 
   // The zone offset can differ on either side of a transition bracketing the
   // wall clock, so probe offsets before/at/after the naive UTC reading and

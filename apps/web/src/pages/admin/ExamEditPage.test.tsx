@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -30,6 +36,9 @@ const { apiGet, apiPatch, state } = vi.hoisted(() => {
     openAt: "",
     closeAt: "" as string | null,
     orgTimeZone: "Asia/Shanghai",
+    /** When true, /api/admin/settings hangs until the test resolves it. */
+    holdSettings: false,
+    resolveSettings: null as null | ((value: unknown) => void),
   };
   const mockExam = () => ({
     id: "exam-1",
@@ -61,8 +70,14 @@ const { apiGet, apiPatch, state } = vi.hoisted(() => {
         return Promise.resolve({ items: mockQuestions, total: 1 });
       if (path.includes("/api/exams/exam-1"))
         return Promise.resolve(mockExam());
-      if (path.includes("/api/admin/settings"))
+      if (path.includes("/api/admin/settings")) {
+        if (state.holdSettings) {
+          return new Promise((resolve) => {
+            state.resolveSettings = resolve;
+          });
+        }
         return Promise.resolve({ timezone: state.orgTimeZone });
+      }
       return Promise.resolve({});
     }),
     apiPatch: vi.fn().mockResolvedValue({}),
@@ -144,6 +159,8 @@ describe("ExamEditPage", () => {
     state.openAt = EXAM_OPEN_AT;
     state.closeAt = EXAM_CLOSE_AT;
     state.orgTimeZone = "Asia/Shanghai";
+    state.holdSettings = false;
+    state.resolveSettings = null;
   });
 
   it("prefills the form from the existing exam", async () => {
@@ -189,6 +206,8 @@ describe("ExamEditPage — scheduling time zone (F-20)", () => {
     state.openAt = EXAM_OPEN_AT;
     state.closeAt = EXAM_CLOSE_AT;
     state.orgTimeZone = "Asia/Shanghai";
+    state.holdSettings = false;
+    state.resolveSettings = null;
   });
 
   /** The two datetime-local inputs, in DOM order (openAt, closeAt). */
@@ -313,5 +332,111 @@ describe("ExamEditPage — scheduling time zone (F-20)", () => {
       openAt: EXAM_OPEN_AT,
       closeAt: "2026-11-20T04:00:00.000Z",
     });
+  });
+
+  /** Resolves the held /api/admin/settings request once it is in flight. */
+  async function resolveLateSettings(timeZone: string) {
+    await waitFor(() => expect(state.resolveSettings).not.toBeNull());
+    await act(async () => {
+      state.resolveSettings!({ timezone: timeZone });
+    });
+  }
+
+  it("opens the schedule only after the first settings read settles (exam detail first)", async () => {
+    // The review acceptance order: GET /api/exams/:id lands BEFORE the
+    // organization settings read. The schedule inputs must not open on the
+    // fallback zone, because that zone would silently reinterpret whatever
+    // the user typed once settings arrived.
+    state.holdSettings = true;
+    const user = userEvent.setup();
+    renderPage();
+
+    // The exam detail has been fetched (and resolved) while settings hang;
+    // the form is not open yet, so no wall clock exists on a fallback zone.
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith("/api/exams/exam-1");
+    });
+    await act(async () => {});
+    expect(
+      document.querySelectorAll("input[type='datetime-local']"),
+    ).toHaveLength(0);
+    expect(screen.queryByText(/以下时间按/)).not.toBeInTheDocument();
+
+    await resolveLateSettings("Asia/Shanghai");
+    expect(await screen.findByDisplayValue("期末测评")).toBeInTheDocument();
+    await screen.findByText("以下时间按 Asia/Shanghai 时区填写与保存。");
+
+    // The user sees the ORGANIZATION wall clock of the stored instants.
+    expect(scheduleInputs()[0]).toHaveValue("2026-11-20T09:00");
+    expect(scheduleInputs()[1]).toHaveValue("2026-11-20T11:00");
+
+    // Untouched: the displayed 09:00 Shanghai is exactly 01:00:30Z.
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => {
+      expect(apiPatch).toHaveBeenCalledWith(
+        "/api/exams/exam-1",
+        expect.anything(),
+      );
+    });
+    const payload = apiPatch.mock.calls[0]![1];
+    expect(payload.openAt).toBe(EXAM_OPEN_AT);
+    expect(payload.closeAt).toBe(EXAM_CLOSE_AT);
+  });
+
+  it("converts an edit made after late-arriving settings in the zone the user saw", async () => {
+    state.holdSettings = true;
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith("/api/exams/exam-1");
+    });
+    await resolveLateSettings("Asia/Shanghai");
+    expect(await screen.findByDisplayValue("期末测评")).toBeInTheDocument();
+    await screen.findByText("以下时间按 Asia/Shanghai 时区填写与保存。");
+
+    fireEvent.change(scheduleInputs()[0]!, {
+      target: { value: "2026-11-20T10:00" },
+    });
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => {
+      expect(apiPatch).toHaveBeenCalledWith(
+        "/api/exams/exam-1",
+        expect.anything(),
+      );
+    });
+    const payload = apiPatch.mock.calls[0]![1];
+    // 10:00 in the zone the form session displayed (Shanghai) = 02:00Z.
+    expect(payload.openAt).toBe("2026-11-20T02:00:00.000Z");
+    expect(payload.closeAt).toBe(EXAM_CLOSE_AT);
+  });
+
+  it("keeps the open session's zone when settings refresh later (no silent re-fill)", async () => {
+    const user = userEvent.setup();
+    await renderAndAwaitOrgZone("以下时间按 Asia/Shanghai 时区填写与保存。");
+
+    // A branding refresh re-reads settings under a DIFFERENT organization
+    // zone. The already-open form session must keep its zone: the fields are
+    // not re-filled and the payload is not reinterpreted.
+    state.orgTimeZone = "America/Los_Angeles";
+    await act(async () => {
+      window.dispatchEvent(new Event("branding:refresh"));
+    });
+
+    expect(
+      screen.getByText("以下时间按 Asia/Shanghai 时区填写与保存。"),
+    ).toBeInTheDocument();
+    expect(scheduleInputs()[0]).toHaveValue("2026-11-20T09:00");
+    expect(scheduleInputs()[1]).toHaveValue("2026-11-20T11:00");
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => {
+      expect(apiPatch).toHaveBeenCalledWith(
+        "/api/exams/exam-1",
+        expect.anything(),
+      );
+    });
+    const payload = apiPatch.mock.calls[0]![1];
+    expect(payload.openAt).toBe(EXAM_OPEN_AT);
+    expect(payload.closeAt).toBe(EXAM_CLOSE_AT);
   });
 });
