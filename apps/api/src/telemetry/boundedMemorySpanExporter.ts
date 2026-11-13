@@ -8,9 +8,24 @@ interface ExportSuccess {
 }
 
 /**
+ * Serialized event projection retained alongside a span — name, attribute
+ * snapshot, and the span's high-resolution timestamp pair. Bounded per span
+ * (see {@link MAX_EVENTS_PER_SPAN}).
+ */
+export interface RetainedSpanEvent {
+  name: string;
+  attributes: Record<string, SpanAttributeValue>;
+  /** The SDK event timestamp as the raw `[seconds, nanoseconds]` pair. */
+  time: [number, number];
+}
+
+/**
  * Span projection retained by the exporter — exactly the fields the
  * in-memory witness surface reads. Attributes arrive already scrubbed by the
- * {@link UrlScrubSpanProcessor} that runs first in the processor chain.
+ * {@link UrlScrubSpanProcessor} that runs first in the processor chain; the
+ * status message and event set make the EXCEPTION surface observable too
+ * (#973 P1: a witness that drops status.message / events cannot prove the
+ * exported form carries no exception-derived text).
  */
 export interface RetainedSpan {
   name: string;
@@ -18,11 +33,22 @@ export interface RetainedSpan {
   spanId: string;
   parentSpanId: string | null;
   status: "unset" | "ok" | "error";
+  /** Raw status message (post-scrub) as exported; null when unset. */
+  statusMessage: string | null;
   attributes: Record<string, SpanAttributeValue>;
+  /** Serialized events, bounded to the last {@link MAX_EVENTS_PER_SPAN}. */
+  events: readonly RetainedSpanEvent[];
 }
 
 /** Hard cap on retained spans (ring buffer); oldest spans fall off first. */
 const MAX_RETAINED_SPANS = 1000;
+
+/**
+ * Hard cap on retained events PER span (oldest fall off first). Events are
+ * exception-shaped data — the same unbounded-resource class as spans — so
+ * the witness keeps a bounded serialized slice, never a growth surface.
+ */
+const MAX_EVENTS_PER_SPAN = 16;
 
 /**
  * Bounded in-process span exporter — the local-observation export target
@@ -31,6 +57,7 @@ const MAX_RETAINED_SPANS = 1000;
  * BOUNDS (ADR-028 D1: telemetry must never become an unbounded resource):
  * - at most {@link MAX_RETAINED_SPANS} finished spans are retained; the
  *   buffer is a FIFO ring, never a growth surface;
+ * - at most {@link MAX_EVENTS_PER_SPAN} events per retained span;
  * - `export` settles synchronously — the export task never blocks, never
  *   retries, and cannot fail (nothing here can throw into the SDK).
  *
@@ -84,7 +111,13 @@ export class BoundedMemorySpanExporter implements SpanExporter {
           : span.status.code === 1
             ? "ok"
             : "unset",
+      statusMessage: span.status.message ?? null,
       attributes: { ...span.attributes },
+      events: span.events.slice(-MAX_EVENTS_PER_SPAN).map((event) => ({
+        name: event.name,
+        attributes: { ...event.attributes },
+        time: event.time,
+      })),
     };
   }
 }

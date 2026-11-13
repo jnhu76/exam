@@ -8,6 +8,7 @@ import {
   BoundedMemorySpanExporter,
   type RetainedSpan,
 } from "./boundedMemorySpanExporter.js";
+import { ExceptionScrubSpanProcessor } from "./exceptionScrubSpanProcessor.js";
 import { ServerRootPropagator } from "./serverRootPropagator.js";
 import { UrlScrubSpanProcessor } from "./urlScrubSpanProcessor.js";
 
@@ -221,11 +222,15 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
   const memoryExporter =
     config.exporter === "memory" ? new BoundedMemorySpanExporter() : null;
 
-  // Scrub processor FIRST: every later processor and any exporter observe
-  // the same span object, so the scrubbed form is the only exported form
-  // (urlScrubSpanProcessor.ts header). sdk-trace 3.1.1 takes the exporter
-  // and the queue bounds in ONE options object.
-  const spanProcessors = [new UrlScrubSpanProcessor()];
+  // Scrub processors FIRST (URL surface, then exception surface): every
+  // later processor and any exporter observe the same span object, so the
+  // scrubbed form is the only exported form (urlScrubSpanProcessor.ts and
+  // exceptionScrubSpanProcessor.ts headers). sdk-trace 3.1.1 takes the
+  // exporter and the queue bounds in ONE options object.
+  const spanProcessors = [
+    new UrlScrubSpanProcessor(),
+    new ExceptionScrubSpanProcessor(),
+  ];
   let flush: (() => Promise<void>) | null = null;
   if (memoryExporter) {
     const batch = new bundle.BatchSpanProcessor({

@@ -88,6 +88,23 @@ describe("telemetry runtime construction contract", () => {
     }
   });
 
+  it("places the exception scrub second, before every queueing processor", () => {
+    // #973 P1: @fastify/otel writes error.message into span.status.message
+    // and recordException attaches exception.* text — the exception scrub
+    // must run on the live span before any processor queues it, so every
+    // exporter (memory now, OTLP later) sees only the scrubbed form.
+    const urlScrubIndex = runtimeSource.indexOf("new UrlScrubSpanProcessor()");
+    const exceptionScrubIndex = runtimeSource.indexOf(
+      "new ExceptionScrubSpanProcessor()",
+    );
+    const batchIndex = runtimeSource.indexOf("new bundle.BatchSpanProcessor(");
+    expect(urlScrubIndex).toBeGreaterThan(-1);
+    expect(exceptionScrubIndex).toBeGreaterThan(urlScrubIndex);
+    if (batchIndex !== -1) {
+      expect(batchIndex).toBeGreaterThan(exceptionScrubIndex);
+    }
+  });
+
   it("never ships the experimental ESM loader hook", () => {
     // W1.1 measured the loader breaking the real ESM entry's module linking
     // (--experimental-loader syntax error at boot). The injection stays the
