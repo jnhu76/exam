@@ -1,4 +1,10 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  act,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -438,5 +444,298 @@ describe("CourseSearchSelect", () => {
     const secondOption = screen.getByRole("option", { name: /课程1/ });
     expect(secondOption).toHaveAttribute("data-active", "true");
     expect(firstOption).not.toHaveAttribute("data-active", "true");
+  });
+});
+
+/** Deferred promise for controlling response order from the test. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("CourseSearchSelect query ownership (controlled clock)", () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  // The repo fake-timer pattern (QuestionPage.queryState A12): drive events
+  // with fireEvent — userEvent's internal waits deadlock on faked timers.
+
+  const FAKE: Parameters<typeof vi.useFakeTimers>[0] = {
+    toFake: ["setTimeout", "clearTimeout", "Date"],
+  };
+
+  /** Open the popover synchronously; returns the search input. */
+  function openForOwnership(courses: CourseRow[] = makeCourses(3)) {
+    renderSelect(courses);
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    expect(screen.getAllByRole("option").length).toBe(courses.length);
+    return getComboboxInput();
+  }
+
+  /** Fire the pending debounced commit and let its effects settle. */
+  async function advanceDebounce() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+  }
+
+  /** Resolve a deferred search response and let the component apply it. */
+  async function settle(
+    handle: {
+      promise: Promise<ListResponse>;
+      resolve: (value: ListResponse) => void;
+    },
+    value: ListResponse,
+  ) {
+    await act(async () => {
+      handle.resolve(value);
+      await handle.promise;
+    });
+  }
+
+  it("a response for an older query cannot land after a newer term is typed", async () => {
+    vi.useFakeTimers(FAKE);
+    const input = openForOwnership();
+
+    // Query A is in flight.
+    const staleA = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => staleA.promise);
+    fireEvent.change(input, { target: { value: "甲" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // The user types B while A is still unresolved.
+    const freshB = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => freshB.promise);
+    fireEvent.change(input, { target: { value: "甲乙" } });
+
+    // A resolves inside B's debounce window — it belongs to a superseded
+    // query and must not update results, truncation, or loading.
+    await settle(staleA, {
+      items: [{ id: "stale-a", name: "旧查询结果", code: "OLD" }],
+      total: 5,
+      totalPages: 1,
+    });
+    expect(screen.queryByText("旧查询结果")).not.toBeInTheDocument();
+    expect(screen.getByText("课程0")).toBeInTheDocument();
+    expect(screen.queryByText(/仅显示前/)).not.toBeInTheDocument();
+
+    // B fires after its debounce and its response is the one that applies.
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(2);
+    await settle(freshB, {
+      items: [{ id: "fresh-b", name: "新查询结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("新查询结果")).toBeInTheDocument();
+    expect(screen.queryByText("旧查询结果")).not.toBeInTheDocument();
+    expect(screen.queryByText("课程0")).not.toBeInTheDocument();
+  });
+
+  it("when responses return in reverse order only the newest query updates state", async () => {
+    vi.useFakeTimers(FAKE);
+    const input = openForOwnership();
+
+    const staleA = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => staleA.promise);
+    fireEvent.change(input, { target: { value: "甲" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    const freshB = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => freshB.promise);
+    fireEvent.change(input, { target: { value: "甲乙" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(2);
+
+    // B resolves BEFORE A: B applies, and the later-arriving A is discarded.
+    await settle(freshB, {
+      items: [{ id: "fresh-b", name: "新查询结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("新查询结果")).toBeInTheDocument();
+    await settle(staleA, {
+      items: [{ id: "stale-a", name: "旧查询结果", code: "OLD" }],
+      total: 5,
+      totalPages: 1,
+    });
+    expect(screen.getByText("新查询结果")).toBeInTheDocument();
+    expect(screen.queryByText("旧查询结果")).not.toBeInTheDocument();
+    expect(screen.queryByText(/仅显示前/)).not.toBeInTheDocument();
+  });
+
+  it("replacing the initial course list invalidates an in-flight search", async () => {
+    vi.useFakeTimers(FAKE);
+    const scopeA = makeCourses(3, "范围A");
+    const { rerender } = render(
+      <CourseSearchSelect courses={scopeA} value="" onChange={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    expect(screen.getAllByRole("option").length).toBe(scopeA.length);
+    const input = getComboboxInput();
+
+    const stale = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => stale.promise);
+    fireEvent.change(input, { target: { value: "a" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // The parent supplies a new initial list (scope change, e.g. the edit
+    // page finishing its course load).
+    const scopeB = makeCourses(2, "范围B");
+    rerender(
+      <CourseSearchSelect courses={scopeB} value="" onChange={() => {}} />,
+    );
+    expect(screen.getByText("范围B0")).toBeInTheDocument();
+
+    // The response from the old scope must never land.
+    await settle(stale, {
+      items: [{ id: "stale", name: "旧范围结果", code: "OLD" }],
+      total: 5,
+      totalPages: 1,
+    });
+    expect(screen.queryByText("旧范围结果")).not.toBeInTheDocument();
+    expect(screen.getByText("范围B0")).toBeInTheDocument();
+    expect(screen.getByText("范围B1")).toBeInTheDocument();
+    expect(screen.queryByText(/仅显示前/)).not.toBeInTheDocument();
+  });
+
+  it("a scope change during the debounce window cancels the pending search", async () => {
+    vi.useFakeTimers(FAKE);
+    const scopeA = makeCourses(3, "范围A");
+    const { rerender } = render(
+      <CourseSearchSelect courses={scopeA} value="" onChange={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    const input = getComboboxInput();
+
+    // Type a term, but leave the 300ms debounce pending — no request yet.
+    fireEvent.change(input, { target: { value: "a" } });
+    expect(apiGet).not.toHaveBeenCalled();
+
+    // The parent supplies a new initial list before the commit is due.
+    const scopeB = makeCourses(2, "范围B");
+    rerender(
+      <CourseSearchSelect courses={scopeB} value="" onChange={() => {}} />,
+    );
+    expect(screen.getByText("范围B0")).toBeInTheDocument();
+
+    // The superseded term belongs to the old scope and must never be sent,
+    // neither by the stale debounce nor by a late in-flight continuation.
+    await advanceDebounce();
+    expect(apiGet).not.toHaveBeenCalled();
+    expect(getComboboxInput()).toHaveValue("");
+    expect(screen.getByText("范围B0")).toBeInTheDocument();
+    expect(screen.getByText("范围B1")).toBeInTheDocument();
+  });
+
+  it("a failed current query restores the initial list; a superseded failure changes nothing", async () => {
+    vi.useFakeTimers(FAKE);
+    const input = openForOwnership();
+
+    // Part 1: the current query fails → fall back to the initial list.
+    const failing = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => failing.promise);
+    fireEvent.change(input, { target: { value: "甲" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      failing.reject(new Error("network down"));
+      await failing.promise.catch(() => {});
+    });
+    expect(screen.getByText("课程0")).toBeInTheDocument();
+    expect(screen.queryByText("新查询结果")).not.toBeInTheDocument();
+
+    // Part 2: a newer query succeeds, then the OLDER query fails — the
+    // failure must not clobber the newer results with the initial list.
+    const staleA = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => staleA.promise);
+    fireEvent.change(input, { target: { value: "甲乙" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(2);
+
+    const freshB = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => freshB.promise);
+    fireEvent.change(input, { target: { value: "甲乙丙" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(3);
+    await settle(freshB, {
+      items: [{ id: "fresh-b", name: "新查询结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("新查询结果")).toBeInTheDocument();
+
+    await act(async () => {
+      staleA.reject(new Error("network down"));
+      await staleA.promise.catch(() => {});
+    });
+    expect(screen.getByText("新查询结果")).toBeInTheDocument();
+    expect(screen.queryByText("课程0")).not.toBeInTheDocument();
+  });
+
+  it("closing during the debounce window cancels the scheduled search", async () => {
+    vi.useFakeTimers(FAKE);
+    const input = openForOwnership();
+
+    // Type a term whose debounced search has NOT fired yet, then close.
+    fireEvent.change(input, { target: { value: "甲" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+    // The scheduled commit must never fire.
+    await advanceDebounce();
+    expect(apiGet).not.toHaveBeenCalled();
+
+    // Re-opening shows the clean initial state.
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    expect(screen.getByRole("combobox")).toHaveValue("");
+    expect(screen.getByRole("option", { name: /课程0/ })).toBeInTheDocument();
+    expect(apiGet).not.toHaveBeenCalled();
+  });
+
+  it("keys during IME composition are handed to the IME, not list navigation", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderSelect(makeCourses(3), { onChange });
+
+    await openPopover(user);
+    await screen.findByRole("option", { name: /课程0/ });
+    const input = getComboboxInput();
+
+    // Highlight the first option so Enter would select it if not guarded.
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("option", { name: /课程0/ })).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+
+    // Enter pressed while the IME is composing (keyCode 229 / isComposing):
+    // it confirms the composition text and must not select an option.
+    const composingEnter = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(composingEnter, "isComposing", { value: true });
+    Object.defineProperty(composingEnter, "keyCode", { value: 229 });
+    fireEvent(input, composingEnter);
+    expect(onChange).not.toHaveBeenCalled();
+
+    // After composition, Enter selects the highlighted option normally.
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith("c0");
   });
 });
