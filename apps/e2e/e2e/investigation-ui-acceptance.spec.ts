@@ -1134,7 +1134,13 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     await expect(visibleText(page, "创建事件", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    await visibleText(page, "创建事件", { exact: true }).click();
+    // Rows expand through the row's own toggle button (named
+    // action（target）的日志详情); the row itself is not clickable.
+    await page
+      .getByRole("button", {
+        name: `创建事件（${systemRow.targetId}）的日志详情`,
+      })
+      .click();
     const detail = page.locator("pre").first();
     await expect(detail).toContainText('"operationId"');
     await expect(detail).not.toContainText('"requestId"');
@@ -1150,7 +1156,11 @@ test.describe("investigation UI browser acceptance (#856)", () => {
     await expect(visibleText(page, "创建题目", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    await visibleText(page, "创建题目", { exact: true }).click();
+    await page
+      .getByRole("button", {
+        name: `创建题目（${seeded.questionId}）的日志详情`,
+      })
+      .click();
     await expect(detail).toContainText('"requestId"');
     await expect(detail).not.toContainText('"operationId"');
     await page.screenshot({
