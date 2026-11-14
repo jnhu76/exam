@@ -112,4 +112,40 @@ describe("telemetry runtime construction contract", () => {
     expect(serverSource).not.toContain("--experimental-loader");
     expect(runtimeSource).not.toContain("hook.mjs");
   });
+
+  it("loads the DB telemetry plugin only inside the On-path SDK start, before fastify exists", () => {
+    // #964 W2: the plugin installs a driver prototype patch (reversible
+    // since #974) — the Off deployment must never even import it. The only
+    // reference is the dynamic import inside startSdk (after the granular
+    // SDK start — bundle.startTracing — before the fastify plugin is
+    // built), and its seam registration must sit in the same On-path block.
+    const dynamicImportIndex = runtimeSource.indexOf(
+      'await import("@exam/otel-drizzle-postgresjs")',
+    );
+    expect(dynamicImportIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).not.toMatch(
+      /from ["']@exam\/otel-drizzle-postgresjs["']/,
+    );
+    const sdkStartIndex = runtimeSource.indexOf("bundle.startTracing(");
+    const seamIndex = runtimeSource.indexOf(
+      "setTransactionSeam(dbTelemetry.transactionSeam)",
+    );
+    const fastifyIndex = runtimeSource.indexOf(
+      "bundle.createFastifyInstrumentation()",
+    );
+    expect(sdkStartIndex).toBeGreaterThan(-1);
+    expect(dynamicImportIndex).toBeGreaterThan(sdkStartIndex);
+    expect(seamIndex).toBeGreaterThan(dynamicImportIndex);
+    expect(fastifyIndex).toBeGreaterThan(seamIndex);
+  });
+
+  it("stops DB telemetry recording before the shutdown flush", () => {
+    const disableIndex = runtimeSource.indexOf("current.dbTelemetry.disable()");
+    const seamClearIndex = runtimeSource.indexOf("setTransactionSeam(null);");
+    const flushIndex = runtimeSource.indexOf("if (current.flush) {");
+    expect(disableIndex).toBeGreaterThan(-1);
+    expect(seamClearIndex).toBeGreaterThan(-1);
+    expect(disableIndex).toBeLessThan(flushIndex);
+    expect(seamClearIndex).toBeLessThan(flushIndex);
+  });
 });

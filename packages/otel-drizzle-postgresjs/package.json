@@ -1,0 +1,46 @@
+{
+  "name": "@exam/otel-drizzle-postgresjs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "@exam/test-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./vocabulary": {
+      "@exam/test-source": "./src/vocabulary.ts",
+      "types": "./dist/vocabulary.d.ts",
+      "default": "./dist/vocabulary.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/clean-dist.mjs . && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "bench": "EXAM_DB_TELEMETRY_BENCHMARK=1 vitest run src/benchmark.test.ts"
+  },
+  "dependencies": {
+    "@exam/db": "workspace:*",
+    "@opentelemetry/api": "1.10.0",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@opentelemetry/context-async-hooks": "3.1.1",
+    "@opentelemetry/sdk-metrics": "3.1.1",
+    "@opentelemetry/sdk-trace": "3.1.1",
+    "@types/node": "^22.19.19",
+    "@vitest/coverage-v8": "^4.1.7",
+    "drizzle-orm": "^0.45.2",
+    "typescript": "^5.8.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.7"
+  }
+}

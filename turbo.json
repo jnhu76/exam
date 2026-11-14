@@ -42,6 +42,24 @@
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
+    "@exam/otel-drizzle-postgresjs#test": {
+      "dependsOn": ["^build", "@exam/db#test"],
+      "env": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "DB_HOST_PORT",
+        "TEST_DB_ISOLATION"
+      ]
+    },
+    "@exam/otel-drizzle-postgresjs#coverage": {
+      "dependsOn": ["^build", "@exam/db#coverage"],
+      "env": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "DB_HOST_PORT",
+        "TEST_DB_ISOLATION"
+      ]
+    },
     "@exam/api#test": {
       "dependsOn": ["^build", "@exam/db#test"],
       "env": [

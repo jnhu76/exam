@@ -4,6 +4,7 @@ import type {
   Permission,
   Role,
 } from "@exam/domain";
+import { getTransactionSeam } from "./observation.js";
 import type { schema } from "./schema/pg.js";
 
 /** Drizzle database type bound to the application schema. */
@@ -113,23 +114,23 @@ export function setTransactionRetryLogger(
 }
 
 /**
- * True when the error — or any error in its `cause` chain, because Drizzle
- * wraps the underlying PostgreSQL error — carries the given PostgreSQL
- * error code (e.g. `23505` unique_violation). Uses a `visited` Set to guard
- * against circular `cause` references.
+ * Walks an error's `cause` chain (Drizzle wraps the underlying PostgreSQL
+ * error, so the SQLSTATE usually lives on the cause) and returns the first
+ * `code` the predicate accepts, or undefined. Uses a `visited` Set to guard
+ * against circular `cause` references. THE single traversal implementation:
+ * both code-classification consumers below build on it.
  */
-export function hasPostgresErrorCode(err: unknown, code: string): boolean {
+function findCodeInCauseChain(
+  err: unknown,
+  accept: (code: string) => boolean,
+): string | undefined {
   let current: unknown = err;
   const visited = new Set<unknown>();
-  while (current && !visited.has(current)) {
+  while (current && typeof current === "object" && !visited.has(current)) {
     visited.add(current);
-    if (
-      typeof current === "object" &&
-      current !== null &&
-      "code" in current &&
-      (current as { code: unknown }).code === code
-    ) {
-      return true;
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && accept(code)) {
+      return code;
     }
     if (typeof current === "object" && current !== null && "cause" in current) {
       current = (current as { cause: unknown }).cause;
@@ -137,7 +138,33 @@ export function hasPostgresErrorCode(err: unknown, code: string): boolean {
       break;
     }
   }
-  return false;
+  return undefined;
+}
+
+/**
+ * True when the error — or any error in its `cause` chain, because Drizzle
+ * wraps the underlying PostgreSQL error — carries the given PostgreSQL
+ * error code (e.g. `23505` unique_violation).
+ */
+export function hasPostgresErrorCode(err: unknown, code: string): boolean {
+  return findCodeInCauseChain(err, (found) => found === code) !== undefined;
+}
+
+/** SQLSTATE shape: five characters, `digits + digits/uppercase letters`. */
+function isSqlStateShape(code: string): boolean {
+  return /^[0-9][0-9A-Z]{4}$/.test(code);
+}
+
+/**
+ * The first SQLSTATE-looking code on the error or its `cause` chain, or
+ * `null` when none carries one. Observation-side twin of
+ * {@link hasPostgresErrorCode} for consumers that need the STATE itself
+ * (the #964 DB telemetry plugin reads it for span attributes) instead of a
+ * membership test. Never returns a non-SQLSTATE string, so callers can
+ * attach the result to telemetry attributes without re-validating.
+ */
+export function findPostgresSqlState(err: unknown): string | null {
+  return findCodeInCauseChain(err, isSqlStateShape) ?? null;
 }
 
 /**
@@ -178,6 +205,14 @@ function isRetryableError(err: unknown): boolean {
  * violations are permanent conflicts (duplicate email, username, etc.)
  * and retrying them wastes resources.
  *
+ * Observation seam: when a telemetry seam is registered
+ * (`@exam/db/observation`), the whole retry loop is handed to
+ * `seam.logical` and each `db.transaction` attempt to `seam.attempt`, and
+ * every classified retry additionally calls `seam.retry` next to the warn
+ * below. The seam is measurement-neutral by contract (observation.ts) —
+ * retry count, backoff, isolation, and commit semantics are unchanged, and
+ * with NO seam registered this function behaves exactly as before.
+ *
  * @param db - Database instance.
  * @param fn - Async function that receives a transactional `Database` handle.
  * @param isolationLevel - Transaction isolation level (default: "repeatable read").
@@ -188,43 +223,54 @@ export async function executeInTransaction<T>(
   fn: (tx: TransactionDatabase) => Promise<T>,
   isolationLevel: "read committed" | "repeatable read" = "repeatable read",
 ): Promise<T> {
-  let lastError: unknown;
+  const seam = getTransactionSeam();
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      // Exponential backoff: 20ms, 40ms, 80ms
-      await new Promise((resolve) =>
-        setTimeout(resolve, 20 * 2 ** (attempt - 1)),
-      );
-    }
-    try {
-      return await db.transaction(
-        async (tx) => {
-          return fn(tx as unknown as TransactionDatabase);
-        },
-        { isolationLevel },
-      );
-    } catch (err) {
-      lastError = err;
-      if (attempt === MAX_RETRIES || !isRetryableError(err)) {
-        throw err;
+  const runLoop = async (): Promise<T> => {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 20ms, 40ms, 80ms
+        await new Promise((resolve) =>
+          setTimeout(resolve, 20 * 2 ** (attempt - 1)),
+        );
       }
-      // #800 PR-B: a request's retry attempts were previously invisible —
-      // "retry exhausted" and "unique violation" both collapsed into
-      // 409/500 with nothing to distinguish them. The SQLSTATE comes from
-      // the same cause-chain walk the classification used; retry count,
-      // backoff, isolation, and commit semantics are unchanged.
-      transactionRetryLogger?.warn(
-        {
-          attempt: attempt + 1,
-          sqlstate: [...RETRYABLE_ERROR_CODES].find((code) =>
-            hasPostgresErrorCode(err, code),
-          ),
-        },
-        "transaction retry",
-      );
+      const runAttempt = () =>
+        db.transaction(
+          async (tx) => {
+            return fn(tx as unknown as TransactionDatabase);
+          },
+          { isolationLevel },
+        );
+      try {
+        return await (seam
+          ? seam.attempt({ attempt, isolationLevel }, runAttempt)
+          : runAttempt());
+      } catch (err) {
+        lastError = err;
+        if (attempt === MAX_RETRIES || !isRetryableError(err)) {
+          throw err;
+        }
+        const sqlstate = [...RETRYABLE_ERROR_CODES].find((code) =>
+          hasPostgresErrorCode(err, code),
+        );
+        // #800 PR-B: a request's retry attempts were previously invisible —
+        // "retry exhausted" and "unique violation" both collapsed into
+        // 409/500 with nothing to distinguish them. The SQLSTATE comes from
+        // the same cause-chain walk the classification used; retry count,
+        // backoff, isolation, and commit semantics are unchanged.
+        transactionRetryLogger?.warn(
+          { attempt: attempt + 1, sqlstate },
+          "transaction retry",
+        );
+        // Same event on the telemetry seam, under the same logical parent
+        // (#964 W2): the warn above keeps its stdout contract unchanged.
+        seam?.retry({ failedAttempt: attempt + 1, sqlstate: sqlstate ?? null });
+      }
     }
-  }
 
-  throw lastError;
+    throw lastError;
+  };
+
+  return seam ? seam.logical(runLoop) : runLoop();
 }

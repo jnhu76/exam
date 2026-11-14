@@ -105,6 +105,11 @@
       "types": "./dist/types.d.ts",
       "default": "./dist/types.js"
     },
+    "./observation": {
+      "@exam/test-source": "./src/observation.ts",
+      "types": "./dist/observation.d.ts",
+      "default": "./dist/observation.js"
+    },
     "./schema/pg": {
       "@exam/test-source": "./src/schema/pg.ts",
       "types": "./dist/schema/pg.d.ts",

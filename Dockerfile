@@ -45,6 +45,7 @@ COPY config/envFilePolicy.ts config/
 COPY packages/domain/package.json packages/domain/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
+COPY packages/otel-drizzle-postgresjs/package.json packages/otel-drizzle-postgresjs/
 COPY packages/auth/package.json packages/auth/
 COPY packages/authz/package.json packages/authz/
 COPY packages/exam-engine/package.json packages/exam-engine/
@@ -66,6 +67,7 @@ RUN pnpm --reporter=append-only --filter @exam/auth build
 RUN pnpm --reporter=append-only --filter @exam/authz build
 RUN pnpm --reporter=append-only --filter @exam/import-export build
 RUN pnpm --reporter=append-only --filter @exam/db build
+RUN pnpm --reporter=append-only --filter @exam/otel-drizzle-postgresjs build
 RUN pnpm --reporter=append-only --filter @exam/exam-engine build
 RUN pnpm --reporter=append-only --filter @exam/web build
 RUN pnpm --reporter=append-only --filter @exam/api build

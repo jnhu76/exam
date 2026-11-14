@@ -32,6 +32,7 @@
     "@exam/authz": "workspace:*",
     "@exam/contracts": "workspace:*",
     "@exam/db": "workspace:*",
+    "@exam/otel-drizzle-postgresjs": "workspace:*",
     "@exam/domain": "workspace:*",
     "@exam/exam-engine": "workspace:*",
     "@exam/import-export": "workspace:*",
