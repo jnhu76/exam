@@ -1928,6 +1928,13 @@ const zhCN = {
         afterGrading: "评分完成后公布",
         manualPublication: "管理员手动公布",
         timeInvalid: "结束时间必须晚于开始时间",
+        timeZoneHint: "以下时间按 {{timeZone}} 时区填写与保存。",
+        timeZoneLoading: "正在读取组织时区，读取完成后即可填写排期。",
+        scheduleDstGap:
+          "该时间在 {{timeZone}} 的夏令时切换中不存在，请选择其他时间。",
+        scheduleDstAmbiguous:
+          "该时间在 {{timeZone}} 的夏令时回拨中出现两次，无法唯一确定，请调整时间。",
+        scheduleInvalid: "请输入有效的日期和时间。",
         scoreMismatch: "总分与题目分值之和不匹配（应为 {{score}}）",
         passingScoreExceeds: "及格分不能超过总分（{{passing}} > {{total}}）",
       },
@@ -2620,6 +2627,10 @@ const zhCN = {
         reconciledStateChanged: "阅卷状态已发生变化，已加载最新结果。",
         /** Failure-of-failure: both POST and the reconciliation GET failed. */
         submitUnknown: "无法确认评分是否已提交，请刷新页面核对。",
+        /** POST outcome is KNOWN committed, but the follow-up GET failed: the
+         *  grade is saved; only the refresh (and its metadata) is missing. */
+        savedRefreshFailed:
+          "评分已保存，但页面刷新失败，请重试刷新以查看最新状态。",
         /** The click-time queue probe itself failed. */
         nextPendingFailed: "查找下一份失败，请重试",
       },
@@ -2627,6 +2638,7 @@ const zhCN = {
         backToQueue: "返回队列",
         nextPending: "下一份待阅卷",
         findingNext: "查找中...",
+        retryRefresh: "重试刷新",
       },
       question: {
         maxScore: "满分: {{score}}",
@@ -2640,6 +2652,9 @@ const zhCN = {
         submit: "提交评分",
         submitting: "提交中...",
         submittedLabel: "已提交评分",
+        /** POST known-committed while its authoritative refresh failed; the
+         *  committed grader/time metadata is not fabricated client-side. */
+        savedPendingRefresh: "已保存 {{score}} 分（等待刷新）",
         gradedLabel: "已评分: {{score}} 分",
         gradedBy: "评分人: {{grader}}",
         gradedByUnavailable: "评分人账号已删除或不可见",
