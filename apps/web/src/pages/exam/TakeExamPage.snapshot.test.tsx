@@ -605,6 +605,82 @@ describe("submit dialog fact weighting (S3.4)", () => {
   });
 });
 
+describe("submit dialog flush timeout (W5.1 超时控制流)", () => {
+  it("a save that outlives the 10s flush budget gates confirm behind the explicit override; the timeout is a business fact, never telemetry", async () => {
+    const send = installRecordingBuffer();
+    // effectiveDeadline: null → the 1s deadline auto-submit episode is gated
+    // off entirely (this test exercises the MANUAL submit dialog's flush
+    // budget, not the deadline flow, and fake Date.now() would otherwise
+    // read the harness's fixed July deadline as already passed).
+    installTakeRoute(
+      buildSnapshot({
+        effectiveDeadline: null,
+        questions: [fillBlankQuestion("q1")],
+      }),
+    );
+    // The save response never settles inside the test: only the flush
+    // budget can end the wait (as-built control flow — the browser client
+    // sets no fetch timeout; the queue's 10s budget decides).
+    apiPost.mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/answers/")) {
+        return new Promise(() => {});
+      }
+      return { ok: true, serverNow: NOW };
+    });
+
+    vi.useFakeTimers();
+    renderPage();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0); // initial snapshot load
+    });
+    fireEvent.change(screen.getByLabelText("第1空答案"), {
+      target: { value: "x" },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500); // debounce fires → save in flight
+    });
+
+    fireEvent.click(screen.getByTestId("take-submit-btn"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0); // dialog opens; flush drains
+    });
+    const dialog = screen.getByRole("dialog");
+    // The in-flight save blocks the plain confirm while flushing.
+    expect(
+      within(dialog).getByRole("button", { name: "确认交卷" }),
+    ).toBeDisabled();
+
+    // The flush budget elapses: the unfinished save is counted as PENDING
+    // (not failed) and the explicit override is offered. Direct assertions
+    // after the act-advanced budget — RTL waitFor does not settle under
+    // vitest fake timers (no real-timer advancement for its retry loop).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "仍然提交" }),
+    ).toBeEnabled();
+    expect(
+      within(dialog).getByRole("button", { name: "确认交卷" }),
+    ).toBeDisabled();
+    expect(within(dialog).getByTestId("submit-fact-unsaved")).toHaveTextContent(
+      "未保存：1 题",
+    );
+    // No failure surface was fabricated from the timeout: the save is not
+    // failed and no error toast fired.
+    expect(
+      within(dialog).getByTestId("submit-fact-save-failed"),
+    ).toHaveTextContent("保存失败：0 题");
+    expect(toast.error).not.toHaveBeenCalled();
+
+    // The timeout is a business fact computed from the save queue — it does
+    // NOT enter client telemetry as a failure verdict.
+    await getBuffer().flush();
+    expect(telemetryEvents(send, "answer_autosave_failed")).toHaveLength(0);
+    expect(telemetryEvents(send, "answer_autosave_success")).toHaveLength(0);
+  });
+});
+
 describe("submit-freeze UI proof", () => {
   it("save execution seam reads derived canSave, keeps the control disabled, and skips the API call when the snapshot is non-editable", async () => {
     // Requirement: "view.canSave === false => save endpoint is not called",
