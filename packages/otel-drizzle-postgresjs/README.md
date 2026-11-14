@@ -97,6 +97,18 @@ any process).
   consuming call frame, before `handle()`'s microtask hop, so they parent
   to the ambient span (request span, or the `db.transaction.attempt` span
   for transaction bodies).
+- **No retention of finished transactions** (scoped-closure ownership):
+  postgres.js mints a NEW handler closure for every `sql.begin`/savepoint
+  scope, and that closure's context chain holds the per-transaction queue,
+  `uncaughtError`, and the caller's transaction body — so the scoped dedup
+  set is a `WeakSet`: the plugin holds no strong reference to any finished
+  transaction's closure, and the first-sight dedup/count semantics are
+  unchanged (a collected closure can never be observed again). Root
+  closures stay in a strong set — one entry per registered root pool, and
+  the API runtime registers exactly one pool per process, so that set is
+  bounded. Pinned on real PostgreSQL by `src/scopedClosureRetention.test.ts`
+  (recyclability via `--expose-gc` + `WeakRef`; a repeatable before/after
+  probe writes retained-heap evidence under `out/`).
 
 ## Declared coverage boundary (W2.1 §5 constraint 3)
 
@@ -138,6 +150,24 @@ overridable via `EXAM_DB_TELEMETRY_BENCH_OUT`. CPU/p99 budgets are W7.2's
 measured acceptance on the integrated candidate — this entry records
 evidence, it does not assert budgets.
 
+### Retention probe (before/after evidence)
+
+```bash
+pnpm db:up
+NODE_OPTIONS=--expose-gc pnpm --filter @exam/otel-drizzle-postgresjs test:retention     # recyclability test
+NODE_OPTIONS=--expose-gc pnpm --filter @exam/otel-drizzle-postgresjs probe:retention    # long-loop evidence
+```
+
+300 mixed transactions whose bodies capture a 64 KB buffer (the real-world
+shape: `fn` captures request-scoped state), checkpointed at half/full with
+full-GC quiesce: retained `heapUsed`/`external` bytes, a `WeakRef` cohort's
+survival, and per-phase CPU. Output goes to
+`out/otel-w964/retention-fix/retention-probe.jsonl` by default (overridable
+via `EXAM_DB_TELEMETRY_RETENTION_OUT`). Run the same probe on the base
+commit to compare — the pre-fix strong set keeps every cohort closure
+alive and grows `external` ~64 KB per transaction; the WeakSet holds both
+flat.
+
 ## Tests
 
 Real PostgreSQL (per-file schema harness, testing.md §2.8; the suite
@@ -154,5 +184,7 @@ real 40P01 retry observability), `offNoSideEffects.test.ts` (import ≠
 patch; install is the single decision),
 `driverStatementSeamLifecycle.test.ts` (the reversible install → disable →
 enable cycle: structural descriptor-baseline restore proof + healthy real
-queries through the disabled window), `benchmark.test.ts` (guarded
-entry).
+queries through the disabled window),
+`scopedClosureRetention.test.ts` (scoped-closure counting/classification +
+`--expose-gc` recyclability; the probe describe is env-guarded),
+`benchmark.test.ts` (guarded entry).
