@@ -363,3 +363,29 @@ before raising.
 | No logs in Loki | Expected with the logs leg disabled (§2.1, PENDING VERIFICATION). When the `observability-logs` overlay is enabled: host path `/var/lib/docker/containers` must be mounted read-only into `otelcol-logs` (real Linux Docker host); entries whose `attrs.tag` does not match `OBS_LOGS_TAG_PATTERN` are dropped by design — each deployment's pattern is derived from its own compose project name (§2.1) |
 | No metrics in Prometheus | `http://otelcol:8889/metrics` (network-internal) should list `exam_loop_*` / `db_client_operation_duration_seconds_*`; check the `otelcol-exam-metrics` target at Prometheus `/targets` |
 | Grafana 403/locked out | `OBS_GRAFANA_ADMIN_PASSWORD` is required when the profile runs (compose fails fast without it); reset by clearing `data/observability/grafana` (loses dashboards) |
+
+## 8. Signal ownership (single owner per fact, W7.1)
+
+The opt-in stack adds carriers; it does not replace the existing
+authorities. Every technical fact has exactly one implementation owner:
+
+| Fact | Single owner | Consumer | Explicitly not duplicated by |
+| --- | --- | --- | --- |
+| HTTP SERVER span | `@fastify/otel` (`sdkBundle.createFastifyInstrumentation`, registered before every other plugin/route) | Tempo | `HttpInstrumentation` incoming requests are disabled (outbound/client spans only) |
+| Technical logs | Pino → stdout; `instrumentation-pino` is correlation-only (`disableLogSending: true`), `OTEL_LOGS_EXPORTER=none` | Docker json-file → collector filelog → Loki; `docker compose logs app` | No application-side OTLP log exporter |
+| DB statements / logical transactions | `@exam/otel-drizzle-postgresjs`: one `db.statement` span per submitted statement, one `db.transaction` span per `executeInTransaction`, plus `db.client.operation.duration` | Tempo / Prometheus | Drizzle's built-in tracing is dead code (W2.1 F1); no second driver patch |
+| Transaction retries | `transactionRetryLogger` retained (#800 PR-B, process-level warn); the plugin only adds correlated `db.transaction.attempt` spans | stdout grep + traces | Different carriers: the retry warning has no HTTP correlation, the span is not a log-line authority |
+| Background loop health | W4 `exam.loop.{cycle.duration,cycle.count,work.count}`; the in-memory `*Metrics`, `/system/diagnostics`, and `operability.*` stdout events remain the stall/alert authority | Prometheus / Admin diagnostics / on-call | Loop metrics do not decide readiness and are not a second stall projection |
+| Readiness / alerts | `probeApplicationReadiness` + `operability.*` stdout events | orchestrator / on-call | Collector or backend outage never changes readiness or alert transitions |
+| Business facts | `audit_logs`, receipts / attempt version, `client_events` (ADR-025 / ADR-026) | Audit, recovery, proctor surfaces | Traces and spans are diagnostic only |
+| Browser | No OTel facade in `apps/web`; client evidence uses the existing `client_events` path | Admin / proctor timeline | No browser → collector connection |
+| `CAPACITY_RESEARCH` (#550) | `apps/api/src/lib/capacityResearch.ts`, inert unless `CAPACITY_RESEARCH=1`; `/research/capacity` is registered only then | #550 research harness and frozen evidence docs | Not a duplicate of the DB plugin: it counts statement ARRIVALS (lazy Query creation) and carries event-loop / CPU / pool projections with no OTel equivalent; execution-side timing is explicitly `NOT_DIRECTLY_OBSERVABLE` |
+
+W7.1 also removed the only cross-signal contamination between these
+retained mechanisms: telemetry root-pool tagging now runs before the
+research wrapper, so its one lazy, never-executed marker query no longer
+increments the research arrival counter when both switches are On
+(`apps/api/src/plugins/db.ts`; regression
+`apps/api/src/plugins/db.capacityResearch.test.ts`). The research fixture
+itself is retained — #550 is an independent owner and its snapshot facts
+are not reproduced by OTel.

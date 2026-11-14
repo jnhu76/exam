@@ -40,10 +40,10 @@ acceptance criteria and outstanding runtime validation.
 | --- | --- | --- |
 | Traces / metrics | None (stdout logs + `/system/*` projections only) | OTel SDK behind a default-Off switch; On requires per-deployment opt-in |
 | HTTP correlation id | Server UUIDv4 `request.id` + `x-request-id` (ADR-025) — authoritative, unchanged | Same id remains authoritative. Trace and span IDs provide technical correlation. Untrusted inbound trace headers do not supply the server parent context. |
-| Logs | Pino → stdout, single path | Pino remains the only server logging API; when remote ingestion is enabled, exactly ONE remote path per deployment mode (stdout collection or OTLP Logs); default stdout contract stays available |
-| Remote log ingestion | None | Not yet supported; selection and single-path proof are W1/W6 acceptance items |
+| Logs | Pino → stdout, single path | Pino remains the only server logging API. W1/W6 selected stdout collection as the single remote path (the opt-in collector's filelog receiver); `instrumentation-pino` is correlation-only and the default stdout contract stays available |
+| Remote log ingestion | None | Stdout collection through the opt-in collector filelog receiver is the single selected remote path (W6); application-side OTLP Logs is not implemented |
 | Readiness / alerts | `probeApplicationReadiness` + `operability.*` stdout events | Unchanged; telemetry (collector/exporter) failure must never alter readiness, transactions, retries, or shutdown semantics |
-| DB observability | `transactionRetryLogger` + `CAPACITY_RESEARCH` research wrapper | Independent workspace plugin (W2) behind the same Off default; retry semantics unchanged |
+| DB observability | `transactionRetryLogger` + `CAPACITY_RESEARCH` research wrapper | Independent workspace plugin (W2) behind the same Off default; retry semantics unchanged. `transactionRetryLogger` is retained (#800 PR-B) and `CAPACITY_RESEARCH` is retained as an arrival-only #550 research fixture — the plugin measures actual submissions, so this is not a second authority for the same fact (W7.1 ledger) |
 | Enablement | — | ADR-028 acceptance and #964 W1–W7 review, including W7.2 three-state acceptance (Off / On-no-export / On-full-export, CPU and p99 overhead budgets ≤5% each, unknown until measured), precede the separate Owner production-enable decision. |
 | Rollback | — | Configuration-level return to Off; no business-schema change; audit/receipt/client-event behavior untouched |
 
