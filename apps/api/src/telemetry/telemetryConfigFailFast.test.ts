@@ -114,6 +114,22 @@ describe("telemetry config fail-fast", () => {
     );
   });
 
+  it.each(["?", "#"])(
+    "rejects an endpoint with a bare %s delimiter",
+    (delimiter) => {
+      vi.stubEnv("APP_MODE", "development");
+      vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+      vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+      vi.stubEnv(
+        "TELEMETRY_OTLP_ENDPOINT",
+        `http://collector:4318/otlp${delimiter}`,
+      );
+      expect(() => getRuntimeConfig()).toThrow(
+        /TELEMETRY_OTLP_ENDPOINT must not carry a query or fragment/,
+      );
+    },
+  );
+
   it("an https endpoint resolves exactly like an http one", () => {
     vi.stubEnv("APP_MODE", "development");
     vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
