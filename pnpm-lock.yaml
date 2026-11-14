@@ -14,6 +14,12 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^21.0.2
         version: 21.0.2
+      '@commitlint/lint':
+        specifier: ^21.0.2
+        version: 21.0.2
+      '@commitlint/load':
+        specifier: ^21.0.2
+        version: 21.0.2(@types/node@26.1.1)(typescript@5.9.3)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2

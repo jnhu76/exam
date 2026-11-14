@@ -151,6 +151,7 @@ Key recovery authority:
 | Document | Purpose |
 | --- | --- |
 | [`standards/code-quality.md`](standards/code-quality.md) | Quality rules, gates, dependency graph, AI coding rules |
+| [`standards/commit-messages.md`](standards/commit-messages.md) | Commit message standard: `type(scope): subject` format, merge/revert/fixup workflows, enforcement gates (`commitlint.config.mjs` is the executable authority) |
 | [`standards/testing.md`](standards/testing.md) | Testing & CI contract, environment variables, DB lifecycle |
 | [`standards/i18n-copy-policy.md`](standards/i18n-copy-policy.md) | i18n copy policy — **review-enforced** hardcoded-copy rules and copy taxonomy (browser / wire compat / server-rendered / diagnostics / data-format); the machine guard was removed by #634 (see the policy's directive model); semantics live in `contracts/api-contract.md` |
 | [`standards/test-flakes.md`](standards/test-flakes.md) | Test flake registry |

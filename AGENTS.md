@@ -72,6 +72,7 @@ Exam 是面向局域网和本地部署的通用考试与测评平台。一个部
 | 当前任务的 scope / acceptance / non-goals | 同一被授权 OPEN Issue，加任何显式采纳的 parent ordering（见 `docs/README.md`） |
 | 当前实现状态 | `docs/status/implementation-status.md` 与 as-built evidence |
 | 测试、环境变量和数据库生命周期 | `docs/standards/testing.md` |
+| 提交信息格式与提交门禁 | `docs/standards/commit-messages.md`（`commitlint.config.mjs` 为可执行权威） |
 | 代码质量和依赖边界 | `docs/standards/code-quality.md`（§6 为 as-built 权威）；跨包模块解析见 `docs/architecture/workspace-module-resolution.md` |
 | 前端视觉系统 | `docs/architecture/frontend.md`、`docs/standards/ui-system.md` |
 | 实际命令与 CI 接线 | `package.json` scripts、`.github/workflows/` |

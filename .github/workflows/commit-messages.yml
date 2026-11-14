@@ -1,0 +1,60 @@
+name: Commit messages
+
+# Commit message gate for every pull request, regardless of target branch
+# (stacked W1–W7 chains included — unlike ci.yml, which is scoped to master).
+# `edited` covers PR title changes. The gate validates the PR title and every
+# commit the PR introduces, enumerated via the GitHub API (immune to shallow
+# checkouts and local range mistakes). The rule authority is
+# commitlint.config.mjs — the same file the local hooks use.
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          # Depth 1 is enough: PR commits are enumerated via the GitHub API,
+          # not from the local object database.
+          fetch-depth: 1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.22.x"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Self-test the gate
+        # Keeps the gate's own logic continuously verified in CI without
+        # touching the heavyweight verify chain.
+        run: pnpm test:commit-messages
+
+      - name: Check PR title and PR commits
+        run: |
+          node scripts/check-commit-messages.mjs --pr "${{ github.event.pull_request.number }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
