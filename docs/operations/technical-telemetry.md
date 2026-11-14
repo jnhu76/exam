@@ -240,15 +240,34 @@ password was removed from the env file, temporarily restore any
 placeholder value before running the rollback.
 
 **Verify the rollback actually removed the collectors** (plain docker —
-no compose interpolation involved):
+no compose interpolation involved). The checks are scoped by THIS
+deployment's compose project label, so a neighbouring deployment's
+containers on the same host never satisfy or fail the check, and the
+removal check includes STOPPED containers — a stopped-but-present
+collector is not "removed". `exam-prod` is the canonical project name
+(the base file's `name:`); a deployment started under a different
+project name (`-p` / `COMPOSE_PROJECT_NAME`, the same authority the §2.1
+logs selector derives from) substitutes its own value:
 
 ```bash
-# expect the "all removed" branch: no observability container is left
-docker ps --format '{{.Names}}' \
-  | grep -E 'otelcol|tempo|prometheus|loki|grafana' \
-  || echo "observability containers: all removed"
-# expect the business services still running (app/web/db/redis)
-docker ps --format '{{.Names}}\t{{.Status}}' | grep -E 'app|web|db|redis'
+PROJECT=exam-prod
+# expect the "all removed" branch: no observability container — running
+# OR stopped — remains under this deployment's project label:
+docker ps -a \
+  --filter "label=com.docker.compose.project=${PROJECT}" \
+  --format '{{.Label "com.docker.compose.service"}}' \
+  | grep -E '^(otelcol|otelcol-logs|tempo|prometheus|loki|grafana)$' \
+  && echo "observability containers still present" \
+  || echo "observability containers: all removed (including stopped)"
+# expect one line per business service naming a running container — a
+# service with no line is NOT running and must be investigated:
+for svc in app web db redis; do
+  printf '%s: ' "$svc"
+  docker ps \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=${svc}" \
+    --format '{{.Names}} {{.Status}}'
+done
 ```
 
 No business schema or data is touched by either step. A bare
