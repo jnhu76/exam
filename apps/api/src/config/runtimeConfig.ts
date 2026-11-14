@@ -260,6 +260,28 @@ export interface LaunchpadConfig {
   setupToken: string;
 }
 
+/**
+ * Technical telemetry runtime config (ADR-028, default Off). Resolved from
+ * the `telemetry` settings group; consumed by `src/telemetry/runtime.ts`.
+ *
+ * - `enabled: false` is the deployment default: the telemetry module returns
+ *   before any SDK construction — no instrumentations, no export task, no
+ *   telemetry network.
+ * - `exporter: "none"` is the On-but-no-export acceptance state; `"memory"`
+ *   keeps finished spans in a bounded in-process buffer for local
+ *   observation. No remote exporter exists at the API runtime layer.
+ * - `sampleRatio` feeds the root sampler (server-created trace roots only —
+ *   inbound trace headers never parent a server span).
+ */
+export interface TelemetryConfig {
+  enabled: boolean;
+  serviceName: string;
+  sampleRatio: number;
+  exporter: "none" | "memory";
+  /** Memory-exporter witness dump path; empty string = disabled. */
+  memoryDumpFile: string;
+}
+
 export interface AppRuntimeConfig {
   app: {
     mode: AppMode;
@@ -286,6 +308,7 @@ export interface AppRuntimeConfig {
   emailWorker: EmailWorkerConfig;
   publicWebOrigin: PublicWebOriginConfig;
   launchpad: LaunchpadConfig;
+  telemetry: TelemetryConfig;
 }
 
 /**
@@ -730,6 +753,13 @@ export function loadRuntimeConfig(
       // bootstrap endpoint refuses). NOT fail-fast — a bare `docker compose
       // up` without launchpad configured must start normally.
       setupToken: s.app.LAUNCHPAD_SETUP_TOKEN,
+    },
+    telemetry: {
+      enabled: s.telemetry.TELEMETRY_ENABLED,
+      serviceName: s.telemetry.TELEMETRY_SERVICE_NAME,
+      sampleRatio: s.telemetry.TELEMETRY_SAMPLE_RATIO,
+      exporter: s.telemetry.TELEMETRY_EXPORTER,
+      memoryDumpFile: s.telemetry.TELEMETRY_MEMORY_DUMP_FILE,
     },
   };
 }

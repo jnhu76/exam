@@ -35,6 +35,11 @@ import {
   serializeErrorForLog,
   serializeReqForLog,
 } from "./lib/logRedaction.js";
+import {
+  initTelemetry,
+  shutdownTelemetry,
+  type TelemetryRuntimeHandle,
+} from "./telemetry/runtime.js";
 
 loadRootEnv();
 
@@ -70,6 +75,13 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
       app.log.error({ err }, "Graceful shutdown failed");
       process.exitCode = 1;
     }
+    // Telemetry flush runs LAST and BEST-EFFORT: after the app has closed
+    // (request spans are complete) and even when graceful close failed.
+    // shutdownTelemetry is bounded and never throws, so the #351 shutdown
+    // budget and exit semantics are untouched (ADR-028 D1). Runs on both
+    // the success and failure paths above — a failed app.close() must not
+    // skip the flush.
+    await shutdownTelemetry();
     // Bounded exit assist (#351): after app.close() settles, work ABANDONED
     // by a bounded shutdown (e.g. an in-flight email send past the loop's
     // EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS budget) can still hold ref'ed
@@ -110,6 +122,14 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
  * serves static assets from `public/`, and starts listening.
  */
 async function main() {
+  // INVARIANT: telemetry init MUST run before the Fastify instance below is
+  // constructed — fastify requires pino lazily inside the Fastify()
+  // constructor, and initializing first is what lets instrumentation-pino
+  // patch it while it loads (see telemetry/runtime.ts header). Default is
+  // Off: this returns null before any telemetry module is loaded. A config
+  // error (invalid TELEMETRY_* value) propagates like every other settings
+  // leaf; SDK construction failures degrade to null inside initTelemetry.
+  const telemetry: TelemetryRuntimeHandle | null = await initTelemetry();
   const app = Fastify({
     // #860: server-generated UUIDv4 is scoped to each HTTP request, not a
     // business/operation identity. It avoids per-process counter reuse across
@@ -138,6 +158,15 @@ async function main() {
   // server-owned x-request-id. The value is the request.id already minted
   // above; client headers never influence it.
   setupRequestIdHeader(app);
+
+  // Telemetry (ADR-028, Off by default): when enabled, register the Fastify
+  // span-owner plugin FIRST — before cookies, CORS, and long before any
+  // route module — so the server root span starts at the earliest hook and
+  // every route definition is covered (W1.1 measured a late registration
+  // silently dropping all handler spans). null = Off: nothing registers.
+  if (telemetry) {
+    await app.register(telemetry.fastifyOtelPlugin);
+  }
 
   await app.register(fastifyCookie);
   await app.register(cors);
