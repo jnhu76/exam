@@ -484,6 +484,9 @@ export function ExamPage() {
         return (
           <RowActions
             row={exam}
+            // F-07 (#971): compose the entity name so every icon control and
+            // kebab trigger announces WHICH row it acts on.
+            entityName={exam.title}
             actions={[
               {
                 id: "view",

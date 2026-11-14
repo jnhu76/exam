@@ -490,8 +490,11 @@ describe("ExamPage URL query state (#784 A3)", () => {
     const row = screen
       .getAllByRole("row")
       .find((r) => r.textContent?.includes("考试21"));
+    // Composed per-row accessible name (audit #971 F-07).
     await user.click(
-      within(row as HTMLElement).getByRole("button", { name: "查看详情" }),
+      within(row as HTMLElement).getByRole("button", {
+        name: "查看详情：考试21",
+      }),
     );
     expect(await screen.findByText("考试详情")).toBeInTheDocument();
     expect(screen.getByTestId("location-state")).toHaveTextContent(

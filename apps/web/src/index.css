@@ -158,7 +158,13 @@
   --primary-active: #1e40af;
   --primary-soft: #eff6ff;
   --primary-soft-strong: #dbeafe;
-  --primary-focus: #93c5fd;
+  /* Focus ring / outlines resolve through --color-ring. INVARIANT (WCAG
+   * 1.4.11): the ring must hold ≥3:1 on every adjacent surface it paints
+   * against — white --surface, the #f5f7fa canvas and --primary-soft. The
+   * previous tint (#93c5fd) measured 1.80:1 even fully opaque, and the old
+   * ring-ring/25..50 alpha modifiers diluted any color below the floor; both
+   * are retired. Aliases --primary so one value owns the role color. */
+  --primary-focus: var(--primary);
   /* Table state surfaces — neutral light tints. Header/hover are a hair
    * lighter than the surface (neutral, not blue). Focus/selected are the only
    * places blue is allowed in the table — they signal interaction. */

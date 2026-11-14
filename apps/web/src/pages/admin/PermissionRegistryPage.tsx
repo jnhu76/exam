@@ -318,17 +318,32 @@ export function PermissionRegistryPage() {
                 </TableRow>
                 {entries.map((entry) => (
                   <TableRow key={entry.key}>
-                    <TableCell className="font-mono text-xs">
+                    {/* The key cell declares the nowrap overflow vocabulary so
+                        recipes.css clips a single-line cell inside its column;
+                        without the attribute the widest catalog key paints
+                        across the sticky boundary onto the grant column. The
+                        column width itself is the geometry authority's job
+                        (table/permissionMatrix.ts). */}
+                    <TableCell
+                      data-column-role="matrix-key"
+                      data-column-overflow="nowrap"
+                      className="font-mono"
+                    >
                       {entry.key}
                     </TableCell>
                     {assignableRoles.map((role) => (
                       <TableCell key={role.key} className="text-center">
                         {role.permissions.includes(entry.key) ? (
+                          // The grant icon IS the cell's only state signal:
+                          // decorative=false keeps "已授予" in the
+                          // accessibility tree (an aria-hidden icon made the
+                          // granted state invisible to assistive technology).
                           <AppIcon
                             icon={BadgeCheck}
                             size="inline"
+                            decorative={false}
+                            label={t("admin.permissions.roles.granted")}
                             className="text-primary"
-                            aria-label={t("admin.permissions.roles.granted")}
                           />
                         ) : (
                           <span className="text-muted-foreground">—</span>

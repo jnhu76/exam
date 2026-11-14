@@ -110,8 +110,6 @@ export interface MobileRecordListProps<TData> {
   rows: TData[];
   /** Row key resolver. */
   getRowId?: (row: TData) => string;
-  /** Card-level activation (mirrors DesktopDataTable.onRowClick). */
-  onRowClick?: (row: TData) => void;
   /** Body state — exactly one of these renders below the header. */
   loading?: boolean;
   empty?: boolean;
@@ -135,7 +133,6 @@ export function MobileRecordList<TData>({
   columns,
   rows,
   getRowId,
-  onRowClick,
   loading = false,
   empty = false,
   error = null,
@@ -211,7 +208,6 @@ export function MobileRecordList<TData>({
         return (
           <MobileRecordCard
             key={row.id}
-            onClick={onRowClick ? () => onRowClick(row.original) : undefined}
             header={
               header.length > 0 ? (
                 <>

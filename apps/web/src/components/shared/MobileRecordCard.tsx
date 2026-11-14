@@ -6,6 +6,11 @@ import type { ReactNode } from "react";
  * metadata row. Surfaces only the most important fields — NOT every table
  * column as a gray box. Uses semantic tokens (surface-content, border-row) so
  * it shares the table's visual language without re-implementing it.
+ *
+ * The card itself is not interactive: row activation is carried by real
+ * links/controls inside the card's cell content (an unfocusable card-level
+ * onClick was a mouse-only activation path). Pages compose activation into
+ * their column cell renderers.
  */
 export function MobileRecordCard({
   children,
@@ -13,7 +18,6 @@ export function MobileRecordCard({
   primary,
   meta,
   actions,
-  onClick,
   className,
 }: {
   children?: ReactNode;
@@ -25,19 +29,12 @@ export function MobileRecordCard({
   meta?: ReactNode;
   /** Optional explicit body (overrides primary/meta composition). */
   actions?: ReactNode;
-  /** Card-level activation (derived MobileRecordList rows mirror row clicks). */
-  onClick?: () => void;
   className?: string;
 }) {
   return (
     <div
       data-slot="mobile-record-card"
-      onClick={onClick}
-      className={[
-        "surface-content flex flex-col gap-2 p-4",
-        onClick && "cursor-pointer",
-        className,
-      ]
+      className={["surface-content flex flex-col gap-2 p-4", className]
         .filter(Boolean)
         .join(" ")}
     >

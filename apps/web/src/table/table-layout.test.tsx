@@ -150,7 +150,12 @@ describe("row-action capacity contract", () => {
         // their dialog tables: auto layout, outside the admin shell (#445
         // P3 §4.4 documented exception).
         const pickerException = body.includes("dialogActions.add");
-        if (!throughRowActions && !pickerException) {
+        // A disclosure cell (audit #971 F-02) hosts an aria-expanded toggle
+        // bound to a detail region — state reveal, not a row action, so the
+        // RowActions vocabulary does not apply. Any non-disclosure control
+        // in an actions cell still must go through RowActions.
+        const disclosureException = body.includes("aria-expanded=");
+        if (!throughRowActions && !pickerException && !disclosureException) {
           offenders.push(relative(webRoot, path));
         }
       }

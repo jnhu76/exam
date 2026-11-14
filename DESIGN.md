@@ -61,7 +61,7 @@ color-contrast baseline).
 | primary-active | `#1e40af` | primary pressed |
 | primary-soft | `#eff6ff` | selected/info anchor |
 | primary-soft-strong | `#dbeafe` | selected-row inset accent |
-| primary-focus | `#93c5fd` | focus ring / outlines |
+| primary-focus | `#2563eb` (= primary) | focus ring / outlines (≥3:1 on surface/canvas/primary-soft, WCAG 1.4.11) |
 | danger | `#c8263c` | error feedback, destructive action (≥4.5:1 on canvas) |
 | danger-hover | `#c41e33` | destructive hover |
 | danger-soft | `#fdecef` | destructive soft surface |

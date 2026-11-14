@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { deriveMobileCardFields, MobileRecordList } from "./MobileRecordList";
 import type { DataViewColumnDef } from "./DesktopDataTable";
@@ -264,18 +264,21 @@ describe("MobileRecordList (derived mode)", () => {
     ).toBeInTheDocument();
   });
 
-  it("activates the card through onRowClick", () => {
-    const activated: string[] = [];
+  it("keeps the card itself non-interactive (activation lives in real links/controls)", () => {
     render(
       <MobileRecordList
         columns={columns}
         rows={[rows[0]!]}
         getRowId={(r) => r.id}
-        onRowClick={(row) => activated.push(row.id)}
       />,
     );
-    fireEvent.click(screen.getByText("First row"));
-    expect(activated).toEqual(["r1"]);
+    // A card-level onClick was a mouse-only activation path (audit #971
+    // F-02); the card div must carry no click handler of its own.
+    const card = document.querySelector('[data-slot="mobile-record-card"]')!;
+    expect(card.getAttribute("onclick")).toBeNull();
+    expect(
+      screen.getByText("First row").closest('[data-slot="mobile-record-card"]'),
+    ).not.toHaveAttribute("onclick");
   });
 
   it("renders the error card and the empty card from body state", () => {

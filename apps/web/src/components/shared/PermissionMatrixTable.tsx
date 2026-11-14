@@ -17,7 +17,10 @@ import {
  *   TableScrollSurface   scroll region, overflow facts, local-scroll affordance
  *   ui Table primitives  cell/header padding (recipes.css keys on data-slot)
  *   recipes.css          typography, grid borders, row states
- *   detail-comparison    pins the capability-key column during local scroll
+ *   detail-comparison    pins the capability-key column during local scroll at
+ *                        >=sm; below sm the key column scrolls with the grant
+ *                        columns (a 336px pin would leave ~7px of a 343px
+ *                        region, hiding every grant icon)
  *
  * — while its own column semantics live in ONE named authority
  * (table/permissionMatrix.ts). The page supplies the role labels and the
@@ -63,7 +66,7 @@ export function PermissionMatrixTable({
         </colgroup>
         <TableHeader>
           <TableRow>
-            <TableHead className="font-mono text-xs">
+            <TableHead data-column-role="matrix-key" className="font-mono">
               {t("admin.permissions.roles.columnPermission")}
             </TableHead>
             {roleLabels.map((roleLabel) => (

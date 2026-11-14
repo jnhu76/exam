@@ -28,6 +28,33 @@ function cssHexVar(css: string, name: string): string | null {
   return m?.[1] ?? null;
 }
 
+/** The body of the first brace block opened at/after `opener`'s match. */
+function cssBlock(css: string, opener: RegExp): string | null {
+  const m = opener.exec(css);
+  if (!m) return null;
+  const open = css.indexOf("{", m.index);
+  if (open === -1) return null;
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}") {
+      depth--;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/** The selector text and body of the first rule matching `opener`. */
+function cssRule(css: string, opener: RegExp): string | null {
+  const m = opener.exec(css);
+  if (!m) return null;
+  const open = css.indexOf("{", m.index);
+  const close = open === -1 ? -1 : css.indexOf("}", open);
+  if (open === -1 || close === -1) return null;
+  return css.slice(m.index, close + 1);
+}
+
 describe("table and color visual-finish authority", () => {
   it("keeps the brand pin and the documented neutral token relationships", () => {
     // index.css is the palette authority, so
@@ -146,6 +173,47 @@ describe("table and color visual-finish authority", () => {
   it("leaves DataTableShell as the single local overflow owner", () => {
     expect(tableCss).toMatch(
       /\[data-slot="admin-table-shell"\]\s+\[data-slot="table-container"\][\s\S]*?overflow-x:\s*visible/,
+    );
+  });
+
+  it("unpins the permission matrix first column only on narrow viewports", () => {
+    // W5 review: at 375px the matrix scroll region is ~343px while the derived
+    // capability-key column is 336px, so a pinned key column leaves ~7px of
+    // grant column visible — every grant icon paints under the opaque pinned
+    // cell. Below the sm breakpoint the matrix uses the shared horizontal
+    // scroll instead; the desktop (detail-comparison) pin contract stays.
+    const basePin = cssBlock(
+      tableCss,
+      /\[data-table-archetype="detail-comparison"\] \[data-slot="table-head"\]:first-child,/,
+    );
+    expect(
+      basePin,
+      "the detail-comparison sticky rule must exist",
+    ).not.toBeNull();
+    expect(basePin).toContain("position: sticky");
+
+    const narrow = cssBlock(tableCss, /@media \(max-width: 639px\)/);
+    expect(
+      narrow,
+      "the matrix needs a narrow-viewport override",
+    ).not.toBeNull();
+    const unpinRule = cssRule(
+      narrow!,
+      /\[data-table-matrix="permissions"\][^{]*\{/,
+    );
+    expect(unpinRule, "the matrix narrow override must exist").not.toBeNull();
+    for (const slot of ["table-head", "table-cell"]) {
+      expect(unpinRule).toContain(`[data-slot="${slot}"]:first-child`);
+    }
+    expect(unpinRule).toContain("position: static");
+    // Scoped to the matrix: the result sheet and attempt detail keep their
+    // pinned context column at every width.
+    expect(narrow).not.toMatch(/\[data-table-archetype="detail-comparison"\]/);
+
+    // Base pin and narrow override have equal specificity, so the override
+    // must come after the base rule to win the cascade.
+    expect(tableCss.indexOf("@media (max-width: 639px)")).toBeGreaterThan(
+      tableCss.indexOf('[data-table-archetype="detail-comparison"]'),
     );
   });
 
@@ -326,5 +394,62 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toContain("pointer-events: none");
     expect(tableCss).toContain("width: 0.5rem");
     expect(tableCss).toContain("var(--text-muted) 4%");
+  });
+
+  it("keeps the keyboard focus ring at or above the 3:1 non-text contrast floor", () => {
+    // WCAG 1.4.11: the focus indicator must contrast ≥3:1 with the colors it
+    // paints against. The ring (--color-ring → --primary-focus) renders on
+    // white surfaces, the canvas and the soft primary tint — every documented
+    // adjacent background must clear the floor. The token may alias another
+    // (--primary-focus: var(--primary)); the guard resolves the chain so an
+    // alias to a failing value reds exactly like a literal one.
+    const cssVar = (name: string): string | null => {
+      const alias = new RegExp(`${name}:\\s*var\\(--([a-z-]+)\\)`).exec(
+        indexCss,
+      );
+      return alias ? cssHexVar(indexCss, alias[1]!) : cssHexVar(indexCss, name);
+    };
+    const focusHex = cssVar("--primary-focus");
+    expect(
+      focusHex,
+      "--primary-focus (resolved) must be a concrete hex color",
+    ).not.toBeNull();
+    const lin = (channel: number) =>
+      channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    const luminance = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      const [r, g, b] = [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff].map((c) =>
+        lin(c / 255),
+      );
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const contrast = (a: string, b: string) => {
+      const sorted = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (sorted[0]! + 0.05) / (sorted[1]! + 0.05);
+    };
+    for (const neighbor of ["--surface", "--bg", "--primary-soft"]) {
+      const hex = cssVar(neighbor) as string;
+      expect(hex, `${neighbor} must resolve to a hex color`).not.toBeNull();
+      const ratio = contrast(focusHex as string, hex);
+      expect(
+        ratio,
+        `focus ring on ${neighbor} must be ≥3:1 (measured ${ratio.toFixed(2)})`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("renders the control-family focus ring at full strength (no alpha dilution)", () => {
+    // A `ring-ring/NN` alpha modifier blends the ring toward the background —
+    // even a 3:1 token measured 1.43:1 at 25% opacity on white. The control
+    // family must paint the ring solid; state layers live on the token, not
+    // in per-control alpha.
+    const uiDir = join(here, "../components/ui");
+    const diluted: string[] = [];
+    for (const entry of readdirSync(uiDir)) {
+      if (!/\.tsx$/.test(entry) || /\.test\./.test(entry)) continue;
+      const text = readFileSync(join(uiDir, entry), "utf8");
+      if (/ring-ring\/\d+/.test(text)) diluted.push(entry);
+    }
+    expect(diluted).toEqual([]);
   });
 });

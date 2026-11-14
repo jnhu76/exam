@@ -417,6 +417,29 @@
   background: var(--table-row-selected);
 }
 
+/*
+ * Narrow viewports: the permission matrix does NOT pin its key column.
+ *
+ * Its key column is derived from the widest capability key (336px at the
+ * governed cell tier). At 375px the local scroll region is ~343px, so a pinned
+ * key column leaves ~7px of grant column visible and every grant icon paints
+ * under the opaque pinned cell. The matrix already owns a local horizontal
+ * scroll; below sm that scroll is the whole affordance and the key column
+ * moves with it. At >=sm the region can give the grant columns real width, so
+ * the detail-comparison pin returns. Scoped to the matrix by its own
+ * `data-table-matrix` marker: result sheets and attempt detail keep their
+ * pinned context column at every width.
+ *
+ * Cascade: equal specificity to the detail-comparison pin above, so this rule
+ * MUST stay after it.
+ */
+@media (max-width: 639px) {
+  [data-table-matrix="permissions"] [data-slot="table-head"]:first-child,
+  [data-table-matrix="permissions"] [data-slot="table-cell"]:first-child {
+    position: static;
+  }
+}
+
 [data-slot="table-scroll-fade-left"],
 [data-slot="table-scroll-fade-right"] {
   position: absolute;

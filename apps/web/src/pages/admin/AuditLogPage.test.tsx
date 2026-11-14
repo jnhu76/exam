@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -419,18 +425,6 @@ describe("AuditLogPage", () => {
     });
   });
 
-  it("expands metadata on row click", async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await screen.findByText("评分录入");
-
-    const row = screen.getByText("评分录入").closest("tr");
-    expect(row).toBeTruthy();
-    await user.click(row!);
-
-    expect(await screen.findByText(/questionId/)).toBeInTheDocument();
-  });
-
   it("sends targetType query param when target filter is set", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -634,5 +628,33 @@ describe("AuditLogPage", () => {
       expect(lastCall).not.toContain("targetId=");
     });
     expect(screen.getByRole("textbox", { name: "对象 ID" })).toHaveValue("");
+  });
+
+  it("expands and collapses a log entry through a real toggle button bound to the detail region", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const table = await screen.findByRole("table");
+
+    // The expansion control is a real button (keyboard/AT reachable), named
+    // after the row's own action, not a mouse-only clickable row.
+    const toggle = within(table).getByRole("button", {
+      name: /评分录入/,
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const regionId = toggle.getAttribute("aria-controls");
+    expect(regionId).toBeTruthy();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const region = screen.getByRole("region", { name: "日志详情" });
+    expect(region).toHaveAttribute("id", regionId);
+    // The expanded region carries the row's metadata payload.
+    expect(within(region).getByText(/"questionId"/)).toBeInTheDocument();
+
+    // Enter on the focused button collapses again (native button semantics).
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 });
