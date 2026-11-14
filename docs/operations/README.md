@@ -162,3 +162,14 @@ for the full recovery protocol.
 | JWT expired / 401 | Check `JWT_SECRET` hasn't changed between restarts |
 | Email not sending | Check `EMAIL_ENABLED=true` and `SMTP_HOST` in `.env.production` |
 | Redis connection refused | Redis is optional; only needed with `--profile redis` |
+
+## Technical Telemetry (opt-in observability stack)
+
+Default Off. An optional Compose profile (collector + Tempo/Loki/
+Prometheus/Grafana, `deploy/observability/`) receives OTLP traces and
+metrics plus stdout-collected logs when the deployment opts in — the
+bare stack and the offline LAN contract are unchanged. Enable, rollback,
+retention, failure boundaries, and troubleshooting:
+[`operations/technical-telemetry.md`](technical-telemetry.md). The
+`operability.*` stdout events above remain the alert contract — the
+stack only stores and visualizes technical signals (ADR-028, PROPOSED).

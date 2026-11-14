@@ -1,0 +1,49 @@
+# Grafana Loki — Exam opt-in observability profile (#964 W6).
+# Image: grafana/loki:3.7.9 (single-binary filesystem mode — no object
+# storage dependency for the LAN profile).
+#
+# Log ingestion arrives via the collector's otlp_http exporter →
+# http://loki:3100/otlp (native OTLP endpoint, Loki 3.x; structured
+# metadata allowed by default since 3.0 — the mapping default keeps
+# service.name as index label, which is this deployment's ONLY index
+# label, keeping label cardinality at exactly one service).
+#
+# Retention: 14 days via retention_enabled + compactor delete_request_store
+# (the retention horizon is an operator decision — see
+# docs/operations/technical-telemetry.md §Retention).
+
+auth_enabled: false
+
+server:
+  http_listen_address: 0.0.0.0
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: "2024-01-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  allow_structured_metadata: true
+  retention_period: 336h # 14 days
+
+compactor:
+  working_directory: /loki/compactor
+  delete_request_store: filesystem
+  retention_enabled: true

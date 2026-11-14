@@ -7,10 +7,11 @@
  * loads the whole version-locked group in one place.
  *
  * VERSION GROUP (W1.1 probe, exactly-pinned in package.json — upgrade as one
- * unit): @opentelemetry/api@1.10.0 · sdk-trace@3.1.1 ·
+ * unit): @opentelemetry/api@1.10.0 · sdk-trace@3.1.1 · sdk-metrics@3.1.1 ·
  * context-async-hooks@3.1.1 · core@3.1.1 · resources@3.1.1 ·
  * instrumentation@0.301.2 · instrumentation-http@0.301.2 ·
- * instrumentation-pino@0.71.0 · @fastify/otel@1.0.1. The @fastify/otel
+ * instrumentation-pino@0.71.0 · exporter-{trace,metrics}-otlp-http@0.301.2 ·
+ * @fastify/otel@1.0.1. The @fastify/otel
  * internal `@opentelemetry/instrumentation@^0.300.0` resolves to 0.300.0 and
  * co-runs with the 0.301.2 SDK generation in one process with a single API
  * instance (probe-measured: no conflict, no duplicate registration).
@@ -23,18 +24,25 @@
  * the deploy artifact contract rejects (#798 negative scan: @types/* must
  * never enter the dependency store). The API's exporter surface is the
  * in-memory witness and (W6) OTLP/HTTP only; this bundle therefore imports
- * no exporter package at all — the trace-side processors/exporters are
- * constructed by runtime.ts from sdk-trace alone.
+ * ONLY the OTLP/HTTP exporter pair — the gRPC/Zipkin/Prometheus families
+ * never enter the dependency closure.
  *
- * The wiring below reproduces exactly the global-registration sequence of
- * the sdk-node start path it replaces (registerInstrumentations → context
- * manager → propagator → tracer provider), with the metric and log faces
- * intentionally absent: this runtime never constructs a meter or logger
- * provider (no metric reader, no log-record producer — pino correlation is
- * injection-only), so there is nothing to register for those signals.
+ * The trace wiring below reproduces exactly the global-registration sequence
+ * of the sdk-node start path it replaces (registerInstrumentations → context
+ * manager → propagator → tracer provider). The metric face is the W6 opt-in
+ * {@link startMetrics} (one bounded periodic reader, registered only when
+ * `TELEMETRY_EXPORTER=otlp`); the log face stays absent — no log-record
+ * producer exists in this runtime (pino correlation is injection-only).
  */
-import { context, propagation, trace } from "@opentelemetry/api";
+import { context, metrics, propagation, trace } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+  type PushMetricExporter,
+} from "@opentelemetry/sdk-metrics";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import {
   CompositePropagator,
   W3CBaggagePropagator,
@@ -100,6 +108,79 @@ export interface StartedTracing {
    * shutdown is terminal exactly as it was under sdk-node.
    */
   shutdown: () => Promise<void>;
+}
+
+/**
+ * OTLP/HTTP span exporter (W6 opt-in). `TELEMETRY_OTLP_ENDPOINT` is the
+ * collector BASE url; the programmatic `url` option in 0.301.x is used
+ * AS-IS (only the env-var configuration path appends the signal path —
+ * probe-measured against the installed exporter), so the per-signal path
+ * is appended here explicitly.
+ */
+export function createOtlpSpanExporter(endpoint: string): OTLPTraceExporter {
+  return new OTLPTraceExporter({ url: `${withSlash(endpoint)}v1/traces` });
+}
+
+/**
+ * Periodic metric reader over the OTLP/HTTP metric exporter. This is the
+ * metric equivalent of BatchSpanProcessor's scheduled flush — one bounded
+ * queue, one export interval. Bounds are written down by contract in
+ * runtime.ts (BATCH_QUEUE_BOUNDS / OTLP_METRIC_EXPORT_INTERVAL_MS), not
+ * inherited from SDK defaults by accident. The reader is shut down by the
+ * {@link startMetrics} provider shutdown alongside the span processors.
+ */
+export function createPeriodicOtlpMetricReader(
+  endpoint: string,
+  exportIntervalMillis: number,
+  exportTimeoutMillis: number,
+): PeriodicExportingMetricReader {
+  const exporter: PushMetricExporter = new OTLPMetricExporter({
+    url: `${withSlash(endpoint)}v1/metrics`,
+  });
+  return new PeriodicExportingMetricReader({
+    exporter,
+    exportIntervalMillis,
+    exportTimeoutMillis,
+  });
+}
+
+/** Handle of the assembled metric SDK — lifecycle surface only. */
+export interface StartedMetrics {
+  /**
+   * Shuts the meter provider down: flushes and stops every registered
+   * metric reader (the periodic OTLP export task ends with it). Terminal
+   * exactly like the trace face — the OTel API's global registrations are
+   * one-way per process.
+   */
+  shutdown: () => Promise<void>;
+}
+
+/**
+ * Assemble and register the metric face (W6 opt-in): one MeterProvider over
+ * the caller's reader, registered globally so the facade instruments
+ * (`metrics.getMeter()` in backgroundLoopSpan.ts, W4) become real series.
+ * Without this registration the facade resolves to NOOP_METER_PROVIDER and
+ * loop metrics degrade to spans-only (W4 containment contract). The reader
+ * comes from {@link createPeriodicOtlpMetricReader} — bounded by contract in
+ * runtime.ts, not inherited from SDK defaults by accident.
+ */
+export function startMetrics(options: {
+  serviceName: string;
+  reader: PeriodicExportingMetricReader;
+}): StartedMetrics {
+  const meterProvider = new MeterProvider({
+    resource: defaultResource().merge(
+      resourceFromAttributes({ "service.name": options.serviceName }),
+    ),
+    readers: [options.reader],
+  });
+  metrics.setGlobalMeterProvider(meterProvider);
+  return { shutdown: () => meterProvider.shutdown() };
+}
+
+/** Normalize a base endpoint to end with exactly one `/`. */
+function withSlash(endpoint: string): string {
+  return endpoint.endsWith("/") ? endpoint : `${endpoint}/`;
 }
 
 /**

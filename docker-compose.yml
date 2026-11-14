@@ -82,6 +82,10 @@ services:
       TELEMETRY_SERVICE_NAME: ${TELEMETRY_SERVICE_NAME:-}
       TELEMETRY_SAMPLE_RATIO: ${TELEMETRY_SAMPLE_RATIO:-}
       TELEMETRY_EXPORTER: ${TELEMETRY_EXPORTER:-}
+      # OTLP/HTTP collector base URL; REQUIRED when TELEMETRY_EXPORTER=otlp
+      # (startup guard) — e.g. http://otelcol:4318 with the observability
+      # profile. Empty otherwise.
+      TELEMETRY_OTLP_ENDPOINT: ${TELEMETRY_OTLP_ENDPOINT:-}
       # Memory-exporter witness only; empty in real deployments.
       TELEMETRY_MEMORY_DUMP_FILE: ${TELEMETRY_MEMORY_DUMP_FILE:-}
     depends_on:

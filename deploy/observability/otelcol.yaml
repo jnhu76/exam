@@ -1,0 +1,90 @@
+# OpenTelemetry Collector — Exam opt-in observability profile (#964 W6).
+# Validated with: otel/opentelemetry-collector-contrib:0.165.0
+#   `otelcol validate --config=otelcol.yaml` (see
+#   docs/operations/technical-telemetry.md).
+#
+# Signal flow (traces and metrics ONLY — #979 P1 split):
+#   app (TELEMETRY_EXPORTER=otlp) ──OTLP/HTTP 4318──▶ otlp receiver
+#   traces  → memory_limiter → batch → otlp_http → tempo:4318
+#   metrics → memory_limiter → batch → prometheus (exposition :8889, scraped
+#             by the prometheus service — no remote-write dependency)
+#
+# The file-log ingestion leg (filelog receiver on the host Docker
+# containers dir → loki) is NOT part of this collector: it lives in
+# otelcol.logs.yaml behind the PENDING VERIFICATION overlay
+# docker-compose.observability.logs.yml (`observability-logs` profile).
+# Loki itself stays in the compose overlay (idle until that overlay is
+# enabled).
+#
+# Component names are the NON-deprecated forms (`otlp_http`): 0.165.0
+# still accepts the `otlphttp` alias but logs a deprecation warning; a
+# future upgrade may remove the aliases.
+#
+# Field-cleaning split (ADR-028 D4): the APPLICATION owns secret/URL/SQL
+# redaction before export (logRedaction.ts, UrlScrubSpanProcessor, closed
+# metric label sets); this collector only carries app-exported OTLP. It
+# intentionally does NOT parse or rewrite bodies.
+#
+# Bound contract: every exporter queue and retry is explicitly bounded —
+# an unreachable backend degrades to bounded in-memory queuing then data
+# loss, never to blocking or crashing (and never to an Exam business
+# result change; the app's own export queue is separately bounded).
+
+receivers:
+  otlp:
+    protocols:
+      # exam-net bridge only — no host port publish, no grpc (the app
+      # exports OTLP/HTTP).
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Bound the collector's own memory FIRST in every pipeline (upstream
+  # convention: memory_limiter precedes batch). ~500 MiB hard limit with a
+  # 100 MiB spike margin for the single-host LAN profile.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 500
+    spike_limit_mib: 100
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+
+exporters:
+  # Tempo OTLP/HTTP ingestion (traces). Tempo appends /v1/traces.
+  otlp_http/traces:
+    endpoint: http://tempo:4318
+    sending_queue:
+      queue_size: 2000
+      num_consumers: 4
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 60s
+  # Prometheus exposition scraped by the prometheus service. metric_expiration
+  # bounds the in-memory series table.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    metric_expiration: 5m
+
+service:
+  extensions:
+    - health_check
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/traces]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133

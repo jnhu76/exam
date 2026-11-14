@@ -838,9 +838,15 @@ export const SETTINGS = {
     TELEMETRY_SAMPLE_RATIO: ratioLeaf(1),
     // Export target. `none` = On with in-process signals only (no export
     // task, no network). `memory` = bounded in-process buffer for local
-    // observation. OTLP export is a W6 deployment concern, not a runtime
-    // leaf yet.
-    TELEMETRY_EXPORTER: enumLeaf(["none", "memory"] as const, "none"),
+    // observation. `otlp` = OTLP/HTTP export to the deployment's collector
+    // (W6 opt-in; requires TELEMETRY_OTLP_ENDPOINT — enforced by the
+    // runtimeConfig policy guard).
+    TELEMETRY_EXPORTER: enumLeaf(["none", "memory", "otlp"] as const, "none"),
+    // Base endpoint of the OTLP/HTTP collector (e.g. http://otelcol:4318).
+    // The exporter appends /v1/{traces,metrics}. Empty = unset; non-empty
+    // with an exporter other than `otlp` is a config drift the policy guard
+    // rejects.
+    TELEMETRY_OTLP_ENDPOINT: stringLeaf("", { trim: true }),
     // Memory-exporter witness seam: when non-empty, graceful shutdown writes
     // the retained spans as JSONL to this path (best-effort, exit-neutral).
     // Empty = disabled; production deployments never set it. Mirrors the

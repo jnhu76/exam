@@ -45,19 +45,25 @@ interface DbTelemetryHandle {
  *   The dynamic `import("./sdkBundle.js")` never executes, so no OTel
  *   SDK/instrumentation package, export task, or network surface exists in
  *   the process (W1.1 measured the Off state: zero spans, zero connections to
- *   the collector port, unmodified exit). Since W3, the business operation
- *   spans (businessOperationSpan.ts) statically import the API-only facade
+ *   the collector port, unmodified exit). Since W3/W4, the API span helpers
+ *   (businessOperationSpan.ts for business operations, backgroundLoopSpan.ts
+ *   for background loop cycles) statically import the API-only facade
  *   `@opentelemetry/api` — already an apps/api dependency since W1 — which is
- *   inert without a registered provider: ProxyTracer → NonRecordingSpans, no
- *   task, no network. The SDK bundle itself stays dynamic-import-only.
+ *   inert without a registered provider: ProxyTracer → NonRecordingSpans and
+ *   NOOP_METER_PROVIDER → no-op instruments, no task, no network. The SDK
+ *   bundle itself stays dynamic-import-only.
  * - **On**: the SDK is assembled from granular OTel packages with explicit
- *   per-signal configuration (sdkBundle.ts startTracing — no auto-configure
- *   facade), and every signal's exporter env is additionally pinned to
- *   `none` before construction (W1.1 probe F4/S8: the default OTLP exporter
- *   dials localhost:4318; the explicit env decision keeps that surface at
- *   zero for any OTel library that consults the env). There is no remote
- *   exporter at the API runtime layer; OTLP enablement is a W6 deployment
- *   concern that must extend THIS wiring, not bypass it.
+ *   per-signal configuration (sdkBundle.ts startTracing/startMetrics — no
+ *   auto-configure facade), and every signal's exporter env is additionally
+ *   pinned to `none` before construction (W1.1 probe F4/S8: the default OTLP
+ *   exporter dials localhost:4318; the explicit env decision keeps that
+ *   surface at zero for any OTel library that consults the env). The one
+ *   remote exporter is the W6 opt-in (`TELEMETRY_EXPORTER=otlp`): traces via
+ *   a bounded BatchSpanProcessor over OTLP/HTTP, metrics via one bounded
+ *   periodic reader registered as the global MeterProvider — both pointed
+ *   at TELEMETRY_OTLP_ENDPOINT. Logs have NO remote path: Pino stays
+ *   stdout-only (correlation-only instrumentation; remote log ingestion is
+ *   the collector's job, ADR-028 D3 single-path rule).
  * - **Degraded**: any SDK construction/start failure is contained — a
  *   structured warn event goes to stderr and the process continues with
  *   telemetry Off. Telemetry failures never change business results
@@ -76,10 +82,14 @@ interface DbTelemetryHandle {
  */
 
 /**
- * Shutdown flush budget. One best-effort term appended to the #351 shutdown
- * sequence (loop 8s + audit 10s + DB 10s + exit assist 2s + this bound);
- * the flush runs concurrently AFTER app.close() settles, and the race bound
- * keeps a stuck exporter from extending the bounded shutdown.
+ * Shutdown budget. ONE deadline shared by every telemetry shutdown face —
+ * flush, trace-face provider shutdown, metric-face provider shutdown —
+ * counted from the moment {@link shutdownTelemetry} starts (R5 review: two
+ * serial bounds of this size let a collector that accepts but never answers
+ * delay the metric face's final export to t+3 s and return at t+6 s). One
+ * best-effort term appended to the #351 shutdown sequence (loop 8s + audit
+ * 10s + DB 10s + exit assist 2s + this bound); the shared race keeps a
+ * stuck exporter from extending the bounded shutdown.
  */
 const SHUTDOWN_FLUSH_TIMEOUT_MS = 3_000;
 
@@ -93,6 +103,15 @@ const BATCH_QUEUE_BOUNDS = {
   exportTimeoutMillis: 30_000,
   maxExportBatchSize: 512,
 } as const;
+
+/**
+ * Defined bounds of the OTLP metric reader (the metric counterpart of
+ * BATCH_QUEUE_BOUNDS — bounded by contract, ADR-028 D1). Export failures
+ * (collector unreachable) are contained by the SDK's reader internals and
+ * never propagate into request handling.
+ */
+const OTLP_METRIC_EXPORT_INTERVAL_MS = 60_000;
+const OTLP_METRIC_EXPORT_TIMEOUT_MS = 30_000;
 
 interface ActiveTelemetry {
   sdk: { shutdown: () => Promise<void> };
@@ -194,15 +213,34 @@ export async function initTelemetry(): Promise<TelemetryRuntimeHandle | null> {
   } catch (err) {
     // Structured stderr event, not app.log: at init time no fastify logger
     // exists yet (same rationale as the runtimeConfig email-mode guard).
-    // Shape mirrors the operability.* bounded events.
+    // Shape mirrors the operability.* bounded events; the reason is
+    // endpoint-redacted (see redactOtlpEndpoint).
     process.stderr.write(
       `${JSON.stringify({
         event: "telemetry.init_failed",
-        reason: err instanceof Error ? err.message : String(err),
+        reason: redactOtlpEndpoint(
+          err instanceof Error ? err.message : String(err),
+          config.otlpEndpoint,
+        ),
       })}\n`,
     );
     return null;
   }
+}
+
+/**
+ * Diagnostic hygiene for telemetry failure events: SDK construction errors
+ * can echo the configured OTLP endpoint (deploy topology — and a URL with
+ * credentials must never reach a log line; the config layer rejects those,
+ * this redacts any endpoint-bearing message regardless). Plain substring
+ * replacement, no regex — the endpoint is used verbatim.
+ */
+export function redactOtlpEndpoint(
+  message: string,
+  otlpEndpoint: string,
+): string {
+  if (!otlpEndpoint) return message;
+  return message.split(otlpEndpoint).join("<otlp-endpoint>");
 }
 
 /**
@@ -230,23 +268,34 @@ export async function shutdownTelemetry(): Promise<void> {
   }
   setTransactionSeam(null);
 
-  // Flush the batch queue FIRST so the witness dump sees every span the
-  // process produced; both flush and shutdown are bounded races so a stuck
-  // exporter can never extend the #351 shutdown budget.
-  if (current.flush) {
-    try {
-      await Promise.race([
-        current.flush(),
-        new Promise<void>((resolve) =>
-          setTimeout(resolve, SHUTDOWN_FLUSH_TIMEOUT_MS).unref(),
-        ),
-      ]);
-    } catch {
-      // Keep shutting down; the dump writes whatever landed.
-    }
-  }
+  // ONE shared deadline for every shutdown face, counted from the moment
+  // shutdown starts (R5 review: the former structure raced TWO serial
+  // SHUTDOWN_FLUSH_TIMEOUT_MS bounds — flush first, then sdk.shutdown — so
+  // a collector that accepts but never answers delayed the metric face's
+  // final export to t+3 s and returned at t+6 s). Every face now starts
+  // together and the whole composition is bounded by one budget — the 3 s
+  // figure the operations runbook states for the telemetry term.
+  const deadline = Date.now() + SHUTDOWN_FLUSH_TIMEOUT_MS;
+  const deadlineRace = (work: Promise<void>): Promise<void> =>
+    Promise.race([
+      work,
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, Math.max(0, deadline - Date.now())).unref(),
+      ),
+    ]);
 
   if (current.memoryExporter) {
+    // Witness leg (memory exporter mode): flush the batch queue FIRST so
+    // the dump sees every span the process produced, then write the dump.
+    // This mode has no metric face (the periodic reader exists only on the
+    // otlp path), so this sequencing cannot starve another face.
+    if (current.flush) {
+      try {
+        await deadlineRace(current.flush());
+      } catch {
+        // Keep shutting down; the dump writes whatever landed.
+      }
+    }
     writeMemoryDumpIfConfigured(
       current.memoryExporter.getRetainedSpans(),
       current.memoryDumpFile,
@@ -254,24 +303,46 @@ export async function shutdownTelemetry(): Promise<void> {
   }
 
   try {
-    await Promise.race([
-      current.sdk.shutdown(),
-      new Promise<void>((resolve) =>
-        setTimeout(resolve, SHUTDOWN_FLUSH_TIMEOUT_MS).unref(),
-      ),
-    ]);
+    // SDK leg: composeSdkShutdown starts every face at once (the trace
+    // face's provider shutdown performs the batch drain itself — no
+    // separate trace flush is queued ahead of the metric face's final
+    // export); the race bounds the composition by the shared deadline.
+    await deadlineRace(current.sdk.shutdown());
   } catch {
     // A shutdown/flush failure is telemetry-internal; business shutdown
     // semantics (exit code, timing) are untouched (ADR-028 D1).
   }
 }
 
+/**
+ * Composed shutdown of the assembled SDK faces. INVARIANT: every face's
+ * shutdown runs to settlement even when another face fails — a trace-face
+ * rejection must never cancel the metric face's final periodic export,
+ * whose interval only ends through its provider shutdown. Faces run
+ * concurrently inside ONE bounded caller race (shutdownTelemetry), so a
+ * hung face cannot starve the others; the first rejection re-surfaces
+ * only after every face has settled.
+ */
+export function composeSdkShutdown(
+  faces: readonly (() => Promise<void>)[],
+): () => Promise<void> {
+  return async () => {
+    const outcomes = await Promise.allSettled(faces.map((run) => run()));
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") {
+        throw outcome.reason;
+      }
+    }
+  };
+}
+
 async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
-  // PROTOCOL (W1.1 S8/F4, kept from the sdk-node wiring): the API runtime
-  // has no remote exporter surface, and every OTel library that consults
-  // the exporter env must see the explicit `none` decision BEFORE any
-  // exporter construction. W6's OTLP enablement must replace this explicit
-  // decision with an explicit exporter — never remove it into silence.
+  // PROTOCOL (W1.1 S8/F4, kept from the sdk-node wiring): every OTel library
+  // that consults the exporter env must see the explicit `none` decision
+  // BEFORE any exporter construction. The W6 `otlp` branch below replaces
+  // this explicit decision with an explicit exporter for traces+metrics —
+  // never remove the `none` defaults into silence; any new signal path must
+  // be another explicit decision like that one.
   process.env.OTEL_TRACES_EXPORTER = "none";
   process.env.OTEL_METRICS_EXPORTER = "none";
   process.env.OTEL_LOGS_EXPORTER = "none";
@@ -291,6 +362,7 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
     new ExceptionScrubSpanProcessor(),
   ];
   let flush: (() => Promise<void>) | null = null;
+  let metricsSdk: ReturnType<typeof bundle.startMetrics> | null = null;
   if (memoryExporter) {
     const batch = new bundle.BatchSpanProcessor({
       exporter: memoryExporter,
@@ -298,9 +370,30 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
     });
     spanProcessors.push(batch);
     flush = () => batch.forceFlush();
+  } else if (config.exporter === "otlp") {
+    // W6 opt-in: the only remote exporter path. Same scrub-first processor
+    // chain and the same bounded queue as the memory witness — the remote
+    // destination sees exactly the scrubbed projection. Metrics register
+    // the global meter provider over ONE bounded periodic reader (W4's
+    // facade instruments turn into real series exactly here; in every other
+    // exporter mode they stay NOOP — the W4 containment contract).
+    const batch = new bundle.BatchSpanProcessor({
+      exporter: bundle.createOtlpSpanExporter(config.otlpEndpoint),
+      ...BATCH_QUEUE_BOUNDS,
+    });
+    spanProcessors.push(batch);
+    flush = () => batch.forceFlush();
+    metricsSdk = bundle.startMetrics({
+      serviceName: config.serviceName,
+      reader: bundle.createPeriodicOtlpMetricReader(
+        config.otlpEndpoint,
+        OTLP_METRIC_EXPORT_INTERVAL_MS,
+        OTLP_METRIC_EXPORT_TIMEOUT_MS,
+      ),
+    });
   }
 
-  const sdk = bundle.startTracing({
+  const tracing = bundle.startTracing({
     serviceName: config.serviceName,
     sampleRatio: config.sampleRatio,
     spanProcessors,
@@ -335,7 +428,16 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
 
   const fastifyOtel = bundle.createFastifyInstrumentation();
   return {
-    sdk,
+    sdk: {
+      // Both faces always run: composeSdkShutdown lets a trace-face failure
+      // never cancel the metric face's final periodic export (R4 review —
+      // the faces are independent queues; sdk-node composed the same two
+      // faces internally).
+      shutdown: composeSdkShutdown([
+        () => tracing.shutdown(),
+        ...(metricsSdk ? [() => metricsSdk.shutdown()] : []),
+      ]),
+    },
     flush,
     fastifyOtelPlugin: fastifyOtel.plugin(),
     memoryExporter,

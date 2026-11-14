@@ -1,0 +1,91 @@
+# OPT-IN observability overlay — FILE-LOG ingestion leg (#964 W6).
+#
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ STATUS: PENDING VERIFICATION (#979 P1).                             │
+# │                                                                     │
+# │ This overlay adds a dedicated collector (otelcol-logs) that reads   │
+# │ the Docker daemon's json-file storage (/var/lib/docker/containers)  │
+# │ directly. Docker does not support external tools reading that       │
+# │ storage, and the path could not be verified on the W6 WSL2 lab      │
+# │ host — so it is deliberately split from the validated               │
+# │ traces/metrics overlay (docker-compose.observability.yml) and gated │
+# │ behind its OWN compose profile (`observability-logs`).              │
+# │                                                                     │
+# │ Do NOT enable this overlay in production until the acceptance       │
+# │ criteria in docs/operations/technical-telemetry.md §2.1 pass on a   │
+# │ real Linux Docker host:                                             │
+# │   1. Exam app logs land in Loki exactly once;                       │
+# │   2. other host containers' logs do NOT enter Loki;                 │
+# │   3. a second Exam deployment on the same host (its own compose     │
+# │      project) is NOT ingested by this deployment;                   │
+# │   4. the Docker json-file-direct-read caveat is acknowledged and    │
+# │      the host Docker version matches the verified one.              │
+# └─────────────────────────────────────────────────────────────────────┘
+#
+# Usage (adds the logs leg on top of the verified stack; both profiles
+# must be activated explicitly — including this file alone changes
+# nothing):
+#   docker compose --env-file .env.production \
+#     -f docker-compose.yml \
+#     -f deploy/observability/docker-compose.observability.yml \
+#     -f deploy/observability/docker-compose.observability.logs.yml \
+#     --profile observability --profile observability-logs up -d
+#
+# A bare `docker compose --env-file .env.production up -d` (base file
+# only) starts NONE of these services; neither does the verified overlay
+# alone start otelcol-logs. The app keeps its default Off behavior — the
+# leg's only app-facing surface is the json-file `tag` log-opt already
+# stamped unconditionally by the verified overlay, so enabling or
+# disabling this leg never recreates the app container.
+#
+# Selection is deployment-distinguishable BY CONSTRUCTION: the tag
+# pattern's default DERIVES from THIS deployment's compose project name
+# at interpolation time (`COMPOSE_PROJECT_NAME` — the base file pins
+# `name: exam-prod`, so the canonical deployment derives
+# `^/?exam-prod-app-1$`; a second same-host deployment runs under its own
+# project name and derives its own pattern — the two collectors can never
+# select each other's containers, with no mandatory env var). Override
+# OBS_LOGS_TAG_PATTERN only for non-standard tag shapes.
+#
+# Loki is NOT defined here: it stays in the verified overlay (the Grafana
+# datasource provisions a Loki target unconditionally, so keeping the
+# backend there keeps the datasource non-dangling; an idle Loki costs
+# little and starts receiving the moment this overlay is enabled).
+services:
+  otelcol-logs:
+    profiles: ["observability-logs"]
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    # Read-only host docker containers dir (json-file logs). Root user is
+    # required: those directories are root-only on a default Docker host.
+    user: "0:0"
+    environment:
+      # Deployment-distinguishing tag filter (single default authority).
+      # The default derives the project segment from THIS deployment's
+      # compose project name at interpolation time, so every deployment
+      # selects its own `app-1` container by default (see header). `$$`
+      # renders a literal `$` so the composed pattern anchors the match
+      # end. Override only for non-standard tag shapes.
+      OBS_LOGS_TAG_PATTERN: ${OBS_LOGS_TAG_PATTERN:-^/?${COMPOSE_PROJECT_NAME}-app-1$$}
+    volumes:
+      - ./deploy/observability/otelcol.logs.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/otelcol-contrib",
+          "--config=/etc/otelcol/config.yaml",
+          "validate",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - exam-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
