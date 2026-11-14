@@ -281,6 +281,28 @@ export async function shutdownTelemetry(): Promise<void> {
   }
 }
 
+/**
+ * Composed shutdown of the assembled SDK faces. INVARIANT: every face's
+ * shutdown runs to settlement even when another face fails — a trace-face
+ * rejection must never cancel the metric face's final periodic export,
+ * whose interval only ends through its provider shutdown. Faces run
+ * concurrently inside ONE bounded caller race (shutdownTelemetry), so a
+ * hung face cannot starve the others; the first rejection re-surfaces
+ * only after every face has settled.
+ */
+export function composeSdkShutdown(
+  faces: readonly (() => Promise<void>)[],
+): () => Promise<void> {
+  return async () => {
+    const outcomes = await Promise.allSettled(faces.map((run) => run()));
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") {
+        throw outcome.reason;
+      }
+    }
+  };
+}
+
 async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
   // PROTOCOL (W1.1 S8/F4, kept from the sdk-node wiring): every OTel library
   // that consults the exporter env must see the explicit `none` decision
@@ -374,14 +396,14 @@ async function startSdk(config: TelemetryConfig): Promise<ActiveTelemetry> {
   const fastifyOtel = bundle.createFastifyInstrumentation();
   return {
     sdk: {
-      // Trace face first (flushes queued spans), then the metric face (its
-      // final periodic export). Sequential so ordering is deterministic —
-      // the caller's bounded race wraps the whole sequence (the sdk-node
-      // shutdown composed the same two faces internally).
-      shutdown: async () => {
-        await tracing.shutdown();
-        if (metricsSdk) await metricsSdk.shutdown();
-      },
+      // Both faces always run: composeSdkShutdown lets a trace-face failure
+      // never cancel the metric face's final periodic export (R4 review —
+      // the faces are independent queues; sdk-node composed the same two
+      // faces internally).
+      shutdown: composeSdkShutdown([
+        () => tracing.shutdown(),
+        ...(metricsSdk ? [() => metricsSdk.shutdown()] : []),
+      ]),
     },
     flush,
     fastifyOtelPlugin: fastifyOtel.plugin(),
