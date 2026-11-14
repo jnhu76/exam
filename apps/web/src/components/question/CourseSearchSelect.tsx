@@ -52,7 +52,10 @@ const SEARCH_PAGE_SIZE = 100;
  * this component owns only what a committed term MEANS: the remote query and
  * its query ownership. Unlike the toolbar search, blur and Enter do NOT flush
  * the pending commit — Enter activates the highlighted option (owned by cmdk)
- * and blur inside the popover is not a commit action.
+ * and blur inside the popover is not a commit action. While a term is pending
+ * (from its first keystroke until its query settles) the stale options are
+ * disabled, so Enter stays inert instead of picking a stale pre-highlighted
+ * course or cancelling the pending search.
  *
  * INVARIANT: only the most recently issued query (latest seq) may update
  * results, truncation, loading, or failure fallback. Typing a new term,
@@ -166,13 +169,17 @@ export function CourseSearchSelect({
    * deliberate clear: it commits "" immediately (no debounce wait). A
    * non-empty term schedules the debounced commit AND invalidates in-flight
    * queries right away, so an older response can never land inside this
-   * term's debounce window. */
+   * term's debounce window. Turning `loading` on at input time also starts
+   * the pending window below one keystroke earlier than the request itself:
+   * the still-rendered list is stale from now until the term's query
+   * settles. */
   const handleSearchChange = useCallback(
     (term: string) => {
       if (!term.trim()) {
         commit.clear();
         return;
       }
+      setLoading(true);
       searchSeq.current += 1;
       commit.change(term);
     },
@@ -190,7 +197,6 @@ export function CourseSearchSelect({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={t("admin.forms.question.course")}
           className="w-full justify-between font-normal"
@@ -241,6 +247,14 @@ export function CourseSearchSelect({
                 <CommandItem
                   key={c.id}
                   value={c.id}
+                  // INVARIANT: options are selectable only when they reflect
+                  // the current query. From the first keystroke of a new
+                  // term until its query settles, `loading` is true and the
+                  // stale options are disabled — cmdk keeps keyboard focus
+                  // on the input, so Enter cannot pick a stale
+                  // pre-highlighted course, close the popover, or cancel the
+                  // pending search.
+                  disabled={loading}
                   onSelect={() => selectCourse(c)}
                   className="cursor-pointer px-3 py-2"
                 >

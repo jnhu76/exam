@@ -516,6 +516,21 @@ describe("CourseSearchSelect", () => {
     const trigger = screen.getByRole("button", { name: "所属课程" });
     expect(trigger).not.toHaveAttribute("role", "combobox");
   });
+
+  it("trigger aria-haspopup agrees with the popover it controls", async () => {
+    const user = userEvent.setup();
+    renderSelect(makeCourses(2));
+    const trigger = screen.getByRole("button", { name: "所属课程" });
+
+    await openPopover(user);
+    // Radix owns the trigger wiring: it renders a dialog popup, so the token
+    // must be the Radix default — not a hand-written "listbox" claim that
+    // contradicts the role of the element aria-controls points at.
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    const popup = screen.getByRole("dialog");
+    expect(popup.id).not.toBe("");
+    expect(trigger).toHaveAttribute("aria-controls", popup.id);
+  });
 });
 
 /** Deferred promise for controlling response order from the test. */
@@ -775,6 +790,67 @@ describe("CourseSearchSelect query ownership (controlled clock)", () => {
     expect(screen.getByRole("combobox")).toHaveValue("");
     expect(screen.getByRole("option", { name: /课程0/ })).toBeInTheDocument();
     expect(apiGet).not.toHaveBeenCalled();
+  });
+
+  it("Enter inside the debounce window selects nothing and keeps the pending search", async () => {
+    vi.useFakeTimers(FAKE);
+    const onChange = vi.fn();
+    renderSelect(makeCourses(3), { onChange });
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    const input = getComboboxInput();
+
+    // Type a fresh term and press Enter BEFORE the 300ms commit: the stale
+    // list is still rendered, so Enter must be inert — no stale pre-highlight
+    // selection, no close, and the pending debounced search stays scheduled.
+    fireEvent.change(input, { target: { value: "甲" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    const response = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => response.promise);
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // Once the current query settles, its results are selectable again.
+    await settle(response, {
+      items: [{ id: "fresh-1", name: "新词结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("新词结果")).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("fresh-1");
+  });
+
+  it("Enter while the current request is in flight selects nothing from the stale list", async () => {
+    vi.useFakeTimers(FAKE);
+    const onChange = vi.fn();
+    renderSelect(makeCourses(3), { onChange });
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    const input = getComboboxInput();
+
+    const response = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => response.promise);
+    fireEvent.change(input, { target: { value: "甲" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // The initial list is still rendered while the request is unresolved;
+    // Enter must not pick a stale option, close the popover, or invalidate
+    // the in-flight query.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    await settle(response, {
+      items: [{ id: "fresh-1", name: "在途结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("在途结果")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("keys during IME composition are handed to the IME, not selection or dismissal", async () => {
