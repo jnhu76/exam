@@ -27,6 +27,16 @@ import {
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { withBusinessOperationSpan } from "../telemetry/businessOperationSpan.js";
+import { withLoopCycleSpan } from "../telemetry/backgroundLoopSpan.js";
+import {
+  LOOP_DEADLINE_SCANNER,
+  LOOP_OUTCOME_EMPTY,
+  LOOP_OUTCOME_FAILED,
+  LOOP_OUTCOME_SUCCESS,
+  WORK_FAILED,
+  WORK_SUBMITTED,
+  type LoopCycleOutcome,
+} from "../telemetry/backgroundLoopVocabulary.js";
 import {
   ATTR_OP_ATTEMPT_ID,
   ATTR_OP_OUTCOME,
@@ -201,11 +211,12 @@ function createSystemContext(organizationId: string): RequestContext {
  * @returns true iff the attempt was submitted+graded by this call.
  *
  * #964 W3: the background entry is observed by ONE business span per attempt
- * (`exam.attempt.deadline_auto_submit`). There is no ambient server context on
- * this loop, so the span roots its own trace (observability contract §Background
- * work — no HTTP requestId is fabricated; a future W4 loop root would parent
- * these automatically). A stale-discovery candidate that fails the under-lock
- * recheck is a legitimate `no_op`, not a rejection.
+ * (`exam.attempt.deadline_auto_submit`). Outside the W4 cycle span (direct
+ * invocation) it roots its own trace; inside a real scan tick it parents
+ * under the `exam.loop.deadline_scanner` cycle span automatically — either
+ * way no HTTP requestId is fabricated (observability contract §Background
+ * work). A stale-discovery candidate that fails the under-lock recheck is a
+ * legitimate `no_op`, not a rejection.
  */
 export async function autoSubmitAndGrade(
   db: Database,
@@ -386,60 +397,79 @@ export async function scanDatabaseForExpiredAttempts(
   fastify: FastifyInstance,
   nowFn: () => Date = () => fastify.now(),
 ): Promise<ScanResult> {
-  // Whole-cycle discovery tick: one sample up front selects the candidate
-  // set (listDeadlineCandidates). Per-candidate processing re-samples
-  // nowFn() so the expiry recheck, grading and interruption terminalization
-  // observe the actual handling instant — never a tick that may predate a
-  // disruption committed mid-scan by the heartbeat scanner.
-  const now = nowFn();
-  const db = fastify.db as Database;
-  const organizationRepo = createOrganizationRepo(db);
-  const organizations = await organizationRepo.list(
-    createSystemContext("system"),
-  );
+  // #964 W4: the whole cycle runs inside its own rooted `exam.loop.*` span
+  // (discovery + per-candidate processing); the W3 business spans for each
+  // auto-submit parent under it automatically. The tick's stall/throw
+  // bookkeeping in the plugin stays the settle owner (unmodified).
+  return withLoopCycleSpan(
+    LOOP_DEADLINE_SCANNER,
+    async (
+      cycle,
+    ): Promise<{ outcome: LoopCycleOutcome; result: ScanResult }> => {
+      // Whole-cycle discovery tick: one sample up front selects the candidate
+      // set (listDeadlineCandidates). Per-candidate processing re-samples
+      // nowFn() so the expiry recheck, grading and interruption terminalization
+      // observe the actual handling instant — never a tick that may predate a
+      // disruption committed mid-scan by the heartbeat scanner.
+      const now = nowFn();
+      const db = fastify.db as Database;
+      const organizationRepo = createOrganizationRepo(db);
+      const organizations = await organizationRepo.list(
+        createSystemContext("system"),
+      );
 
-  let submittedCount = 0;
-  let failedCount = 0;
+      let submittedCount = 0;
+      let failedCount = 0;
 
-  for (const organization of organizations) {
-    const ctx = createSystemContext(organization.id);
-    const attemptRepo = createAttemptRepo(db);
-    // DERIVED discovery predicate (over-approximation over the full
-    // scanner-eligible domain). The authoritative decision is the under-lock
-    // canonical recheck in autoSubmitAndGrade — candidate membership never
-    // submits directly, and untimed attempts (null close + null deadline)
-    // are never expired by that recheck.
-    const candidates = await attemptRepo.listDeadlineCandidates(ctx, now);
+      for (const organization of organizations) {
+        const ctx = createSystemContext(organization.id);
+        const attemptRepo = createAttemptRepo(db);
+        // DERIVED discovery predicate (over-approximation over the full
+        // scanner-eligible domain). The authoritative decision is the under-lock
+        // canonical recheck in autoSubmitAndGrade — candidate membership never
+        // submits directly, and untimed attempts (null close + null deadline)
+        // are never expired by that recheck.
+        const candidates = await attemptRepo.listDeadlineCandidates(ctx, now);
 
-    const result = await scanDeadlineCandidates(
-      candidates.map((c) => ({
-        id: c.id,
-        status: c.status,
-        organizationId: c.organizationId,
-      })),
-      now,
-      async (attemptId) => {
-        return autoSubmitAndGrade(db, ctx, attemptId, nowFn());
-      },
-      {
-        onError: (attemptId, err) => {
-          fastify.log.error(
-            {
-              err,
-              attemptId,
-              organizationId: organization.id,
+        const result = await scanDeadlineCandidates(
+          candidates.map((c) => ({
+            id: c.id,
+            status: c.status,
+            organizationId: c.organizationId,
+          })),
+          now,
+          async (attemptId) => {
+            return autoSubmitAndGrade(db, ctx, attemptId, nowFn());
+          },
+          {
+            onError: (attemptId, err) => {
+              fastify.log.error(
+                {
+                  err,
+                  attemptId,
+                  organizationId: organization.id,
+                },
+                "Failed to auto-submit expired attempt",
+              );
             },
-            "Failed to auto-submit expired attempt",
-          );
-        },
-      },
-    );
+          },
+        );
 
-    submittedCount += result.submittedCount;
-    failedCount += result.failedCount;
-  }
+        submittedCount += result.submittedCount;
+        failedCount += result.failedCount;
+      }
 
-  return { submittedCount, failedCount };
+      cycle.countWork(WORK_SUBMITTED, submittedCount);
+      cycle.countWork(WORK_FAILED, failedCount);
+      const outcome =
+        failedCount > 0
+          ? LOOP_OUTCOME_FAILED
+          : submittedCount > 0
+            ? LOOP_OUTCOME_SUCCESS
+            : LOOP_OUTCOME_EMPTY;
+      return { outcome, result: { submittedCount, failedCount } };
+    },
+  );
 }
 
 const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {

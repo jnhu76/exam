@@ -5,6 +5,16 @@ import { createOrganizationRepo } from "@exam/db/repository/organizationRepo";
 import { createClientEventRepo } from "@exam/db/repository/clientEventRepo";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import type { Database } from "@exam/db/types";
+import { withLoopCycleSpan } from "../telemetry/backgroundLoopSpan.js";
+import {
+  LOOP_CLIENT_EVENT_RETENTION,
+  LOOP_OUTCOME_EMPTY,
+  LOOP_OUTCOME_FAILED,
+  LOOP_OUTCOME_SUCCESS,
+  WORK_DELETED,
+  WORK_FAILED_ORG,
+  type LoopCycleOutcome,
+} from "../telemetry/backgroundLoopVocabulary.js";
 
 /**
  * Client-event retention executor (#544).
@@ -102,57 +112,81 @@ export async function runClientEventRetentionOnce(
   fastify: FastifyInstance,
   now: Date = fastify.now(),
 ): Promise<ClientEventRetentionResult> {
-  const db = fastify.db as Database;
-  const cutoff = retentionCutoff(now);
-  const organizations = await createOrganizationRepo(db).list(
-    createSystemContext("system"),
-  );
-
-  let deletedCount = 0;
-  let failedOrganizationCount = 0;
-  for (const organization of organizations) {
-    // ADR-006: fastify.now() is the sanctioned plugin-layer clock — the pass
-    // `now` stays fixed for the cutoff, per-org durations use a live read.
-    const startedAt = fastify.now();
-    try {
-      const deleted = await cleanupOrganizationClientEvents(
-        db,
-        createSystemContext(organization.id),
-        cutoff,
+  // #964 W4: the pass is one rooted `exam.loop.client_event_retention` cycle
+  // span with its projected work metrics; the plugin's start/settle
+  // bookkeeping in runPass stays the settle owner (unmodified).
+  return withLoopCycleSpan(
+    LOOP_CLIENT_EVENT_RETENTION,
+    async (
+      cycle,
+    ): Promise<{
+      outcome: LoopCycleOutcome;
+      result: ClientEventRetentionResult;
+    }> => {
+      const db = fastify.db as Database;
+      const cutoff = retentionCutoff(now);
+      const organizations = await createOrganizationRepo(db).list(
+        createSystemContext("system"),
       );
-      deletedCount += deleted;
-      if (deleted > 0) {
-        fastify.log.info(
-          {
-            subsystem: "client_event_retention",
-            organizationId: organization.id,
-            cutoff: cutoff.toISOString(),
-            deletedCount: deleted,
-            durationMs: fastify.now().getTime() - startedAt.getTime(),
-          },
-          "Client-event retention deleted expired rows",
-        );
+
+      let deletedCount = 0;
+      let failedOrganizationCount = 0;
+      for (const organization of organizations) {
+        // ADR-006: fastify.now() is the sanctioned plugin-layer clock — the pass
+        // `now` stays fixed for the cutoff, per-org durations use a live read.
+        const startedAt = fastify.now();
+        try {
+          const deleted = await cleanupOrganizationClientEvents(
+            db,
+            createSystemContext(organization.id),
+            cutoff,
+          );
+          deletedCount += deleted;
+          if (deleted > 0) {
+            fastify.log.info(
+              {
+                subsystem: "client_event_retention",
+                organizationId: organization.id,
+                cutoff: cutoff.toISOString(),
+                deletedCount: deleted,
+                durationMs: fastify.now().getTime() - startedAt.getTime(),
+              },
+              "Client-event retention deleted expired rows",
+            );
+          }
+        } catch (err) {
+          // One org's failure must not block the others; the next pass converges.
+          failedOrganizationCount += 1;
+          fastify.log.error(
+            {
+              err,
+              subsystem: "client_event_retention",
+              organizationId: organization.id,
+              cutoff: cutoff.toISOString(),
+            },
+            "Client-event retention pass failed for organization",
+          );
+        }
       }
-    } catch (err) {
-      // One org's failure must not block the others; the next pass converges.
-      failedOrganizationCount += 1;
-      fastify.log.error(
-        {
-          err,
-          subsystem: "client_event_retention",
-          organizationId: organization.id,
-          cutoff: cutoff.toISOString(),
-        },
-        "Client-event retention pass failed for organization",
-      );
-    }
-  }
 
-  return {
-    deletedCount,
-    organizationCount: organizations.length,
-    failedOrganizationCount,
-  };
+      cycle.countWork(WORK_DELETED, deletedCount);
+      cycle.countWork(WORK_FAILED_ORG, failedOrganizationCount);
+      const outcome =
+        failedOrganizationCount > 0
+          ? LOOP_OUTCOME_FAILED
+          : deletedCount > 0
+            ? LOOP_OUTCOME_SUCCESS
+            : LOOP_OUTCOME_EMPTY;
+      return {
+        outcome,
+        result: {
+          deletedCount,
+          organizationCount: organizations.length,
+          failedOrganizationCount,
+        },
+      };
+    },
+  );
 }
 
 const clientEventRetentionPlugin: FastifyPluginAsync = async (fastify) => {

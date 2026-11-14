@@ -141,6 +141,12 @@ importers:
       '@exam/source-fixture':
         specifier: workspace:*
         version: link:../../packages/source-fixture
+      '@opentelemetry/context-async-hooks':
+        specifier: 3.1.1
+        version: 3.1.1(@opentelemetry/api@1.10.0)
+      '@opentelemetry/sdk-metrics':
+        specifier: 3.1.1
+        version: 3.1.1(@opentelemetry/api@1.10.0)
       '@types/node':
         specifier: ^22.15.21
         version: 22.19.19
