@@ -42,6 +42,12 @@ const stateIconMap: Record<SaveState, LucideIcon> = {
  * Inline indicator showing the current answer save status
  * (idle, saving, saved, or error) with an icon and label.
  *
+ * Accessibility (F-08 #971): role="status" + aria-live="polite" — the chip
+ * is the screen reader's only answer-persistence channel on the take page,
+ * so every state change is announced. polite (not assertive): saves retry
+ * automatically, so announcements must not trample the candidate's current
+ * task.
+ *
  * INVARIANT: h-9 is the Button system's control height (#675) — the
  * take-page topbar row aligns this chip, the exam timer, and the submit
  * button on one shared geometry. States change only data-feedback-tone
@@ -61,6 +67,8 @@ export function SaveIndicator({
 
   return (
     <span
+      role="status"
+      aria-live="polite"
       data-feedback-tone={stateToneMap[resolved]}
       className="inline-flex h-9 min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium"
     >

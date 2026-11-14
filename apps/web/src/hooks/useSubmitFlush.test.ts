@@ -217,22 +217,52 @@ describe("useSubmitFlush", () => {
     expect(flushResult.failedQuestionIds).toEqual([]);
   });
 
-  // ====== Reviewer C2 (Critical) ======
-  it("on unmount, pending debounced timers do NOT fire save()", async () => {
-    const save = vi.fn().mockResolvedValue(undefined);
+  // ====== #971 F-01: the leave guard is the ONLY controlled-exit save path ======
+  it("unmount and pagehide only cancel pending sends — they never fire a save on their own", async () => {
+    const save = vi.fn(async () => {});
     const { result, unmount } = renderHook(() => useSubmitFlush("att-1"));
 
     act(() => {
       result.current.scheduleSave("q1", save);
     });
+    expect(save).not.toHaveBeenCalled();
 
+    // A hard unload is NOT an Exam-controlled save path: the queue must not
+    // invent a send that no caller awaits or can attribute (#971 F-01 leaves
+    // hard-unload persistence to #827).
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+      await Promise.resolve();
+    });
+    expect(save).not.toHaveBeenCalled();
+
+    // Unmount restores the scope-cleanup contract: pending timers are
+    // cancelled, not drained. No post-unmount zombie work either.
     unmount();
-
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it("hands each save the queue's per-question revision so old responses are identifiable", async () => {
+    const save = vi.fn(async () => {});
+    const { result } = renderHook(() => useSubmitFlush("att-1"));
+
+    act(() => {
+      result.current.scheduleSave("q1", save);
+    });
+    expect(result.current.getQuestionRevision("q1")).toBe(1);
+
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(save).toHaveBeenCalledWith(1);
+
+    act(() => {
+      result.current.scheduleSave("q1", save);
+    });
+    expect(result.current.getQuestionRevision("q1")).toBe(2);
   });
 
   // ====== Reviewer I2: ordering-strict assertion (already covered above by callOrder; this is a complement) ======
@@ -487,6 +517,56 @@ describe("useSubmitFlush", () => {
       await Promise.resolve();
     });
     expect(result.current.getQuestionStatus("q-shared")).toBe("saved");
+  });
+
+  // ====== R6 (#971): queue summary derives the global save state ======
+  it("getSaveQueueSummary derives failed / unconfirmed / saved counts from the ACTIVE scope", async () => {
+    let resolveQ1!: () => void;
+    const saveQ1 = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveQ1 = resolve;
+        }),
+    );
+    const saveQ2 = vi.fn().mockRejectedValue(new Error("network"));
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: string }) => useSubmitFlush(scope),
+      { initialProps: { scope: "att-1" } },
+    );
+
+    act(() => {
+      result.current.scheduleSave("q1", saveQ1);
+      result.current.scheduleSave("q2", saveQ2);
+    });
+    // Both unconfirmed (debounce window): q2's future failure must already be
+    // represented once it lands — and q1 pending must never read as saved.
+    expect(result.current.getSaveQueueSummary().unconfirmedIds.sort()).toEqual([
+      "q1",
+      "q2",
+    ]);
+    expect(result.current.getSaveQueueSummary().failedIds).toEqual([]);
+    expect(result.current.getSaveQueueSummary().savedCount).toBe(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      resolveQ1();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // q1 saved while q2 failed — BOTH facts are visible at once. A single
+    // last-event slot would let q2's failure hide behind q1's success (R6).
+    const summary = result.current.getSaveQueueSummary();
+    expect(summary.savedCount).toBe(1);
+    expect(summary.failedIds).toEqual(["q2"]);
+    expect(summary.unconfirmedIds).toEqual([]);
+
+    // Scope switch: the new scope starts with an empty summary.
+    rerender({ scope: "att-2" });
+    expect(result.current.getSaveQueueSummary()).toEqual({
+      unconfirmedIds: [],
+      failedIds: [],
+      savedCount: 0,
+    });
   });
 
   it("an old-scope flush does not consume, await, or count the new scope's work", async () => {
