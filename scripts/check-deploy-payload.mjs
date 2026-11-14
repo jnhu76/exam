@@ -50,6 +50,7 @@
 // everything else in the payload must be on this contract.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -189,6 +190,61 @@ if (!existsSync(repoJournalPath)) {
 for (const dep of Object.keys(manifest.dependencies ?? {})) {
   if (!existsSync(join(PAYLOAD, "node_modules", dep))) {
     fail(`runtime dependency missing from payload node_modules: ${dep}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Positive 3b (#964 W2): the DB instrumentation package and @exam/db must
+// resolve the SAME postgres driver store copy in the payload. The driver
+// statement seam patches the postgres.js Query prototype reached through its
+// OWN `postgres` import; a second copy would leave that patch inert on the
+// pool @exam/db actually drives (silent no-DB-telemetry). pnpm deploy links
+// only each package's OWN runtime dependencies, so the plugin's deployed
+// manifest must declare postgres — a payload that merely loads the driver
+// through the single hoisted root link breaks the moment that link is
+// absent (ERR_MODULE_NOT_FOUND at telemetry init).
+
+const pluginPhys = EXAM_PHYS_DIRS.find((d) =>
+  d.endsWith(`${sep}otel-drizzle-postgresjs`),
+);
+if (!pluginPhys) {
+  fail("node_modules/@exam/otel-drizzle-postgresjs missing from payload");
+} else {
+  const pluginManifest = JSON.parse(
+    readFileSync(join(pluginPhys, "package.json"), "utf8"),
+  );
+  if (!Object.hasOwn(pluginManifest.dependencies ?? {}, "postgres")) {
+    fail(
+      "@exam/otel-drizzle-postgresjs: postgres must be a runtime dependency " +
+        "(the driver seam imports postgres at runtime; loading it only " +
+        "through pnpm's hidden .pnpm hoist layer is not a payload contract)",
+    );
+  }
+  // Resolve the driver the way each package's own `import "postgres"`
+  // resolves at runtime (Node walk-up semantics), then require ONE shared
+  // instance: the seam patches the Query prototype of the driver it loads,
+  // so a second store copy would leave the patch inert on the pool @exam/db
+  // actually drives.
+  const resolveSpecFrom = (fromDir, spec) => {
+    try {
+      return createRequire(join(fromDir, "package.json")).resolve(spec);
+    } catch {
+      return null;
+    }
+  };
+  const dbDriverEntry = resolveSpecFrom(dbPhys, "postgres");
+  const pluginDriverEntry = resolveSpecFrom(pluginPhys, "postgres");
+  if (!dbDriverEntry || !pluginDriverEntry) {
+    fail(
+      "postgres driver unresolvable in payload for " +
+        (dbDriverEntry ? "@exam/otel-drizzle-postgresjs" : "@exam/db"),
+    );
+  } else if (dbDriverEntry !== pluginDriverEntry) {
+    fail(
+      `postgres driver instance split in payload: @exam/db resolves ${dbDriverEntry} ` +
+        `but @exam/otel-drizzle-postgresjs resolves ${pluginDriverEntry} — the ` +
+        "seam would patch a prototype the business pool never uses",
+    );
   }
 }
 
