@@ -91,6 +91,29 @@ describe("telemetry config fail-fast", () => {
     );
   });
 
+  it("a query-bearing endpoint fails fast (the signal paths would be appended into the query)", () => {
+    vi.stubEnv("APP_MODE", "development");
+    vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+    vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+    vi.stubEnv(
+      "TELEMETRY_OTLP_ENDPOINT",
+      "http://collector:4318/otlp?tenant=fixture",
+    );
+    expect(() => getRuntimeConfig()).toThrow(
+      /TELEMETRY_OTLP_ENDPOINT must not carry a query or fragment/,
+    );
+  });
+
+  it("a fragment-bearing endpoint fails fast (both POST paths would be truncated at the fragment)", () => {
+    vi.stubEnv("APP_MODE", "development");
+    vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+    vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+    vi.stubEnv("TELEMETRY_OTLP_ENDPOINT", "http://collector:4318/otlp#fixture");
+    expect(() => getRuntimeConfig()).toThrow(
+      /TELEMETRY_OTLP_ENDPOINT must not carry a query or fragment/,
+    );
+  });
+
   it("an https endpoint resolves exactly like an http one", () => {
     vi.stubEnv("APP_MODE", "development");
     vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");

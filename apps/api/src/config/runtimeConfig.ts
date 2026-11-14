@@ -810,6 +810,14 @@ export function resolveTelemetryPolicy(s: ResolvedSettings): TelemetryConfig {
           "authentication is out of scope for this deployment",
       );
     }
+    if (parsed.search || parsed.hash) {
+      throw new RuntimeConfigError(
+        "TELEMETRY_OTLP_ENDPOINT must not carry a query or fragment — the " +
+          "OTLP signal paths (/v1/traces, /v1/metrics) are appended to the " +
+          "base URL, and a query or fragment would corrupt both request " +
+          "paths while startup still reports telemetry active",
+      );
+    }
   }
   return {
     enabled: s.telemetry.TELEMETRY_ENABLED,
