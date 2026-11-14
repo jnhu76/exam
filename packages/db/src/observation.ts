@@ -1,8 +1,9 @@
 /**
  * SDK-independent observation seam for technical telemetry (#964 W2,
  * ADR-028 D3). This module is the ONLY surface a telemetry component needs
- * from `@exam/db`: plain TypeScript types plus a module-scoped registration
- * setter, shaped like {@link setTransactionRetryLogger} next door. `@exam/db`
+ * from the `@exam/db` package: plain TypeScript types plus a module-scoped
+ * registration setter, shaped like {@link setTransactionRetryLogger} next
+ * door. `@exam/db`
  * keeps zero knowledge of OpenTelemetry — the seam never imports it.
  *
  * MEASUREMENT-NEUTRALITY CONTRACT (the reason this seam exists at all): an
