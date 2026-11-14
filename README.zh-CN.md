@@ -6,7 +6,7 @@
 
 从出题、考试交付到评分、恢复、审计与日常运维，都运行在你自己的基础设施上。
 
-[![Release](https://img.shields.io/badge/release-v0.0.14-blue.svg)](https://github.com/jnhu76/exam/releases)
+[![Release](https://img.shields.io/badge/release-v0.0.15-blue.svg)](https://github.com/jnhu76/exam/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Self-hosted](https://img.shields.io/badge/deployment-self--hosted-success.svg)](INSTALL.zh-CN.md)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](INSTALL.zh-CN.md)

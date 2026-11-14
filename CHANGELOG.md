@@ -8,6 +8,52 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.15] - 2026-11-14
+
+### Changed
+
+- Exam scheduling speaks one time-zone contract across the create wizard,
+  edit page and confirm step (#971 F-20/R9, PR #988): the
+  `datetime-local` wall-clock ↔ instant conversion goes through the
+  product time boundary seam, resolved schedule instants are the wizard
+  wire authority, the edit page preserves stored instants and fills the
+  organization wall clock, and organization settings keep one live owner
+  per identity.
+- `CourseSearchSelect` is migrated from a hand-written combobox with a
+  second debounce timer to the cmdk combobox primitive (#971 F-05/#985,
+  PRs #989/#992): one query owner with cancellation on course scope
+  change, and Enter stays inert while a query is pending.
+- ADR-028 (OpenTelemetry technical telemetry standard) is proposed
+  (#964 W0, PR #970) — proposal-stage documentation only, no runtime
+  telemetry change in this release.
+
+### Fixed
+
+- Leaving a page can no longer silently drop a candidate's typed answer
+  (#971 F-01/F-08/R6, PR #990): Exam-controlled exits hold navigation
+  until in-flight answer saves are server-confirmed, only accepted saves
+  are acknowledged, and the save chip announces its state via
+  `role="status"` `aria-live="polite"`.
+- The permission registry's user permission inspector works again (#971
+  F-03, PR #986): the staff directory consumes the real `GET /api/users`
+  pagination contract instead of a non-existent route whose failure was
+  silently swallowed into an empty list, retries a failed directory page,
+  and keeps the selection coherent.
+- The async read-ownership family on staff and candidate surfaces is
+  closed (#971 F-10/F-11/S5/R7/R8, PR #987): grading queue
+  pagination/refresh, grading detail authoritative re-reads (with the
+  committed grade locked before its refresh can be superseded), the
+  candidate result snapshot bound to `attemptId`, the proctor status
+  poll's `examId` ownership with single-flight ticks, and system
+  diagnostics per-stream reads all discard superseded responses instead
+  of letting the last response to land win.
+- Keyboard operation and permission-matrix readability (#971
+  F-02/F-04/F-06/F-07 + matrix overlap, PR #991): row activation is a
+  real Tab-reachable stop, the "granted" state is perceivable by
+  assistive technology, the focus ring meets the 3:1 non-text contrast
+  floor, row actions announce which row they act on, and the matrix key
+  column scrolls independently below `sm`.
+
 ## [0.0.14] - 2026-11-13
 
 ### Changed
@@ -986,7 +1032,8 @@ for repository releases from `v0.0.1` onward.
 - S0 simplification/test-infrastructure convergence is complete at this baseline;
   roadmap work continues under Issue #333.
 
-[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.14...HEAD
+[Unreleased]: https://github.com/jnhu76/exam/compare/v0.0.15...HEAD
+[0.0.15]: https://github.com/jnhu76/exam/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/jnhu76/exam/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/jnhu76/exam/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/jnhu76/exam/compare/v0.0.11...v0.0.12
