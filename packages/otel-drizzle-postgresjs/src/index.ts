@@ -177,8 +177,17 @@ export function installOtelDbTelemetry(
   // handler closure → role. Registered root pools are known; EVERY other
   // closure is a transaction sub-connection (`sql.begin` scope — the probe's
   // auto-tagged scoped-handler-N) or a reserved sub-connection.
+  // rootClosures stays a STRONG set: one entry per registered root pool, and
+  // the API runtime registers exactly one pool per process — bounded.
   const rootClosures = new Set<unknown>();
-  const scopedClosures = new Set<unknown>();
+  // scopedClosures MUST be weak: postgres.js mints a NEW handler closure for
+  // every `sql.begin`/savepoint scope (src/index.js `scope()`), so a strong
+  // set would retain each finished transaction's closure — and through it
+  // the scope context chain (per-tx queue, uncaughtError, the caller's
+  // transaction body `fn`) — for the process lifetime. Weak membership keeps
+  // the first-sight dedup/count semantics identical: a collected closure
+  // can never be observed again.
+  const scopedClosures = new WeakSet<object>();
   const diagnostics: OtelDbTelemetryDiagnostics = {
     submissions: 0,
     settles: 0,
@@ -205,13 +214,28 @@ export function installOtelDbTelemetry(
     });
   };
 
+  // WeakSet membership requires an object; the driver invariant is that a
+  // Query's handler is the Sql closure's handler FUNCTION (postgres.js
+  // src/query.js stores it verbatim), but this module types `handler` as
+  // `unknown`. The guard lets an out-of-contract primitive skip scoped
+  // dedup instead of throwing — a throw here would be contained by the
+  // seam, but would silently drop that statement's whole telemetry.
+  const canHoldWeakReference = (handler: unknown): handler is object =>
+    typeof handler === "function" ||
+    (typeof handler === "object" && handler !== null);
+
   const observeStatement = (query: InstrumentedQuery): void => {
     diagnostics.submissions += 1;
-    const isRoot = rootClosures.has(query.handler);
+    const handler = query.handler;
+    const isRoot = rootClosures.has(handler);
     const role = isRoot ? ROLE_ROOT : ROLE_TRANSACTION;
-    if (!isRoot && !scopedClosures.has(query.handler)) {
+    if (
+      !isRoot &&
+      canHoldWeakReference(handler) &&
+      !scopedClosures.has(handler)
+    ) {
       // First sight of this scoped closure (one per sql.begin scope).
-      scopedClosures.add(query.handler);
+      scopedClosures.add(handler);
       diagnostics.scopedClosures += 1;
     }
     diagnostics.byRole[role] = (diagnostics.byRole[role] ?? 0) + 1;

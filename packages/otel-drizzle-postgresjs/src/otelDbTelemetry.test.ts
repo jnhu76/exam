@@ -349,6 +349,31 @@ describe("otel-drizzle-postgresjs plugin (real PostgreSQL)", () => {
     expect(delta.submissions).toBe(3);
   }, 30_000);
 
+  it("scoped closure dedup across many transactions: one first-sight count per sql.begin scope, statements never recount", async () => {
+    const before = handle.diagnostics();
+    const { spans } = await inScenario(capture, "tx-dedup", async () => {
+      for (let i = 0; i < 5; i += 1) {
+        await executeInTransaction(pool.db, async (tx) => {
+          await tx.execute(
+            sqlRaw`update organizations set updated_at = now() where slug = 'otelw22-a'`,
+          );
+          await tx.execute(sqlRaw`select 1::int as one`);
+        });
+      }
+      return null;
+    });
+
+    // 5 transactions × (begin[root] + set-transaction + 2 user statements +
+    // commit) — every scope's handler closure counted exactly once no matter
+    // how many statements rode it (the WeakSet membership decision).
+    const delta = deltaDiagnostics(before, handle.diagnostics());
+    expect(delta.submissions).toBe(25);
+    expect(delta.settles).toBe(25);
+    expect(delta.byRole).toEqual({ root: 5, transaction: 20 });
+    expect(delta.scopedClosures).toBe(5);
+    expect(spans().filter((s) => s.name === "db.statement").length).toBe(25);
+  }, 30_000);
+
   it("rollback: sentinel error identity preserved, data rolled back, no retry event", async () => {
     const sentinel = new Error("w22-rollback-sentinel");
     const displayNameBefore = (
