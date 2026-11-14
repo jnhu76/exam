@@ -763,12 +763,15 @@ export function loadRuntimeConfig(
 
 /**
  * Telemetry cross-leaf policy (W6): the `otlp` exporter and its endpoint
- * must be set as a PAIR. Either half alone is operator misconfiguration —
- * `otlp` without an endpoint would export to a nonsense default, and an
- * endpoint left behind after switching the exporter back to `none`/`memory`
- * is config drift that must not survive silently. Exported as a pure
- * function so the fail-fast oracle can assert it without owning the
- * process's single init decision (see telemetryConfigFailFast.test.ts).
+ * must be set as a PAIR, and the endpoint must be an absolute credential-
+ * free http(s) URL. A missing half, a non-URL, a non-HTTP(S) scheme, or an
+ * embedded user:password is operator misconfiguration — without the URL
+ * shape guard, a bare hostname degraded to telemetry.init_failed at SDK
+ * construction while a parseable non-HTTP URL even reported telemetry
+ * active, both silently exporting nowhere; credentials would hand a secret
+ * to any diagnostic that echoes the endpoint. Exported as a pure function
+ * so the fail-fast oracle can assert it without owning the process's
+ * single init decision (see telemetryConfigFailFast.test.ts).
  */
 export function resolveTelemetryPolicy(s: ResolvedSettings): TelemetryConfig {
   const exporter = s.telemetry.TELEMETRY_EXPORTER;
@@ -784,6 +787,29 @@ export function resolveTelemetryPolicy(s: ResolvedSettings): TelemetryConfig {
       `TELEMETRY_OTLP_ENDPOINT is set but TELEMETRY_EXPORTER is "${exporter}" ` +
         "— clear the endpoint or switch the exporter to otlp",
     );
+  }
+  if (exporter === "otlp") {
+    let parsed: URL;
+    try {
+      parsed = new URL(otlpEndpoint);
+    } catch {
+      throw new RuntimeConfigError(
+        "TELEMETRY_OTLP_ENDPOINT must be an absolute http(s) URL " +
+          "(e.g. http://otelcol:4318) — the configured value is not parseable",
+      );
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new RuntimeConfigError(
+        "TELEMETRY_OTLP_ENDPOINT must be an absolute http(s) URL — " +
+          `"${parsed.protocol}//" is not an OTLP/HTTP transport`,
+      );
+    }
+    if (parsed.username || parsed.password) {
+      throw new RuntimeConfigError(
+        "TELEMETRY_OTLP_ENDPOINT must not embed credentials — collector " +
+          "authentication is out of scope for this deployment",
+      );
+    }
   }
   return {
     enabled: s.telemetry.TELEMETRY_ENABLED,

@@ -213,15 +213,34 @@ export async function initTelemetry(): Promise<TelemetryRuntimeHandle | null> {
   } catch (err) {
     // Structured stderr event, not app.log: at init time no fastify logger
     // exists yet (same rationale as the runtimeConfig email-mode guard).
-    // Shape mirrors the operability.* bounded events.
+    // Shape mirrors the operability.* bounded events; the reason is
+    // endpoint-redacted (see redactOtlpEndpoint).
     process.stderr.write(
       `${JSON.stringify({
         event: "telemetry.init_failed",
-        reason: err instanceof Error ? err.message : String(err),
+        reason: redactOtlpEndpoint(
+          err instanceof Error ? err.message : String(err),
+          config.otlpEndpoint,
+        ),
       })}\n`,
     );
     return null;
   }
+}
+
+/**
+ * Diagnostic hygiene for telemetry failure events: SDK construction errors
+ * can echo the configured OTLP endpoint (deploy topology — and a URL with
+ * credentials must never reach a log line; the config layer rejects those,
+ * this redacts any endpoint-bearing message regardless). Plain substring
+ * replacement, no regex — the endpoint is used verbatim.
+ */
+export function redactOtlpEndpoint(
+  message: string,
+  otlpEndpoint: string,
+): string {
+  if (!otlpEndpoint) return message;
+  return message.split(otlpEndpoint).join("<otlp-endpoint>");
 }
 
 /**

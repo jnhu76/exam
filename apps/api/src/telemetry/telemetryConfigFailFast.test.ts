@@ -60,4 +60,45 @@ describe("telemetry config fail-fast", () => {
     expect(config.otlpEndpoint).toBe("http://collector:4318");
     expect(config.enabled).toBe(true);
   });
+
+  it("a non-URL TELEMETRY_OTLP_ENDPOINT fails fast (config error, not init degradation)", () => {
+    vi.stubEnv("APP_MODE", "development");
+    vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+    vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+    vi.stubEnv("TELEMETRY_OTLP_ENDPOINT", "not-a-url");
+    expect(() => getRuntimeConfig()).toThrow(
+      /TELEMETRY_OTLP_ENDPOINT must be an absolute http\(s\) URL/,
+    );
+  });
+
+  it("a non-HTTP(S) endpoint scheme fails fast (ftp:// must never report telemetry active)", () => {
+    vi.stubEnv("APP_MODE", "development");
+    vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+    vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+    vi.stubEnv("TELEMETRY_OTLP_ENDPOINT", "ftp://collector:4318");
+    expect(() => getRuntimeConfig()).toThrow(
+      /TELEMETRY_OTLP_ENDPOINT must be an absolute http\(s\) URL/,
+    );
+  });
+
+  it("an endpoint with embedded credentials fails fast", () => {
+    vi.stubEnv("APP_MODE", "development");
+    vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+    vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+    vi.stubEnv("TELEMETRY_OTLP_ENDPOINT", "http://admin:secret@collector:4318");
+    expect(() => getRuntimeConfig()).toThrow(
+      /TELEMETRY_OTLP_ENDPOINT must not embed credentials/,
+    );
+  });
+
+  it("an https endpoint resolves exactly like an http one", () => {
+    vi.stubEnv("APP_MODE", "development");
+    vi.stubEnv("DATABASE_URL", "postgresql://exam:exam@localhost:5432/exam");
+    vi.stubEnv("TELEMETRY_ENABLED", "true");
+    vi.stubEnv("TELEMETRY_EXPORTER", "otlp");
+    vi.stubEnv("TELEMETRY_OTLP_ENDPOINT", "https://collector:4318");
+    expect(getRuntimeConfig().telemetry.otlpEndpoint).toBe(
+      "https://collector:4318",
+    );
+  });
 });

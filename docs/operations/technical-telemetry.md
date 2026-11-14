@@ -178,6 +178,12 @@ notes; all must pass before the leg is considered enabled):**
 `TELEMETRY_OTLP_ENDPOINT` (or an endpoint left over after switching the
 exporter back) fails fast at app startup with a `RuntimeConfigError` —
 an explicit operator error, never a silent Off or silent export target.
+The endpoint must also be an ABSOLUTE credential-free http(s) URL: a
+bare hostname or an `ftp://` value fails fast the same way (previously
+the first degraded to `telemetry.init_failed` at SDK construction while
+the second even reported telemetry active, both silently exporting
+nowhere), and the init-failure diagnostic never echoes the endpoint
+value itself.
 
 ## 3. Rollback / disable
 
