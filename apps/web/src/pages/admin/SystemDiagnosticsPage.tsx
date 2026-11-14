@@ -110,53 +110,95 @@ export function SystemDiagnosticsPage() {
   const [liveUptime, setLiveUptime] = useState(0);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
 
-  const loadHealth = useCallback(async () => {
-    try {
-      setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
-      clearStaleWarning("health");
-      setLastRefreshedAt(Date.now());
-      logger.debug("system_diagnostics.refreshed", { source: "health" });
-    } catch (err) {
-      if (!initialLoadDone.current) {
-        setError(t("diagnostics.errors.healthLoadFailed"));
-      } else {
-        setStaleWarning("health", t("diagnostics.staleWarnings.health"));
-        logger.warn("system_diagnostics.poll_failed", {
-          source: "health",
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-  }, [clearStaleWarning, setStaleWarning]);
+  // Per-stream read ownership (health and diagnostics poll on independent
+  // intervals and are owned separately): only the newest read of a stream may
+  // commit its data, error, stale warning, or the shared last-refresh /
+  // uptime-base bookkeeping. A superseded read — a manual refresh racing a
+  // hanging poll — must be discarded whole.
+  const healthRequestRef = useRef({ generation: 0, inFlight: false });
+  const diagRequestRef = useRef({ generation: 0, inFlight: false });
 
-  const loadDiag = useCallback(async () => {
-    try {
-      const result = await api.get<DiagnosticsResponse>(
-        "/api/system/diagnostics",
-      );
-      setDiag(result);
-      uptimeBaseRef.current = {
-        serverUptime: result.uptime,
-        fetchedAt: Date.now(),
-      };
-      clearStaleWarning("diagnostics");
-      setLastRefreshedAt(Date.now());
-      logger.debug("system_diagnostics.refreshed", { source: "diagnostics" });
-    } catch (err) {
-      if (!initialLoadDone.current) {
-        setError(t("diagnostics.errors.diagnosticsLoadFailed"));
-      } else {
-        setStaleWarning(
-          "diagnostics",
-          t("diagnostics.staleWarnings.diagnostics"),
-        );
-        logger.warn("system_diagnostics.poll_failed", {
-          source: "diagnostics",
-          error: err instanceof Error ? err.message : String(err),
-        });
+  const loadHealth = useCallback(
+    async (options?: { force?: boolean }) => {
+      const ownership = healthRequestRef.current;
+      // Single-flight for scheduled ticks: skip while this stream has a read on
+      // the wire so slow responses cannot stack overlapping requests that keep
+      // superseding each other and freeze the refresh. Manual refresh passes
+      // `force` and supersedes instead.
+      if (ownership.inFlight && !options?.force) return;
+      const generation = ++ownership.generation;
+      ownership.inFlight = true;
+      try {
+        const result =
+          await api.get<SystemHealthResponse>("/api/system/health");
+        if (generation !== ownership.generation) return;
+        setHealth(result);
+        clearStaleWarning("health");
+        setLastRefreshedAt(Date.now());
+        logger.debug("system_diagnostics.refreshed", { source: "health" });
+      } catch (err) {
+        if (generation !== ownership.generation) return;
+        if (!initialLoadDone.current) {
+          setError(t("diagnostics.errors.healthLoadFailed"));
+        } else {
+          setStaleWarning("health", t("diagnostics.staleWarnings.health"));
+          logger.warn("system_diagnostics.poll_failed", {
+            source: "health",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      } finally {
+        // A superseded read must not release the in-flight slot it no longer
+        // owns — the superseding read manages the slot from here.
+        if (generation === ownership.generation) {
+          ownership.inFlight = false;
+        }
       }
-    }
-  }, [clearStaleWarning, setStaleWarning]);
+    },
+    [clearStaleWarning, setStaleWarning],
+  );
+
+  const loadDiag = useCallback(
+    async (options?: { force?: boolean }) => {
+      const ownership = diagRequestRef.current;
+      if (ownership.inFlight && !options?.force) return;
+      const generation = ++ownership.generation;
+      ownership.inFlight = true;
+      try {
+        const result = await api.get<DiagnosticsResponse>(
+          "/api/system/diagnostics",
+        );
+        if (generation !== ownership.generation) return;
+        setDiag(result);
+        uptimeBaseRef.current = {
+          serverUptime: result.uptime,
+          fetchedAt: Date.now(),
+        };
+        clearStaleWarning("diagnostics");
+        setLastRefreshedAt(Date.now());
+        logger.debug("system_diagnostics.refreshed", { source: "diagnostics" });
+      } catch (err) {
+        if (generation !== ownership.generation) return;
+        if (!initialLoadDone.current) {
+          setError(t("diagnostics.errors.diagnosticsLoadFailed"));
+        } else {
+          setStaleWarning(
+            "diagnostics",
+            t("diagnostics.staleWarnings.diagnostics"),
+          );
+          logger.warn("system_diagnostics.poll_failed", {
+            source: "diagnostics",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      } finally {
+        if (generation === ownership.generation) {
+          ownership.inFlight = false;
+        }
+      }
+    },
+    [clearStaleWarning, setStaleWarning],
+  );
 
   useEffect(() => {
     Promise.all([loadHealth(), loadDiag()]).finally(() => {
@@ -184,11 +226,13 @@ export function SystemDiagnosticsPage() {
     // Manual refresh keeps existing data mounted (no full-content blank swap).
     // Only the refresh icon spins; the cards stay visible with their last
     // values until the new data arrives — toggling the initial `isLoading` flag
-    // here would flash the whole main region blank.
+    // here would flash the whole main region blank. Both streams are forced:
+    // a hanging poll read is superseded, not waited on.
     setIsRefreshing(true);
-    Promise.all([loadHealth(), loadDiag()]).finally(() =>
-      setIsRefreshing(false),
-    );
+    Promise.all([
+      loadHealth({ force: true }),
+      loadDiag({ force: true }),
+    ]).finally(() => setIsRefreshing(false));
   };
 
   if (isLoading && !health && !diag) {

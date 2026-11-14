@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { ContentDocumentV1 } from "@exam/domain";
@@ -182,11 +182,29 @@ interface NextPendingProbe {
   items: Array<{ attemptId: string }>;
 }
 
+/**
+ * Outcome of an authoritative grading-details read. `superseded` means a
+ * newer authoritative read has started while this one was on the wire: the
+ * newer read owns the state projection and this response must be discarded
+ * whole — applying it could unlock already-committed questions or resurrect
+ * a stale attempt projection.
+ */
+type RefreshOutcome =
+  | { kind: "current"; data: GradingDetailData }
+  | { kind: "superseded" }
+  | { kind: "unavailable" };
+
 export function GradingDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { formatDateTime } = useProductDateTime();
+  // Latest-read ownership: only the newest authoritative read may commit
+  // data / scores / comments. A slow earlier read (initial load, a POST's
+  // reconciliation GET) that settles after a newer read must be dropped, or
+  // its pre-POST snapshot would re-unlock questions whose grades are already
+  // irrevocably committed.
+  const readGenerationRef = useRef(0);
   const [data, setData] = useState<GradingDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -208,10 +226,36 @@ export function GradingDetailPage() {
     maxScore: number;
   } | null>(null);
   const [findingNext, setFindingNext] = useState(false);
+  // Questions whose POST is KNOWN to have committed. The marker is written
+  // immediately AFTER the POST (before its own refresh) so a concurrent
+  // submission that supersedes that refresh cannot leave a committed question
+  // editable; `refreshFailed` drives the saved-but-unrefreshed notice only once
+  // a read actually failed or was superseded. Cleared only when an
+  // authoritative current read returns the committed entry.
+  const [savedUnrefreshed, setSavedUnrefreshed] = useState<
+    Record<string, { score: number; refreshFailed: boolean }>
+  >({});
+  const [retryingSavedRefresh, setRetryingSavedRefresh] = useState(false);
+
+  const markSavedRefreshFailed = useCallback((questionId: string) => {
+    setSavedUnrefreshed((current) => {
+      const saved = current[questionId];
+      if (!saved || saved.refreshFailed) return current;
+      return {
+        ...current,
+        [questionId]: { ...saved, refreshFailed: true },
+      };
+    });
+  }, []);
 
   /**
    * Re-fetches the authoritative grading-details and replaces local state from
    * the server response. Used for initial load and post-POST reconciliation.
+   *
+   * Only a read that is still the latest one commits state ({@link RefreshOutcome}):
+   * a superseded read returns `superseded` and the CURRENT read takes over the
+   * projection, so the caller must not classify outcomes or restore drafts
+   * from a response nobody is waiting for anymore.
    *
    * For **completed** questions (entry !== null) the server value is authoritative
    * and always overwrites local state, making the question read-only with the
@@ -225,42 +269,57 @@ export function GradingDetailPage() {
    * it carries the attempt-level gradingStatus and question metadata that are
    * server-authoritative.
    */
-  const refreshFromServer =
-    useCallback(async (): Promise<GradingDetailData | null> => {
-      if (!id) return null;
-      const result = await api.get<GradingDetailData>(
-        `/api/admin/attempts/${id}/grading-details`,
-      );
-      if (!result) return null;
-      setData(result);
-      // For scores: only overwrite completed questions from the server; keep
-      // local draft for pending questions so multi-question grading is safe.
-      setScores((current) => {
-        const next = { ...current };
-        for (const q of result.questions) {
-          if (q.entry != null) {
-            next[q.questionId] = String(q.entry.score);
-          } else if (!(q.questionId in next)) {
-            next[q.questionId] = "";
-          }
+  const refreshFromServer = useCallback(async (): Promise<RefreshOutcome> => {
+    if (!id) return { kind: "unavailable" };
+    const generation = ++readGenerationRef.current;
+    const result = await api.get<GradingDetailData>(
+      `/api/admin/attempts/${id}/grading-details`,
+    );
+    if (!result) return { kind: "unavailable" };
+    if (generation !== readGenerationRef.current) {
+      return { kind: "superseded" };
+    }
+    setData(result);
+    // For scores: only overwrite completed questions from the server; keep
+    // local draft for pending questions so multi-question grading is safe.
+    setScores((current) => {
+      const next = { ...current };
+      for (const q of result.questions) {
+        if (q.entry != null) {
+          next[q.questionId] = String(q.entry.score);
+        } else if (!(q.questionId in next)) {
+          next[q.questionId] = "";
         }
-        return next;
-      });
-      // Comments: same logic — completed questions get the committed comment,
-      // pending questions keep their local draft.
-      setComments((current) => {
-        const next = { ...current };
-        for (const q of result.questions) {
-          if (q.entry != null) {
-            next[q.questionId] = q.entry.comment ?? "";
-          } else if (!(q.questionId in next)) {
-            next[q.questionId] = "";
-          }
+      }
+      return next;
+    });
+    // Comments: same logic — completed questions get the committed comment,
+    // pending questions keep their local draft.
+    setComments((current) => {
+      const next = { ...current };
+      for (const q of result.questions) {
+        if (q.entry != null) {
+          next[q.questionId] = q.entry.comment ?? "";
+        } else if (!(q.questionId in next)) {
+          next[q.questionId] = "";
         }
-        return next;
-      });
-      return result;
-    }, [id]);
+      }
+      return next;
+    });
+    // An authoritative read that now carries the committed entry supersedes
+    // the local "saved but not refreshed" marker for that question.
+    setSavedUnrefreshed((current) => {
+      if (Object.keys(current).length === 0) return current;
+      const next = { ...current };
+      for (const q of result.questions) {
+        if (q.entry != null) delete next[q.questionId];
+      }
+      return Object.keys(next).length === Object.keys(current).length
+        ? current
+        : next;
+    });
+    return { kind: "current", data: result };
+  }, [id]);
 
   const loadDetail = useCallback(async () => {
     if (!id) return;
@@ -274,6 +333,24 @@ export function GradingDetailPage() {
       setIsLoading(false);
     }
   }, [id, t, refreshFromServer]);
+
+  /**
+   * Re-read entry for a known-committed grade whose post-POST refresh failed.
+   * Reuses the same authoritative read as every other path (no new endpoint /
+   * no auto-retry of the POST); it stays available until a current read
+   * returns the committed entries.
+   */
+  const retrySavedRefresh = useCallback(async () => {
+    if (retryingSavedRefresh) return;
+    setRetryingSavedRefresh(true);
+    try {
+      await refreshFromServer();
+    } catch {
+      toast.error(t("admin.gradingDetail.errors.savedRefreshFailed"));
+    } finally {
+      setRetryingSavedRefresh(false);
+    }
+  }, [retryingSavedRefresh, refreshFromServer, t]);
 
   useEffect(() => {
     loadDetail();
@@ -326,8 +403,13 @@ export function GradingDetailPage() {
    *   Case C — attempt became fully_graded, or the question disappeared from
    *     the workset: load the latest state and show a status-changed message.
    *
-   *   Failure-of-failure — the reconciliation GET itself fails: preserve input,
-   *     show the "unknown / please refresh" message, and do not auto-POST.
+   *   Failure-of-failure — the reconciliation GET itself fails, or it is
+   *     superseded by a newer authoritative read: preserve input, show the
+   *     "unknown / please refresh" message, and do not auto-POST. On the
+   *     superseded path the newer read has already taken over the state
+   *     projection, but THIS read can no longer classify the committed /
+   *     failed / state-changed outcome, so the result stays explicitly
+   *     unconfirmed.
    */
   const reconcileAfterPostError = useCallback(
     async (
@@ -335,9 +417,9 @@ export function GradingDetailPage() {
       scoreAtSubmit: number,
       commentAtSubmit: string,
     ) => {
-      let refreshed: GradingDetailData | null;
+      let outcome: RefreshOutcome;
       try {
-        refreshed = await refreshFromServer();
+        outcome = await refreshFromServer();
       } catch {
         // Could not confirm server state — do not claim success or failure, do
         // not clear the form, do not auto-retry. The operator's input is still
@@ -345,10 +427,11 @@ export function GradingDetailPage() {
         toast.error(t("admin.gradingDetail.errors.submitUnknown"));
         return;
       }
-      if (!refreshed) {
+      if (outcome.kind !== "current") {
         toast.error(t("admin.gradingDetail.errors.submitUnknown"));
         return;
       }
+      const refreshed = outcome.data;
       const target = refreshed.questions.find(
         (q) => q.questionId === questionId,
       );
@@ -391,8 +474,9 @@ export function GradingDetailPage() {
       // (server still pending → real failure) can restore it instead of leaving
       // the field cleared by the authoritative refresh.
       const commentAtSubmit = comments[questionId] ?? "";
+      let result: GradeQuestionResponse;
       try {
-        const result = await api.post<GradeQuestionResponse>(
+        result = await api.post<GradeQuestionResponse>(
           `/api/admin/attempts/${id}/grade-question`,
           {
             questionId,
@@ -400,29 +484,57 @@ export function GradingDetailPage() {
             comment: commentAtSubmit,
           },
         );
-        // Authoritative reconciliation: replace local state from the server so
-        // the just-graded question becomes read-only with the real gradedBy /
-        // gradedAt, and the top-level gradingStatus reflects the committed
-        // terminal projection.
-        const refreshed = await refreshFromServer();
-        if (refreshed && result.fullyGraded) {
-          toast.success(t("admin.gradingDetail.toast.fullyGraded"));
+      } catch {
+        // ONLY an unknown POST outcome enters reconciliation. The POST may have
+        // committed on the server but lost its response (network error /
+        // timeout), so we must not assume failure. Re-GET grading-details and
+        // branch on the target question's authoritative server state. The
+        // classification is based on the server entry status, never on matching
+        // an English error message string.
+        await reconcileAfterPostError(questionId, score, commentAtSubmit);
+        setSaving((prev) => ({ ...prev, [questionId]: false }));
+        return;
+      }
+
+      // The POST outcome is KNOWN committed from here. Lock the question
+      // BEFORE starting the refresh: this submission's read can be superseded
+      // by a concurrent submission's newer read, and that newer read can
+      // itself fail — the committed question must never fall back to an
+      // editable state that invites a second POST.
+      setSavedUnrefreshed((current) => ({
+        ...current,
+        [questionId]: { score: result.score, refreshFailed: false },
+      }));
+      try {
+        const outcome = await refreshFromServer();
+        if (outcome.kind === "current") {
+          toast.success(
+            result.fullyGraded
+              ? t("admin.gradingDetail.toast.fullyGraded")
+              : t("admin.gradingDetail.toast.saved"),
+          );
         } else {
-          toast.success(t("admin.gradingDetail.toast.saved"));
+          // Superseded / unavailable: this submission's own refresh did not
+          // verify the commit. A newer read may still clear the marker when it
+          // lands with the entry; until then the question stays locked.
+          markSavedRefreshFailed(questionId);
+          toast.error(t("admin.gradingDetail.errors.savedRefreshFailed"));
         }
       } catch {
-        // Ambiguous result reconciliation. The POST may have committed on the
-        // server but lost its response (network error / timeout), so we must NOT
-        // assume failure. Re-GET grading-details and branch on the target
-        // question's authoritative server state. The classification is based on
-        // the server entry status, never on matching an English error message
-        // string.
-        await reconcileAfterPostError(questionId, score, commentAtSubmit);
+        markSavedRefreshFailed(questionId);
+        toast.error(t("admin.gradingDetail.errors.savedRefreshFailed"));
       } finally {
         setSaving((prev) => ({ ...prev, [questionId]: false }));
       }
     },
-    [id, comments, t, refreshFromServer, reconcileAfterPostError],
+    [
+      id,
+      comments,
+      t,
+      refreshFromServer,
+      reconcileAfterPostError,
+      markSavedRefreshFailed,
+    ],
   );
 
   /**
@@ -494,6 +606,26 @@ export function GradingDetailPage() {
         }
         status={<StatusBadge status={data.gradingStatus} />}
       />
+      {Object.values(savedUnrefreshed).some((saved) => saved.refreshFailed) ? (
+        <div
+          role="alert"
+          data-testid="grading-refresh-failed-banner"
+          data-feedback-tone="caution"
+          className="flex flex-col gap-3 rounded-md border p-3 type-secondary sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>{t("admin.gradingDetail.errors.savedRefreshFailed")}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={retryingSavedRefresh}
+            onClick={() => void retrySavedRefresh()}
+          >
+            {retryingSavedRefresh
+              ? t("common.loadingState")
+              : t("admin.gradingDetail.actions.retryRefresh")}
+          </Button>
+        </div>
+      ) : null}
       {isFullyGraded ? (
         <div
           role="status"
@@ -512,11 +644,16 @@ export function GradingDetailPage() {
         </div>
       )}
       {data.questions.map((q) => {
-        // A question is read-only once its entry is completed_manual, OR once
-        // the whole attempt has reached the terminal fully_graded state (every
-        // question is then committed). Either way: no submit button, inputs
-        // disabled, and the committed entry metadata is shown.
-        const completed = q.entry !== null || isFullyGraded;
+        // A question is read-only once its entry is completed_manual, once the
+        // whole attempt has reached the terminal fully_graded state (every
+        // question is then committed), or once its POST is known to have
+        // committed but the follow-up read has not returned yet. Either way: no
+        // submit button, inputs disabled, and no client-fabricated grader
+        // metadata.
+        const saved = savedUnrefreshed[q.questionId];
+        const savedScore = saved?.score;
+        const completed =
+          q.entry !== null || isFullyGraded || saved !== undefined;
         return (
           <Card key={q.questionId}>
             <CardHeader>
@@ -639,52 +776,72 @@ export function GradingDetailPage() {
                 />
               </div>
               {completed ? (
-                <div
-                  className="space-y-1 type-secondary"
-                  data-testid={`grading-submitted-meta-${q.questionId}`}
-                >
-                  <div className="font-medium text-foreground">
-                    {t("admin.gradingDetail.question.submittedLabel")}
-                  </div>
-                  <div>
-                    {t("admin.gradingDetail.question.gradedLabel", {
-                      score: q.entry?.score ?? 0,
-                    })}
-                  </div>
-                  {q.entry?.comment ? (
-                    <div
-                      data-testid={`grading-submitted-comment-${q.questionId}`}
-                    >
-                      {q.entry.comment}
+                q.entry === null && savedScore !== undefined ? (
+                  // The POST response is a fact, so the question is locked; the
+                  // committed grader/time metadata is NOT invented while the
+                  // authoritative read is unavailable.
+                  <div
+                    className="space-y-1 type-secondary"
+                    data-testid={`grading-saved-pending-refresh-${q.questionId}`}
+                  >
+                    <div className="font-medium text-foreground">
+                      {t("admin.gradingDetail.question.savedPendingRefresh", {
+                        score: savedScore,
+                      })}
                     </div>
-                  ) : null}
-                  {/* The server-resolved display name is the primary identity;
+                  </div>
+                ) : (
+                  <div
+                    className="space-y-1 type-secondary"
+                    data-testid={`grading-submitted-meta-${q.questionId}`}
+                  >
+                    <div className="font-medium text-foreground">
+                      {t("admin.gradingDetail.question.submittedLabel")}
+                    </div>
+                    <div>
+                      {t("admin.gradingDetail.question.gradedLabel", {
+                        score: q.entry?.score ?? 0,
+                      })}
+                    </div>
+                    {q.entry?.comment ? (
+                      <div
+                        data-testid={`grading-submitted-comment-${q.questionId}`}
+                      >
+                        {q.entry.comment}
+                      </div>
+                    ) : null}
+                    {/* The server-resolved display name is the primary identity;
                       when it is unresolvable the explicit fallback plus the raw
                       actor id keep the entry auditable. No name is fabricated
                       client-side. */}
-                  <div data-testid={`grading-submitted-grader-${q.questionId}`}>
-                    {q.entry?.gradedByName
-                      ? t("admin.gradingDetail.question.gradedBy", {
-                          grader: q.entry.gradedByName,
-                        })
-                      : t("admin.gradingDetail.question.gradedByUnavailable")}
-                    {!q.entry?.gradedByName && q.entry?.gradedBy ? (
+                    <div
+                      data-testid={`grading-submitted-grader-${q.questionId}`}
+                    >
+                      {q.entry?.gradedByName
+                        ? t("admin.gradingDetail.question.gradedBy", {
+                            grader: q.entry.gradedByName,
+                          })
+                        : t("admin.gradingDetail.question.gradedByUnavailable")}
+                      {!q.entry?.gradedByName && q.entry?.gradedBy ? (
+                        <div
+                          data-testid={`grading-submitted-grader-id-${q.questionId}`}
+                          className="type-metadata"
+                        >
+                          {q.entry.gradedBy}
+                        </div>
+                      ) : null}
+                    </div>
+                    {q.entry?.gradedAt ? (
                       <div
-                        data-testid={`grading-submitted-grader-id-${q.questionId}`}
-                        className="type-metadata"
+                        data-testid={`grading-submitted-time-${q.questionId}`}
                       >
-                        {q.entry.gradedBy}
+                        {t("admin.gradingDetail.question.gradedAt", {
+                          time: formatDateTime(q.entry.gradedAt),
+                        })}
                       </div>
                     ) : null}
                   </div>
-                  {q.entry?.gradedAt ? (
-                    <div data-testid={`grading-submitted-time-${q.questionId}`}>
-                      {t("admin.gradingDetail.question.gradedAt", {
-                        time: formatDateTime(q.entry.gradedAt),
-                      })}
-                    </div>
-                  ) : null}
-                </div>
+                )
               ) : (
                 <div className="flex items-center gap-2">
                   <Button

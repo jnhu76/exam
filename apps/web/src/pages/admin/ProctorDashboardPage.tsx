@@ -381,25 +381,73 @@ export function ProctorDashboardPage() {
     hydrateForceSubmit();
   }, [hydrateForceSubmit]);
 
+  // Latest-read ownership for the status poll: only the newest read may
+  // commit data / error / the loading flag. An exam switch (this page is NOT
+  // remounted per :id) supersedes the in-flight read of the previous exam,
+  // and a slow response must never render a candidate list the routed exam
+  // does not name.
+  const statusRequestRef = useRef(0);
+  // The exam the URL currently names, readable from an async continuation that
+  // closed over an OLDER examId. A command handler started for exam A can
+  // settle after the route moved to exam B; its `loadStatus({ force: true })`
+  // would otherwise become the newest generation and commit A's candidates
+  // (or error) under B's route.
+  const routedExamIdRef = useRef(examId);
+  routedExamIdRef.current = examId;
+  // Single-flight for scheduled poll ticks: while a read is on the wire the
+  // interval skips its tick, so slow responses cannot stack overlapping
+  // requests that supersede each other and freeze the refresh cycle. Explicit
+  // reads (manual refresh, post-command resync) pass `force` and supersede.
+  const statusInFlightRef = useRef(false);
+
   /** Fetches candidate status from the API. */
-  const loadStatus = useCallback(async () => {
-    if (!examId) return;
-    setError(null);
-    try {
-      const result = await api.get<CandidateStatusResponse>(
-        `/api/admin/exams/${examId}/candidates/status`,
-      );
-      setData(result);
-    } catch {
-      setError(t("admin.proctorDashboard.errors.loadFailed"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [examId, t]);
+  const loadStatus = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!examId) return;
+      // A continuation from the previous route must not even start a read: a
+      // forced read issued now would be the newest generation for the WRONG
+      // exam, so the generation check alone cannot protect the projection.
+      if (examId !== routedExamIdRef.current) return;
+      if (statusInFlightRef.current && !options?.force) return;
+      const generation = ++statusRequestRef.current;
+      statusInFlightRef.current = true;
+      setError(null);
+      try {
+        const result = await api.get<CandidateStatusResponse>(
+          `/api/admin/exams/${examId}/candidates/status`,
+        );
+        // The route may have switched while this read was on the wire, even
+        // before the new exam's effect started its own read.
+        if (examId !== routedExamIdRef.current) return;
+        if (generation !== statusRequestRef.current) return;
+        setData(result);
+      } catch {
+        if (examId !== routedExamIdRef.current) return;
+        if (generation !== statusRequestRef.current) return;
+        setError(t("admin.proctorDashboard.errors.loadFailed"));
+      } finally {
+        // A superseded request must not release the in-flight slot it no longer
+        // owns — the superseding read manages the slot from here. A read whose
+        // exam is no longer routed likewise must not end the current exam's
+        // loading window.
+        if (
+          generation === statusRequestRef.current &&
+          examId === routedExamIdRef.current
+        ) {
+          statusInFlightRef.current = false;
+          setIsLoading(false);
+        }
+      }
+    },
+    [examId, t],
+  );
 
   useEffect(() => {
-    loadStatus();
-    intervalRef.current = setInterval(loadStatus, POLL_INTERVAL_MS);
+    void loadStatus({ force: true });
+    intervalRef.current = setInterval(
+      () => void loadStatus(),
+      POLL_INTERVAL_MS,
+    );
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -552,7 +600,7 @@ export function ProctorDashboardPage() {
         setForceSubmitTargetAttemptId(null);
       }
       toast.success(t("admin.proctorDashboard.forceSubmit.done"));
-      await loadStatus();
+      await loadStatus({ force: true });
     } catch (err) {
       const failure = classifyGrantFailure(err);
       if (failure === "indeterminate") {
@@ -813,7 +861,7 @@ export function ProctorDashboardPage() {
       }
       // Confirmed result: close the dialog and reset to a fresh draft.
       resetGrantDialog();
-      await loadStatus();
+      await loadStatus({ force: true });
     } catch (err) {
       switch (classifyGrantFailure(err)) {
         case "indeterminate": {
@@ -1169,12 +1217,12 @@ export function ProctorDashboardPage() {
         );
         setMisconductState({ phase: "cleanup_failed", command });
         setMisconductDialogOpen(false);
-        await loadStatus();
+        await loadStatus({ force: true });
         return;
       }
       toast.success(t("admin.proctorDashboard.misconductDialog.done"));
       resetMisconductDialog();
-      await loadStatus();
+      await loadStatus({ force: true });
     } catch (err) {
       const failure = classifyGrantFailure(err);
       if (failure === "indeterminate") {
@@ -1194,7 +1242,7 @@ export function ProctorDashboardPage() {
         );
         setMisconductState({ phase: "cleanup_failed", command });
         setMisconductDialogOpen(false);
-        await loadStatus();
+        await loadStatus({ force: true });
         return;
       }
       resetMisconductDialog();
@@ -1281,7 +1329,13 @@ export function ProctorDashboardPage() {
       : misconductState.command.notes;
 
   if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadStatus} />;
+  if (error)
+    return (
+      <ErrorState
+        message={error}
+        onRetry={() => void loadStatus({ force: true })}
+      />
+    );
   if (!data) return null;
 
   const groups = groupByStatus(data.candidates);
@@ -1298,7 +1352,7 @@ export function ProctorDashboardPage() {
               size="sm"
               onClick={() => {
                 setIsLoading(true);
-                void loadStatus();
+                void loadStatus({ force: true });
               }}
             >
               <AppIcon icon={RefreshCw} size="inline" />

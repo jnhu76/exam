@@ -1,0 +1,536 @@
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "@/lib/api";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { BrandProvider } from "@/components/layout/BrandProvider";
+import { GradingDetailPageRoute } from "./GradingDetailPage";
+import { permissionsForRole } from "@exam/authz";
+import { toast } from "sonner";
+
+vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+  setNavigate: () => {},
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+
+const getMock = vi.mocked(api.get);
+const postMock = vi.mocked(api.post);
+const toastErrorMock = vi.mocked(toast.error);
+const toastSuccessMock = vi.mocked(toast.success);
+
+interface GradingEntryFixture {
+  score: number;
+  comment: string;
+  gradedBy: string;
+  gradedByName: string;
+  gradedAt: string;
+}
+
+function entry(score: number, comment = "评语"): GradingEntryFixture {
+  return {
+    score,
+    comment,
+    gradedBy: "admin-1",
+    gradedByName: "李评分",
+    gradedAt: "2026-01-15T12:00:00Z",
+  };
+}
+
+/** Builds a grading-details snapshot. q1Entry/q2Entry are null while the
+ * question is still pending (editable). */
+function detail(
+  q1Entry: GradingEntryFixture | null,
+  q2Entry: GradingEntryFixture | null,
+  gradingStatus: string,
+) {
+  return {
+    attemptId: "att-1",
+    examId: "exam-1",
+    examTitle: "期末考试",
+    candidateId: "c1",
+    candidateName: "张三",
+    gradingStatus,
+    questions: [
+      {
+        questionId: "q1",
+        type: "text_response",
+        content: "第一题",
+        maxScore: 10,
+        candidateAnswer: "答案一",
+        entry: q1Entry,
+      },
+      {
+        questionId: "q2",
+        type: "single_choice",
+        content: "第二题",
+        maxScore: 5,
+        candidateAnswer: "答案二",
+        entry: q2Entry,
+      },
+    ],
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/** FIFO of deferred grading-details GETs: each read holds until the test
+ * releases it, pinning the SETTLEMENT order independently of the START
+ * order — the freedom a slow authoritative read has on the wire. */
+const queue: Array<ReturnType<typeof deferred<ReturnType<typeof detail>>>> = [];
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={["/admin/grading-queue/att-1"]}>
+      <AuthProvider
+        initialUser={{
+          id: "admin-1",
+          username: "admin",
+          name: "Admin",
+          role: "Admin",
+          organizationId: "org-1",
+          capabilities: [...permissionsForRole("Admin")],
+        }}
+      >
+        <BrandProvider>
+          <Routes>
+            <Route
+              path="/admin/grading-queue/:id"
+              element={<GradingDetailPageRoute />}
+            />
+          </Routes>
+        </BrandProvider>
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+}
+
+/** Drives the full submit flow for one question: types the score, clicks the
+ * question's submit button, confirms the irrevocable-POST dialog. */
+async function submitScore(
+  user: ReturnType<typeof userEvent.setup>,
+  questionId: string,
+  score: string,
+) {
+  await user.type(
+    screen.getByTestId(`grading-score-input-${questionId}`),
+    score,
+  );
+  await user.click(screen.getByTestId(`grading-submit-btn-${questionId}`));
+  await user.click(await screen.findByRole("button", { name: "确认提交" }));
+}
+
+describe("GradingDetailPage stale-read ownership (F-11)", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+    postMock.mockReset();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.info).mockClear();
+    queue.length = 0;
+    getMock.mockImplementation(() => {
+      const d = deferred<ReturnType<typeof detail>>();
+      queue.push(d);
+      return d.promise;
+    });
+  });
+
+  it("a superseded reconciliation read landing last must not unlock an already-submitted question", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    // Initial load: both questions pending (editable).
+    await act(async () => {
+      queue.shift()!.resolve(detail(null, null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+    expect(screen.getByTestId("grading-submit-btn-q1")).toBeInTheDocument();
+    expect(screen.getByTestId("grading-submit-btn-q2")).toBeInTheDocument();
+
+    // Submit q1: POST succeeds; its authoritative reconciliation read (read
+    // #2) is held on the wire.
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q1",
+      score: 8,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q1", "8");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+
+    // Submit q2 while q1's reconciliation read is still in flight: POST #2
+    // succeeds and starts read #3 (a newer generation). Read #2 is now
+    // superseded — its snapshot can only describe the attempt BEFORE q2's
+    // POST committed.
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "fully_graded",
+      questionId: "q2",
+      score: 5,
+      fullyGraded: true,
+    });
+    await submitScore(user, "q2", "5");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(3));
+
+    // The CURRENT read (#3) settles first: both questions committed.
+    await act(async () => {
+      queue[1]!.resolve(detail(entry(8), entry(5), "fully_graded"));
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("grading-submitted-meta-q2"),
+      ).toBeInTheDocument(),
+    );
+
+    // The SUPERSEDED read (#2) settles LAST: in its snapshot q2 is still
+    // pending (it started before q2's POST). Rendering it would unlock a
+    // question whose grade is already irrevocably committed.
+    await act(async () => {
+      queue[0]!.resolve(detail(entry(8), null, "pending_manual"));
+    });
+
+    expect(screen.getByTestId("grading-score-input-q2")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q2"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("grading-submitted-meta-q2")).toBeInTheDocument();
+    // q1 stays locked with its committed score as well.
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(screen.getByTestId("grading-score-input-q1")).toHaveValue(8);
+    // The attempt-level projection must not flip back to the irrevocable
+    // notice either.
+    expect(
+      screen.getByTestId("grading-fully-graded-notice"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("grading-irrevocable-notice"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("an unknown-outcome POST whose reconciliation read is superseded must not claim failure, revert the sibling, or re-POST", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await act(async () => {
+      queue.shift()!.resolve(detail(null, null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+
+    // q1's POST fails with a lost response (commit state UNKNOWN): the page
+    // starts a reconciliation read (#2), held on the wire.
+    postMock.mockRejectedValueOnce(new Error("network lost"));
+    await submitScore(user, "q1", "8");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+
+    // q2 is submitted while the reconciliation is pending: POST #2 succeeds
+    // and starts read #3 (newer generation — read #2 is superseded).
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q2",
+      score: 5,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q2", "5");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(3));
+
+    // The current read (#3) settles: q2 committed, q1 STILL pending (q1's
+    // POST genuinely did not commit). The operator's q1 draft survives.
+    await act(async () => {
+      queue[1]!.resolve(detail(null, entry(5), "pending_manual"));
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("grading-submitted-meta-q2"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("grading-score-input-q1")).toBeEnabled();
+    expect(screen.getByTestId("grading-score-input-q1")).toHaveValue(8);
+
+    // The superseded reconciliation read (#2) settles LAST with a snapshot
+    // where BOTH questions are still pending. It must not classify the q1
+    // outcome (a newer authoritative read owns the projection), must not
+    // revert q2 to editable, and must not fabricate a failure verdict.
+    await act(async () => {
+      queue[0]!.resolve(detail(null, null, "pending_manual"));
+    });
+
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "无法确认评分是否已提交，请刷新页面核对。",
+    );
+    expect(toastErrorMock).not.toHaveBeenCalledWith(
+      "评分未提交，请确认网络后重试。",
+    );
+    // q2 keeps its committed read-only state — the stale snapshot must not
+    // unlock it.
+    expect(screen.getByTestId("grading-score-input-q2")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q2"),
+    ).not.toBeInTheDocument();
+    // q1's draft stays intact and editable for a manual retry.
+    expect(screen.getByTestId("grading-score-input-q1")).toBeEnabled();
+    expect(screen.getByTestId("grading-score-input-q1")).toHaveValue(8);
+    // No automatic re-POST may fire from the ambiguous path.
+    expect(postMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a lost POST response whose reconciliation read is CURRENT shows the committed outcome and locks the question (control)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await act(async () => {
+      queue.shift()!.resolve(detail(null, null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+
+    // q1's POST errors (response lost) but the server committed. The
+    // reconciliation read (#2) is the only read in flight → current.
+    postMock.mockRejectedValueOnce(new Error("network lost"));
+    await submitScore(user, "q1", "8");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      queue[0]!.resolve(detail(entry(8), null, "pending_manual"));
+    });
+
+    // Case A: the committed outcome is surfaced neutrally and the question
+    // is read-only with the real entry metadata.
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      "评分已提交，页面已同步最新状态。",
+    );
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("grading-submitted-meta-q1")).toBeInTheDocument();
+    // No failure verdict may be fabricated for a confirmed commit.
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("re-entering the attempt performs a fresh authoritative read and renders the committed state", async () => {
+    const user = userEvent.setup();
+    const first = renderPage();
+    // First session: both pending; grade q1.
+    await act(async () => {
+      queue.shift()!.resolve(detail(null, null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q1",
+      score: 8,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q1", "8");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      queue[0]!.resolve(detail(entry(8), null, "pending_manual"));
+    });
+    expect(screen.getByTestId("grading-submitted-meta-q1")).toBeInTheDocument();
+
+    // Leave and re-enter the attempt: a fresh mount must re-read the server
+    // (the route remounts per :id), not inherit the previous session's local
+    // state, and the fresh read re-establishes the committed projection.
+    first.unmount();
+    renderPage();
+    expect(getMock).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      queue[1]!.resolve(detail(entry(8), null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(screen.getByTestId("grading-submitted-meta-q1")).toBeInTheDocument();
+    expect(screen.getByTestId("grading-score-input-q2")).toBeEnabled();
+  });
+
+  it("a known-success POST whose refresh GET fails reports saved-without-refresh (not unknown) and re-reads through the page entry", async () => {
+    const user = userEvent.setup();
+    // Sequential mocks: initial load, then the POST-success refresh. Only two
+    // reads may happen — a third would be the ambiguous-outcome reconciliation
+    // GET that a KNOWN-success POST must never start.
+    getMock.mockReset();
+    getMock.mockResolvedValueOnce(detail(null, null, "pending_manual"));
+    getMock.mockRejectedValueOnce(new Error("refresh failed"));
+
+    renderPage();
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+
+    // Keep an operator draft on the sibling question.
+    await user.type(screen.getByTestId("grading-score-input-q2"), "5");
+
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q1",
+      score: 8,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q1", "8");
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "评分已保存，但页面刷新失败，请重试刷新以查看最新状态。",
+      ),
+    );
+    // A known POST success must not be reclassified as an unknown outcome.
+    expect(toastErrorMock).not.toHaveBeenCalledWith(
+      "无法确认评分是否已提交，请刷新页面核对。",
+    );
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    // Exactly one POST (never retried) and exactly one post-POST read.
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledTimes(2);
+
+    // The committed question is presented as saved: locked (no duplicate POST
+    // affordance) without fabricating gradedBy/gradedAt.
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("grading-saved-pending-refresh-q1"),
+    ).toHaveTextContent("已保存 8 分（等待刷新）");
+    // The sibling draft survives the known-failure refresh.
+    expect(screen.getByTestId("grading-score-input-q2")).toHaveValue(5);
+    expect(screen.getByTestId("grading-score-input-q2")).toBeEnabled();
+
+    // The banner's re-read is the page's existing authoritative read entry.
+    getMock.mockResolvedValueOnce(detail(entry(8), null, "pending_manual"));
+    await user.click(screen.getByRole("button", { name: "重试刷新" }));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("grading-submitted-meta-q1"),
+      ).toBeInTheDocument(),
+    );
+    expect(getMock).toHaveBeenCalledTimes(3);
+    expect(
+      screen.queryByTestId("grading-saved-pending-refresh-q1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("grading-refresh-failed-banner"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a committed question stays locked when its refresh is superseded and the newer read then fails", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await act(async () => {
+      queue.shift()!.resolve(detail(null, null, "pending_manual"));
+    });
+    expect(await screen.findByText(/期末考试 — 张三/)).toBeInTheDocument();
+
+    // q1's POST succeeds; its authoritative refresh (read #2) is held on the
+    // wire. The committed q1 must be locked from this moment on — not only
+    // when a refresh happens to fail.
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q1",
+      score: 8,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q1", "8");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("grading-score-input-q1")).toBeDisabled();
+    expect(
+      screen.queryByTestId("grading-submit-btn-q1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("grading-saved-pending-refresh-q1"),
+    ).toHaveTextContent("已保存 8 分（等待刷新）");
+    // Nothing has FAILED yet: no failure banner while the read is in flight.
+    expect(
+      screen.queryByTestId("grading-refresh-failed-banner"),
+    ).not.toBeInTheDocument();
+
+    // q2's POST succeeds while read #2 is in flight; read #3 supersedes it.
+    postMock.mockResolvedValueOnce({
+      attemptId: "att-1",
+      gradingStatus: "pending_manual",
+      questionId: "q2",
+      score: 5,
+      fullyGraded: false,
+    });
+    await submitScore(user, "q2", "5");
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(3));
+
+    // The NEWER read (#3) fails, so q2's own refresh has no snapshot either.
+    await act(async () => {
+      queue[1]!.reject(new Error("refresh failed"));
+    });
+    // q1's superseded read (#2) settles last: it can never commit, and the
+    // already-committed q1 must stay locked regardless.
+    await act(async () => {
+      queue[0]!.resolve(detail(null, null, "pending_manual"));
+    });
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "评分已保存，但页面刷新失败，请重试刷新以查看最新状态。",
+      ),
+    );
+    // Both POST-committed questions are saved-stale, never editable again.
+    for (const [questionId, score] of [
+      ["q1", "8"],
+      ["q2", "5"],
+    ] as const) {
+      expect(
+        screen.getByTestId(`grading-score-input-${questionId}`),
+      ).toBeDisabled();
+      expect(
+        screen.queryByTestId(`grading-submit-btn-${questionId}`),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId(`grading-saved-pending-refresh-${questionId}`),
+      ).toHaveTextContent(`已保存 ${score} 分（等待刷新）`);
+    }
+    expect(
+      screen.getByTestId("grading-refresh-failed-banner"),
+    ).toBeInTheDocument();
+    // Exactly the two explicit POSTs: the superseded refresh must not trigger
+    // a reconciliation or a re-POST.
+    expect(postMock).toHaveBeenCalledTimes(2);
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalledWith(
+      "无法确认评分是否已提交，请刷新页面核对。",
+    );
+  });
+});
