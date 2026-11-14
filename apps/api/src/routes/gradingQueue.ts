@@ -22,6 +22,12 @@ import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
+import { withBusinessOperationSpan } from "../telemetry/businessOperationSpan.js";
+import {
+  ATTR_OP_ATTEMPT_ID,
+  ATTR_OP_QUESTION_ID,
+  SPAN_ATTEMPT_GRADE,
+} from "../telemetry/businessOperationVocabulary.js";
 import {
   ensureTargetOrg,
   formatZodError,
@@ -369,70 +375,80 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       // finalizeTerminalGrading take no enrollmentId argument and this route
       // never pre-fetches enrollment for the command.
 
-      const result = await executeInTransaction(fastify.db, async (tx) => {
-        // Build the engine repo pair once, mint the EA capability via the
-        // canonical seam, and thread the SAME instances + capability into
-        // gradeQuestion → finalizeTerminalGrading so one object pair flows
-        // from mint to consumer (HR-6: exact repo object identity).
-        const txAttemptRepo = createAttemptRepo(tx);
-        const txEnrollmentRepo = createEnrollmentRepo(tx);
-        const txEntryRepo = createAttemptGradingEntryRepo(tx);
-        const { enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: txAttemptRepo,
-            enrollmentRepo: txEnrollmentRepo,
-          },
-          ctx,
-        );
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
-          attemptId,
-        );
-        const graded = await gradeQuestion(
-          attempts,
-          enrollments,
-          createGradingWorksetRepoAdapter(txEntryRepo, ctx),
-          cap,
-          questionId,
-          score,
-          comment,
-          ctx.actorId,
-          now,
-          // The DB-layer findExamById returns the raw Drizzle row (status:
-          // string); gradeQuestion's canonical closure expects the domain Exam
-          // type (status: ExamStatus). The row IS a valid Exam at runtime
-          // (Postgres enums map 1:1); the cast narrows the string-literal type
-          // for TypeScript. Mirrors how other engine callers bridge DB rows to
-          // the domain type.
-          exam as unknown as import("@exam/domain").Exam,
-        );
-        await recordAtomicHttpAudit(tx, request, ctx, {
-          action: "grading.score_entered",
-          targetType: "attempt",
-          targetId: attemptId,
-          metadata: {
-            questionId,
-            score,
-            maxScore,
-            previousScore,
-            graderId: ctx.actorId,
-          },
-        });
-        if (graded.fullyGraded) {
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: "grading.finalized",
-            targetType: "attempt",
-            targetId: attemptId,
-            metadata: {
-              gradingStatus: "fully_graded",
-              graderId: ctx.actorId,
-            },
-          });
-        }
-        return graded;
-      });
+      // #964 W3: the manual grade span observes the existing command boundary
+      // (gradeQuestion + terminal closure + audits) inside one transaction.
+      const result = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_GRADE,
+        {
+          [ATTR_OP_ATTEMPT_ID]: attemptId,
+          [ATTR_OP_QUESTION_ID]: questionId,
+        },
+        async () =>
+          await executeInTransaction(fastify.db, async (tx) => {
+            // Build the engine repo pair once, mint the EA capability via the
+            // canonical seam, and thread the SAME instances + capability into
+            // gradeQuestion → finalizeTerminalGrading so one object pair flows
+            // from mint to consumer (HR-6: exact repo object identity).
+            const txAttemptRepo = createAttemptRepo(tx);
+            const txEnrollmentRepo = createEnrollmentRepo(tx);
+            const txEntryRepo = createAttemptGradingEntryRepo(tx);
+            const { enrollments, attempts } = createExamEngineRepos(
+              {
+                examRepo: createExamRepo(tx),
+                attemptRepo: txAttemptRepo,
+                enrollmentRepo: txEnrollmentRepo,
+              },
+              ctx,
+            );
+            const cap = await lockEnrollmentAndAttempt(
+              enrollments,
+              attempts,
+              attemptId,
+            );
+            const graded = await gradeQuestion(
+              attempts,
+              enrollments,
+              createGradingWorksetRepoAdapter(txEntryRepo, ctx),
+              cap,
+              questionId,
+              score,
+              comment,
+              ctx.actorId,
+              now,
+              // The DB-layer findExamById returns the raw Drizzle row (status:
+              // string); gradeQuestion's canonical closure expects the domain Exam
+              // type (status: ExamStatus). The row IS a valid Exam at runtime
+              // (Postgres enums map 1:1); the cast narrows the string-literal type
+              // for TypeScript. Mirrors how other engine callers bridge DB rows to
+              // the domain type.
+              exam as unknown as import("@exam/domain").Exam,
+            );
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "grading.score_entered",
+              targetType: "attempt",
+              targetId: attemptId,
+              metadata: {
+                questionId,
+                score,
+                maxScore,
+                previousScore,
+                graderId: ctx.actorId,
+              },
+            });
+            if (graded.fullyGraded) {
+              await recordAtomicHttpAudit(tx, request, ctx, {
+                action: "grading.finalized",
+                targetType: "attempt",
+                targetId: attemptId,
+                metadata: {
+                  gradingStatus: "fully_graded",
+                  graderId: ctx.actorId,
+                },
+              });
+            }
+            return graded;
+          }),
+      );
 
       return reply.send({
         attemptId,

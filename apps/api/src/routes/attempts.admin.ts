@@ -31,6 +31,14 @@ import {
   resolveExportAnswerView,
 } from "../lib/attemptExportAnswer.js";
 import { recordSensitiveReadAudit } from "../audit/auditWriter.js";
+import { withBusinessOperationSpan } from "../telemetry/businessOperationSpan.js";
+import {
+  ATTR_OP_ATTEMPT_ID,
+  ATTR_OP_OPERATION_ID,
+  ATTR_OP_RESULT,
+  SPAN_ATTEMPT_FORCE_SUBMIT,
+  SPAN_ATTEMPT_TIME_GRANT,
+} from "../telemetry/businessOperationVocabulary.js";
 import { grantWithOperationRaceRecovery } from "../orchestrators/operatorGrantExecution.js";
 import { forceSubmitWithOperationRaceRecovery } from "../orchestrators/forceSubmitExecution.js";
 import { misconductMarkWithOperationRaceRecovery } from "../orchestrators/misconductMarkExecution.js";
@@ -195,11 +203,25 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       // lock, receipt-first insert, submit+grade, fact verification, audit,
       // and the exact-23505 fresh-transaction recovery. The route never
       // re-reads the attempt after the orchestrator returns.
-      const result = await forceSubmitWithOperationRaceRecovery(
-        fastify.db,
-        ctx,
-        { attemptId, operationId, reason, now },
-        { audit: { request } },
+      // #964 W3: ONE business span covers the whole command INCLUDING the
+      // 23505 recovery — per-operation granularity (the receipt's own
+      // disposition union is the result fact).
+      const result = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_FORCE_SUBMIT,
+        {
+          [ATTR_OP_ATTEMPT_ID]: attemptId,
+          [ATTR_OP_OPERATION_ID]: operationId,
+        },
+        async (span) => {
+          const receipt = await forceSubmitWithOperationRaceRecovery(
+            fastify.db,
+            ctx,
+            { attemptId, operationId, reason, now },
+            { audit: { request } },
+          );
+          span.setAttribute(ATTR_OP_RESULT, receipt.disposition);
+          return receipt;
+        },
       );
 
       return reply.send(AttemptCommandReceiptResponseSchema.parse(result));
@@ -275,21 +297,35 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       // original and recovered commands are byte-identical.
       const now = fastify.now();
 
-      const result = await grantWithOperationRaceRecovery(
-        fastify.db,
-        ctx,
+      // #964 W3: ONE business span covers the whole grant command (primary
+      // transaction + 23505 recovery); the response's own outcome union
+      // (granted | idempotent_replay | terminal) is the result fact.
+      const result = await withBusinessOperationSpan(
+        SPAN_ATTEMPT_TIME_GRANT,
         {
-          attemptId,
-          operationId,
-          addedSeconds,
-          reasonCode,
-          reasonText,
-          interruptionId: interruptionId ?? null,
-          incidentId: incidentId ?? null,
-          actorId: ctx.actorId,
-          now,
+          [ATTR_OP_ATTEMPT_ID]: attemptId,
+          [ATTR_OP_OPERATION_ID]: operationId,
         },
-        { audit: { request } },
+        async (span) => {
+          const grant = await grantWithOperationRaceRecovery(
+            fastify.db,
+            ctx,
+            {
+              attemptId,
+              operationId,
+              addedSeconds,
+              reasonCode,
+              reasonText,
+              interruptionId: interruptionId ?? null,
+              incidentId: incidentId ?? null,
+              actorId: ctx.actorId,
+              now,
+            },
+            { audit: { request } },
+          );
+          span.setAttribute(ATTR_OP_RESULT, grant.outcome);
+          return grant;
+        },
       );
 
       return reply.send(
