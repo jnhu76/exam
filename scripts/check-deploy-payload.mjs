@@ -49,10 +49,15 @@
 // workspace-module-resolution.md keeps that out of scope for `files`);
 // everything else in the payload must be on this contract.
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(SCRIPT_DIR, "..");
@@ -220,29 +225,43 @@ if (!pluginPhys) {
         "through pnpm's hidden .pnpm hoist layer is not a payload contract)",
     );
   }
-  // Resolve the driver the way each package's own `import "postgres"`
-  // resolves at runtime (Node walk-up semantics), then require ONE shared
-  // instance: the seam patches the Query prototype of the driver it loads,
-  // so a second store copy would leave the patch inert on the pool @exam/db
-  // actually drives.
-  const resolveSpecFrom = (fromDir, spec) => {
+  // Resolve the driver the way each package's own ESM `import "postgres"`
+  // resolves at runtime — both the seam and @exam/db are ESM consumers, and
+  // the ESM loader follows the exports "import" condition (a require()-based
+  // probe could match on the CJS entry while the runtime loads a different
+  // one). import.meta.resolve has NO parent override (the resolution parent
+  // is the calling module's own URL), so the only faithful witness is a
+  // throwaway probe module placed INSIDE each package's payload dir and
+  // imported dynamically — the real loader then performs the exact walk-up
+  // the runtime would. Require ONE shared instance: the seam patches the
+  // Query prototype of the driver it loads, so a second store copy would
+  // leave the patch inert on the pool @exam/db actually drives.
+  const resolveEsmEntryFrom = async (fromDir) => {
+    const probePath = join(fromDir, `.__payload-esm-probe.${process.pid}.mjs`);
     try {
-      return createRequire(join(fromDir, "package.json")).resolve(spec);
+      writeFileSync(
+        probePath,
+        'export const resolved = import.meta.resolve("postgres");\n',
+      );
+      const mod = await import(pathToFileURL(probePath).href);
+      return mod.resolved;
     } catch {
       return null;
+    } finally {
+      rmSync(probePath, { force: true });
     }
   };
-  const dbDriverEntry = resolveSpecFrom(dbPhys, "postgres");
-  const pluginDriverEntry = resolveSpecFrom(pluginPhys, "postgres");
+  const dbDriverEntry = await resolveEsmEntryFrom(dbPhys);
+  const pluginDriverEntry = await resolveEsmEntryFrom(pluginPhys);
   if (!dbDriverEntry || !pluginDriverEntry) {
     fail(
-      "postgres driver unresolvable in payload for " +
+      "postgres driver unresolvable in payload (ESM import) for " +
         (dbDriverEntry ? "@exam/otel-drizzle-postgresjs" : "@exam/db"),
     );
   } else if (dbDriverEntry !== pluginDriverEntry) {
     fail(
-      `postgres driver instance split in payload: @exam/db resolves ${dbDriverEntry} ` +
-        `but @exam/otel-drizzle-postgresjs resolves ${pluginDriverEntry} — the ` +
+      `postgres driver instance split in payload: @exam/db ESM-imports ${dbDriverEntry} ` +
+        `but @exam/otel-drizzle-postgresjs ESM-imports ${pluginDriverEntry} — the ` +
         "seam would patch a prototype the business pool never uses",
     );
   }
