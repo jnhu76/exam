@@ -1,11 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { DateTimeProvider } from "@/contexts/DateTimeContext";
 import { api, ApiError } from "@/lib/api";
 import { setBuffer } from "@/lib/logger";
 import type { ClientEventBuffer } from "@/lib/clientEventBuffer";
-import type { ClientEvent } from "@exam/contracts";
+import type { ClientEvent, MeResponse } from "@exam/contracts";
+import { permissionsForRole } from "@exam/authz";
 import { ExamListPage } from "./ExamListPage";
 
 vi.mock("@/lib/api", () => ({
@@ -37,6 +40,9 @@ vi.mock("@/lib/api", () => ({
   api: {
     get: vi.fn(),
   },
+  // AuthContext (mounted by the product-time tests below) only needs the
+  // navigation setter to exist; the page itself never navigates via api.
+  setNavigate: () => {},
 }));
 
 const getMock = vi.mocked(api.get);
@@ -532,5 +538,96 @@ describe("ExamListPage", () => {
     // Raw exception text must not leak into the persisted metadata.
     expect(JSON.stringify(telemetry[0])).not.toContain("Network error");
     setBuffer(null);
+  });
+});
+
+/**
+ * #971 W3 coverage: the candidate-side list renders the exam window through
+ * the product time boundary (`useProductDateTime`), not the raw UTC instant
+ * or a page-local `toLocaleString`. The DateTimeProvider/dateTime unit suite
+ * alone cannot prove ExamListPage consumes that formatter, so these tests
+ * pin the rendered wall clock at the page boundary in a non-UTC product zone.
+ *
+ * Candidate display authority (as built): the organization zone is read from
+ * `/api/admin/settings`, which requires `settings.view`; a Candidate does not
+ * hold it (see `CANDIDATE_PERMISSIONS`), so a candidate's product time
+ * resolves from the deployment zone (`VITE_APP_TIMEZONE`) and finally the
+ * browser zone. Both legs are witnessed below.
+ */
+describe("ExamListPage — product time zone rendering (#971 W3)", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function sessionUser(role: "Admin" | "Candidate"): MeResponse {
+    return {
+      id: "00000000-0000-4000-8000-000000000001",
+      username: role.toLowerCase(),
+      name: role,
+      role,
+      organizationId: "00000000-0000-4000-8000-000000000002",
+      capabilities: [...permissionsForRole(role)],
+    };
+  }
+
+  /** Serves api.get by path fragment; unmatched paths resolve to undefined. */
+  function routeApiGet(handlers: Array<[string, unknown]>) {
+    getMock.mockImplementation((path: string) => {
+      const hit = handlers.find(([fragment]) => path.includes(fragment));
+      return Promise.resolve(hit?.[1]);
+    });
+  }
+
+  function renderWithProductTime(user: MeResponse) {
+    return render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <AuthProvider initialUser={user}>
+          <DateTimeProvider>
+            <Routes>
+              <Route path="/exam/list" element={<ExamListPage />} />
+            </Routes>
+          </DateTimeProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("renders the exam window in the organization time zone resolved by DateTimeProvider", async () => {
+    routeApiGet([
+      ["/api/admin/settings", { timezone: "Asia/Shanghai" }],
+      ["/api/candidate/exams", [makeExam({})]],
+    ]);
+
+    renderWithProductTime(sessionUser("Admin"));
+
+    // 2026-05-01T00:00Z–01:00Z is 08:00–09:00 the same day in Asia/Shanghai;
+    // the raw UTC wall clock (00:00–01:00) is a distinct, fail-visible value.
+    expect(
+      await screen.findByText("2026-05-01 08:00 — 2026-05-01 09:00"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a candidate's exam window in the deployment zone when no organization zone is readable", async () => {
+    vi.stubEnv("VITE_APP_TIMEZONE", "America/New_York");
+    routeApiGet([["/api/candidate/exams", [makeExam({})]]]);
+
+    renderWithProductTime(sessionUser("Candidate"));
+
+    // 2026-05-01T00:00Z–01:00Z is 2026-04-30 20:00–21:00 in America/New_York
+    // (EDT): a different calendar day from the UTC and Asia/Shanghai renders.
+    expect(
+      await screen.findByText("2026-04-30 20:00 — 2026-04-30 21:00"),
+    ).toBeInTheDocument();
+    // The organization settings read is admin-gated (settings.view); a
+    // candidate's product time never depends on that endpoint.
+    expect(
+      getMock.mock.calls.some(([path]) =>
+        String(path).includes("/api/admin/settings"),
+      ),
+    ).toBe(false);
   });
 });

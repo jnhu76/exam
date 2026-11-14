@@ -1913,6 +1913,13 @@ const zhCN = {
         afterGrading: "评分完成后公布",
         manualPublication: "管理员手动公布",
         timeInvalid: "结束时间必须晚于开始时间",
+        timeZoneHint: "以下时间按 {{timeZone}} 时区填写与保存。",
+        timeZoneLoading: "正在读取组织时区，读取完成后即可填写排期。",
+        scheduleDstGap:
+          "该时间在 {{timeZone}} 的夏令时切换中不存在，请选择其他时间。",
+        scheduleDstAmbiguous:
+          "该时间在 {{timeZone}} 的夏令时回拨中出现两次，无法唯一确定，请调整时间。",
+        scheduleInvalid: "请输入有效的日期和时间。",
         scoreMismatch: "总分与题目分值之和不匹配（应为 {{score}}）",
         passingScoreExceeds: "及格分不能超过总分（{{passing}} > {{total}}）",
       },
