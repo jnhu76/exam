@@ -232,9 +232,14 @@ No business schema or data is touched by either step. A bare
   (1 s→10 s backoff, 60 s max elapsed) bound the outage; on queue
   overflow data is dropped, never does the collector block the app (its
   OTLP receiver is fire-and-forget from the app's perspective).
-- **Shutdown**: telemetry flush is a bounded term appended to the #351
-  shutdown budget (3 s race, never extends exit, never changes the exit
-  code). `stop_grace_period: 45s` is untouched.
+- **Shutdown**: telemetry shutdown is a bounded term appended to the
+  #351 shutdown budget — ONE 3 s deadline shared by every provider face
+  from the moment shutdown starts (pinned by
+  `apps/api/src/telemetry/telemetryShutdownSlowReceiver.test.ts`:
+  against a collector that accepts but never answers, both faces export
+  immediately and the whole composition returns at ≈3 s, never two
+  serial 3 s bounds); never extends exit, never changes the exit code.
+  `stop_grace_period: 45s` is untouched.
 - Readiness/alerting authority stays with `probeApplicationReadiness`
   and the `operability.*` stdout events — stopping every observability
   container does not change `/api/ready` or alert transitions.

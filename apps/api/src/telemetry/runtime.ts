@@ -82,10 +82,14 @@ interface DbTelemetryHandle {
  */
 
 /**
- * Shutdown flush budget. One best-effort term appended to the #351 shutdown
- * sequence (loop 8s + audit 10s + DB 10s + exit assist 2s + this bound);
- * the flush runs concurrently AFTER app.close() settles, and the race bound
- * keeps a stuck exporter from extending the bounded shutdown.
+ * Shutdown budget. ONE deadline shared by every telemetry shutdown face —
+ * flush, trace-face provider shutdown, metric-face provider shutdown —
+ * counted from the moment {@link shutdownTelemetry} starts (R5 review: two
+ * serial bounds of this size let a collector that accepts but never answers
+ * delay the metric face's final export to t+3 s and return at t+6 s). One
+ * best-effort term appended to the #351 shutdown sequence (loop 8s + audit
+ * 10s + DB 10s + exit assist 2s + this bound); the shared race keeps a
+ * stuck exporter from extending the bounded shutdown.
  */
 const SHUTDOWN_FLUSH_TIMEOUT_MS = 3_000;
 
@@ -245,23 +249,34 @@ export async function shutdownTelemetry(): Promise<void> {
   }
   setTransactionSeam(null);
 
-  // Flush the batch queue FIRST so the witness dump sees every span the
-  // process produced; both flush and shutdown are bounded races so a stuck
-  // exporter can never extend the #351 shutdown budget.
-  if (current.flush) {
-    try {
-      await Promise.race([
-        current.flush(),
-        new Promise<void>((resolve) =>
-          setTimeout(resolve, SHUTDOWN_FLUSH_TIMEOUT_MS).unref(),
-        ),
-      ]);
-    } catch {
-      // Keep shutting down; the dump writes whatever landed.
-    }
-  }
+  // ONE shared deadline for every shutdown face, counted from the moment
+  // shutdown starts (R5 review: the former structure raced TWO serial
+  // SHUTDOWN_FLUSH_TIMEOUT_MS bounds — flush first, then sdk.shutdown — so
+  // a collector that accepts but never answers delayed the metric face's
+  // final export to t+3 s and returned at t+6 s). Every face now starts
+  // together and the whole composition is bounded by one budget — the 3 s
+  // figure the operations runbook states for the telemetry term.
+  const deadline = Date.now() + SHUTDOWN_FLUSH_TIMEOUT_MS;
+  const deadlineRace = (work: Promise<void>): Promise<void> =>
+    Promise.race([
+      work,
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, Math.max(0, deadline - Date.now())).unref(),
+      ),
+    ]);
 
   if (current.memoryExporter) {
+    // Witness leg (memory exporter mode): flush the batch queue FIRST so
+    // the dump sees every span the process produced, then write the dump.
+    // This mode has no metric face (the periodic reader exists only on the
+    // otlp path), so this sequencing cannot starve another face.
+    if (current.flush) {
+      try {
+        await deadlineRace(current.flush());
+      } catch {
+        // Keep shutting down; the dump writes whatever landed.
+      }
+    }
     writeMemoryDumpIfConfigured(
       current.memoryExporter.getRetainedSpans(),
       current.memoryDumpFile,
@@ -269,12 +284,11 @@ export async function shutdownTelemetry(): Promise<void> {
   }
 
   try {
-    await Promise.race([
-      current.sdk.shutdown(),
-      new Promise<void>((resolve) =>
-        setTimeout(resolve, SHUTDOWN_FLUSH_TIMEOUT_MS).unref(),
-      ),
-    ]);
+    // SDK leg: composeSdkShutdown starts every face at once (the trace
+    // face's provider shutdown performs the batch drain itself — no
+    // separate trace flush is queued ahead of the metric face's final
+    // export); the race bounds the composition by the shared deadline.
+    await deadlineRace(current.sdk.shutdown());
   } catch {
     // A shutdown/flush failure is telemetry-internal; business shutdown
     // semantics (exit code, timing) are untouched (ADR-028 D1).
