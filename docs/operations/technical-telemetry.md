@@ -189,17 +189,33 @@ Telemetry rollback is configuration-only, in two independent steps:
 #   .env.production: remove/comment TELEMETRY_ENABLED, TELEMETRY_EXPORTER,
 #   TELEMETRY_OTLP_ENDPOINT — then recreate the app container.
 
-# Observability stack down (independent of the app):
+# Observability stack down (scoped: stops ONLY the observability
+# containers — the app/web/db/redis services and the shared compose
+# network keep running, and the observability data volumes are retained
+# for re-enable; verified against compose down [SERVICES] semantics):
 docker compose --env-file .env.production \
   -f docker-compose.yml \
   -f deploy/observability/docker-compose.observability.yml \
-  --profile observability down
+  down otelcol tempo prometheus loki grafana
+
+# With the file-log ingestion leg (§2.1) enabled, also stop its
+# collector in the same scoped way:
+docker compose --env-file .env.production \
+  -f docker-compose.yml \
+  -f deploy/observability/docker-compose.observability.yml \
+  -f deploy/observability/docker-compose.observability.logs.yml \
+  down otelcol-logs
 ```
 
 Disabling only the file-log ingestion leg (§2.1, PENDING VERIFICATION)
-is equally independent: bring the stack down WITHOUT the
-`observability-logs` profile (recreate with §2's command) — the
-`otelcol-logs` container stops and nothing app-facing changes.
+is equally independent: run the scoped `down otelcol-logs` command
+above (never a whole-project `down`, which would also stop the
+business services) — nothing app-facing changes. Re-enable with §2's
+`up` command.
+
+A whole-project `down` (the same `-f` list WITHOUT the trailing
+service names) is the FULL deployment teardown, not a telemetry
+rollback — use it only when the business stack should stop too.
 
 No business schema or data is touched by either step. A bare
 `docker compose --env-file .env.production -f docker-compose.yml up -d`
