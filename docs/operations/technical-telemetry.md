@@ -193,9 +193,12 @@ value itself.
 
 ## 3. Rollback / disable
 
-Telemetry rollback is configuration-only, in two independent steps:
+Telemetry rollback is configuration-only, in two independent steps. Use
+the same Compose project name you used to start the deployment.
 
 ```bash
+PROJECT=exam-prod  # use the project's actual name throughout this section
+
 # App export off (the app returns to the On/no-export posture; the
 # offline contract is fully restored when TELEMETRY_ENABLED is cleared):
 #   .env.production: remove/comment TELEMETRY_ENABLED, TELEMETRY_EXPORTER,
@@ -205,14 +208,14 @@ Telemetry rollback is configuration-only, in two independent steps:
 # containers — the app/web/db/redis services and the shared compose
 # network keep running, and the observability data volumes are retained
 # for re-enable; verified against compose down [SERVICES] semantics):
-docker compose --env-file .env.production \
+docker compose -p "$PROJECT" --env-file .env.production \
   -f docker-compose.yml \
   -f deploy/observability/docker-compose.observability.yml \
   down otelcol tempo prometheus loki grafana
 
 # With the file-log ingestion leg (§2.1) enabled, also stop its
 # collector in the same scoped way:
-docker compose --env-file .env.production \
+docker compose -p "$PROJECT" --env-file .env.production \
   -f docker-compose.yml \
   -f deploy/observability/docker-compose.observability.yml \
   -f deploy/observability/docker-compose.observability.logs.yml \
@@ -250,24 +253,34 @@ project name (`-p` / `COMPOSE_PROJECT_NAME`, the same authority the §2.1
 logs selector derives from) substitutes its own value:
 
 ```bash
-PROJECT=exam-prod
-# expect the "all removed" branch: no observability container — running
-# OR stopped — remains under this deployment's project label:
-docker ps -a \
-  --filter "label=com.docker.compose.project=${PROJECT}" \
-  --format '{{.Label "com.docker.compose.service"}}' \
-  | grep -E '^(otelcol|otelcol-logs|tempo|prometheus|loki|grafana)$' \
-  && echo "observability containers still present" \
-  || echo "observability containers: all removed (including stopped)"
-# expect one line per business service naming a running container — a
-# service with no line is NOT running and must be investigated:
-for svc in app web db redis; do
-  printf '%s: ' "$svc"
-  docker ps \
+# For a full observability rollback, verify no collector or backend remains
+# and confirm this project's business services are still running.
+verify_telemetry_rollback() {
+  local services running svc failed=0
+  services=$(docker ps -a \
     --filter "label=com.docker.compose.project=${PROJECT}" \
-    --filter "label=com.docker.compose.service=${svc}" \
-    --format '{{.Names}} {{.Status}}'
-done
+    --format '{{.Label "com.docker.compose.service"}}') || return 1
+  if grep -Ex 'otelcol|otelcol-logs|tempo|prometheus|loki|grafana' <<< "$services"; then
+    echo "observability containers still present"
+    failed=1
+  else
+    echo "observability containers: all removed (including stopped)"
+  fi
+
+  running=$(docker ps \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --format '{{.Label "com.docker.compose.service"}}') || return 1
+  for svc in app web db "$@"; do
+    if ! grep -Fxq -- "$svc" <<< "$running"; then
+      echo "$svc is not running"
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
+verify_telemetry_rollback
+# If the deployment uses the redis profile, run: verify_telemetry_rollback redis
 ```
 
 No business schema or data is touched by either step. A bare
