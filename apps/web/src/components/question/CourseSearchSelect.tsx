@@ -1,15 +1,20 @@
-import { useState, useRef, useCallback, useEffect, useId } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandItem,
+} from "@/components/ui/command";
 import { useDataViewTextCommit } from "@/hooks/useDataViewTextCommit";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 
 /** A single course row from the API. */
@@ -46,8 +51,11 @@ const SEARCH_PAGE_SIZE = 100;
  * `hooks/useDataViewTextCommit` (docs/standards/ui-system.md §Toolbar filters);
  * this component owns only what a committed term MEANS: the remote query and
  * its query ownership. Unlike the toolbar search, blur and Enter do NOT flush
- * the pending commit — Enter activates the highlighted option and blur inside
- * the popover is not a commit action.
+ * the pending commit — Enter activates the highlighted option (owned by cmdk)
+ * and blur inside the popover is not a commit action. While a term is pending
+ * (from its first keystroke until its query settles) the stale options are
+ * disabled, so Enter stays inert instead of picking a stale pre-highlighted
+ * course or cancelling the pending search.
  *
  * INVARIANT: only the most recently issued query (latest seq) may update
  * results, truncation, loading, or failure fallback. Typing a new term,
@@ -56,10 +64,12 @@ const SEARCH_PAGE_SIZE = 100;
  * pending debounced commit, so neither a stale response nor a stale term can
  * land inside a newer scope or query.
  *
- * Keyboard interaction follows the WAI-ARIA combobox/listbox pattern:
- * ArrowDown/ArrowUp move the active option, Home/End jump to first/last,
- * Enter selects, Escape closes without selecting. Keys while an IME
- * composition is active belong to the IME and never reach navigation.
+ * The server decides hits and their order: with `shouldFilter={false}` cmdk
+ * renders the results verbatim (no client-side literal matching) and owns the
+ * combobox keyboard interaction (active item, Arrow/Home/End navigation,
+ * Enter-to-select, IME composition guard, scrolling, and the
+ * input/listbox/option ARIA wiring). The form value is written only on an
+ * explicit selection (click or Enter).
  */
 export function CourseSearchSelect({
   courses: initialCourses,
@@ -68,28 +78,14 @@ export function CourseSearchSelect({
   placeholder,
 }: CourseSearchSelectProps) {
   const { t } = useTranslation();
-  const generatedId = useId();
-  const listboxId = `course-search-listbox-${generatedId}`;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CourseRow[]>(initialCourses);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
   const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
-  const focusTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
   // Query ownership token: see the INVARIANT in the component docstring.
   const searchSeq = useRef(0);
-
-  // The commit hook cancels its own timer on unmount; only the popover focus
-  // delay needs manual teardown.
-  useEffect(() => {
-    return () => {
-      if (focusTimeout.current) clearTimeout(focusTimeout.current);
-    };
-  }, []);
 
   // Derive the selected course label: prefer the cached selected course (which
   // may come from a remote search), then fall back to initialCourses.
@@ -97,22 +93,6 @@ export function CourseSearchSelect({
     selectedCourse?.id === value
       ? selectedCourse.name
       : (initialCourses.find((c) => c.id === value)?.name ?? "");
-
-  // Reset the active index when the result set changes, the popover opens or
-  // closes, or a new value is selected.
-  useEffect(() => {
-    setActiveIndex(-1);
-  }, [results, open, value]);
-
-  // Scroll the active option into view when it changes.
-  useEffect(() => {
-    if (activeIndex >= 0 && listRef.current) {
-      const el = listRef.current.querySelector(
-        `[data-active="true"]`,
-      ) as HTMLElement | null;
-      el?.scrollIntoView({ block: "nearest" });
-    }
-  }, [activeIndex]);
 
   /** Fetch courses matching the search term; see the ownership INVARIANT. */
   const doSearch = useCallback(
@@ -171,7 +151,6 @@ export function CourseSearchSelect({
    * debounced commit and, via doSearch(""), invalidates in-flight queries. */
   const closeAndReset = useCallback(() => {
     commit.clear();
-    setActiveIndex(-1);
     setOpen(false);
   }, [commit]);
 
@@ -181,98 +160,31 @@ export function CourseSearchSelect({
       setSelectedCourse(course);
       onChange(course.id);
       commit.clear();
-      setActiveIndex(-1);
       setOpen(false);
     },
     [onChange, commit],
-  );
-
-  /** Move the active index clamped to [0, results.length). */
-  const moveActive = useCallback(
-    (delta: number) => {
-      setActiveIndex((prev) => {
-        const next = prev + delta;
-        return Math.max(0, Math.min(next, results.length - 1));
-      });
-    },
-    [results.length],
   );
 
   /** Route input through the shared commit owner. An empty term is a
    * deliberate clear: it commits "" immediately (no debounce wait). A
    * non-empty term schedules the debounced commit AND invalidates in-flight
    * queries right away, so an older response can never land inside this
-   * term's debounce window. */
+   * term's debounce window. Turning `loading` on at input time also starts
+   * the pending window below one keystroke earlier than the request itself:
+   * the still-rendered list is stale from now until the term's query
+   * settles. */
   const handleSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const term = e.target.value;
+    (term: string) => {
       if (!term.trim()) {
         commit.clear();
         return;
       }
+      setLoading(true);
       searchSeq.current += 1;
       commit.change(term);
     },
     [commit],
   );
-
-  // Focus the search input when the popover opens.
-  useEffect(() => {
-    if (open && inputRef.current) {
-      // Small delay to let the popover animation complete.
-      focusTimeout.current = setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [open]);
-
-  /** Handle keyboard events on the search input (combobox). */
-  const handleInputKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      // IME composition: Enter confirms the composition and Escape cancels it
-      // — these keys belong to the IME, not to list navigation. keyCode 229
-      // is the legacy composition marker.
-      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-      if (!open) return;
-
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          moveActive(1);
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          moveActive(-1);
-          break;
-        case "Home":
-          e.preventDefault();
-          setActiveIndex(results.length > 0 ? 0 : -1);
-          break;
-        case "End":
-          e.preventDefault();
-          setActiveIndex(results.length > 0 ? results.length - 1 : -1);
-          break;
-        case "Enter": {
-          e.preventDefault();
-          const active = results[activeIndex];
-          if (active) selectCourse(active);
-          break;
-        }
-        case "Escape":
-          e.preventDefault();
-          closeAndReset();
-          break;
-      }
-    },
-    [open, activeIndex, results, moveActive, selectCourse, closeAndReset],
-  );
-
-  function optionId(courseId: string) {
-    return `${listboxId}-option-${courseId}`;
-  }
-
-  const activeDescendant =
-    activeIndex >= 0 && activeIndex < results.length
-      ? optionId(results[activeIndex]!.id)
-      : undefined;
 
   return (
     <Popover
@@ -285,7 +197,6 @@ export function CourseSearchSelect({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={t("admin.forms.question.course")}
           className="w-full justify-between font-normal"
@@ -303,73 +214,67 @@ export function CourseSearchSelect({
       <PopoverContent
         className="w-[var(--radix-popover-trigger-width)] p-0"
         align="start"
+        onEscapeKeyDown={(e) => {
+          // Escape during an IME composition cancels the candidate panel —
+          // the key belongs to the IME, so keep the popover open (Radix hands
+          // the native KeyboardEvent here). cmdk applies the same guard to
+          // its own navigation keys.
+          if (e.isComposing || e.keyCode === 229) {
+            e.preventDefault();
+          }
+        }}
       >
-        <div className="flex items-center border-b px-3">
-          <AppIcon
-            icon={Search}
-            size="inline"
-            className="mr-2 shrink-0 opacity-50"
-          />
-          <Input
-            ref={inputRef}
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={open}
-            aria-controls={listboxId}
-            aria-activedescendant={activeDescendant}
+        <Command shouldFilter={false} label={t("admin.forms.question.course")}>
+          <CommandInput
             value={search}
-            onChange={handleSearchChange}
-            onKeyDown={handleInputKeyDown}
+            onValueChange={handleSearchChange}
             placeholder={t("admin.forms.question.courseSearchPlaceholder")}
-            className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
           />
-        </div>
-        <div
-          ref={listRef}
-          id={listboxId}
-          role="listbox"
-          aria-label={t("admin.forms.question.course")}
-          className="max-h-[300px] overflow-y-auto"
-        >
-          {loading && results.length === 0 && (
-            <div className="py-6 text-center type-secondary">
-              {t("admin.forms.question.courseSearching")}
-            </div>
-          )}
-          {!loading && results.length === 0 && (
-            <div className="py-6 text-center type-secondary">
-              {t("admin.forms.question.courseNoResults")}
-            </div>
-          )}
-          {results.map((c, i) => {
-            const isActive = i === activeIndex;
-            const isSelected = c.id === value;
-            return (
-              <div
-                key={c.id}
-                id={optionId(c.id)}
-                role="option"
-                aria-selected={isSelected}
-                data-active={isActive}
-                onClick={() => selectCourse(c)}
-                className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
-              >
-                <AppIcon
-                  icon={Check}
-                  size="inline"
-                  className={isSelected ? "opacity-100" : "opacity-0"}
-                />
-                <span className="flex-1 truncate">{c.name}</span>
-                <span className="type-metadata">{c.code}</span>
+          <CommandList label={t("admin.forms.question.course")}>
+            {loading && results.length === 0 && (
+              <div className="py-6 text-center type-secondary">
+                {t("admin.forms.question.courseSearching")}
               </div>
-            );
-          })}
-        </div>
-        {truncated && (
-          <div role="status" className="border-t px-3 py-2 type-metadata">
-            {t("admin.forms.question.courseTruncatedHint")}
-          </div>
-        )}
+            )}
+            {!loading && results.length === 0 && (
+              <div className="py-6 text-center type-secondary">
+                {t("admin.forms.question.courseNoResults")}
+              </div>
+            )}
+            {results.map((c) => {
+              const isSelected = c.id === value;
+              return (
+                <CommandItem
+                  key={c.id}
+                  value={c.id}
+                  // INVARIANT: options are selectable only when they reflect
+                  // the current query. From the first keystroke of a new
+                  // term until its query settles, `loading` is true and the
+                  // stale options are disabled — cmdk keeps keyboard focus
+                  // on the input, so Enter cannot pick a stale
+                  // pre-highlighted course, close the popover, or cancel the
+                  // pending search.
+                  disabled={loading}
+                  onSelect={() => selectCourse(c)}
+                  className="cursor-pointer px-3 py-2"
+                >
+                  <AppIcon
+                    icon={Check}
+                    size="inline"
+                    className={isSelected ? "opacity-100" : "opacity-0"}
+                  />
+                  <span className="flex-1 truncate">{c.name}</span>
+                  <span className="type-metadata">{c.code}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandList>
+          {truncated && (
+            <div role="status" className="border-t px-3 py-2 type-metadata">
+              {t("admin.forms.question.courseTruncatedHint")}
+            </div>
+          )}
+        </Command>
       </PopoverContent>
     </Popover>
   );

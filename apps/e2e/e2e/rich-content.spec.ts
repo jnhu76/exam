@@ -328,7 +328,19 @@ async function setupProsePlusFormula(
   await page.waitForURL(/\/admin\/questions\/new/);
   await page.getByRole("button", { name: "所属课程" }).click();
   await page.getByPlaceholder("搜索课程名称或代码...").fill("基础安全培训");
-  await page.getByRole("option", { name: "基础安全培训" }).click();
+  // Keyboard path through the cmdk combobox. The seed has exactly one course
+  // matching this term, so once the debounced remote search lands the list
+  // narrows to a single option. cmdk does not pre-highlight replaced
+  // results, so ArrowDown activates that option and Enter commits it.
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    page.getByRole("option", { name: "基础安全培训" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "所属课程" })).toContainText(
+    "基础安全培训",
+  );
   await pickSelect(page, "题目类型", "文本作答题");
   const PROMPT = `${tag}-${STAMP}`;
   await page.getByPlaceholder("输入题目内容").fill(PROMPT);

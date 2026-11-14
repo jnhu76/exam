@@ -13,6 +13,12 @@ import { CourseSearchSelect } from "./CourseSearchSelect";
 /**
  * CourseSearchSelect — keyboard navigation, search purity, stale-response
  * protection, truncation disclosure, mouse selection, and a11y coverage.
+ *
+ * The combobox interaction (active option, Arrow/Home/End navigation,
+ * Enter-to-select, IME guard, ARIA wiring) is owned by cmdk; these tests
+ * pin it through public ARIA contracts — roles, accessible names, and the
+ * input's aria-activedescendant → option id reference — never cmdk-private
+ * markers.
  */
 
 const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }));
@@ -94,7 +100,26 @@ async function openPopover(user: ReturnType<typeof userEvent.setup>) {
 
 /** Find the combobox input (the search field, not the trigger button). */
 function getComboboxInput(): HTMLElement {
-  return screen.getByRole("combobox");
+  return screen.getByRole("combobox", { name: "所属课程" });
+}
+
+/** Assert the input's aria-activedescendant points at the given option. */
+function expectActiveOption(input: HTMLElement, option: HTMLElement) {
+  expect(option.id).not.toBe("");
+  expect(input).toHaveAttribute("aria-activedescendant", option.id);
+}
+
+/** Fire a keydown that the platform marks as belonging to an IME
+ * composition (isComposing=true / legacy keyCode 229). */
+function fireComposingKey(key: "Enter" | "Escape", target: HTMLElement) {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, "isComposing", { value: true });
+  Object.defineProperty(event, "keyCode", { value: 229 });
+  fireEvent(target, event);
 }
 
 describe("CourseSearchSelect", () => {
@@ -112,19 +137,30 @@ describe("CourseSearchSelect", () => {
     ).toBeInTheDocument();
   });
 
-  it("ArrowDown followed by Enter selects a result", async () => {
+  it("Enter selects the pre-highlighted first option; ArrowDown then Enter selects the next", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderSelect(makeCourses(3), { onChange });
 
     await openPopover(user);
-    expect(
-      await screen.findByRole("option", { name: /课程0/ }),
-    ).toBeInTheDocument();
+    await screen.findByRole("option", { name: /课程0/ });
+    const input = getComboboxInput();
 
-    // ArrowDown moves to first option (index 0), Enter selects it.
-    await user.keyboard("{ArrowDown}{Enter}");
+    // The list mounts with the first option active (highlight ≠ selection);
+    // Enter activates it and writes the form value exactly once.
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith("c0");
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    });
+
+    // Re-open: ArrowDown moves the active option to the second row.
+    await openPopover(user);
+    await screen.findByRole("option", { name: /课程0/ });
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith("c1");
   });
 
   it("ArrowUp, Home, and End update the active option correctly", async () => {
@@ -135,33 +171,30 @@ describe("CourseSearchSelect", () => {
     await screen.findByRole("option", { name: /课程0/ });
     const input = getComboboxInput();
 
-    // ArrowDown twice → index 1
+    // On mount cmdk marks the first option as the active one (highlight,
+    // not a form selection).
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: /课程0/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    });
+
+    // ArrowDown twice → second option.
     await user.keyboard("{ArrowDown}{ArrowDown}");
-    expect(input).toHaveAttribute(
-      "aria-activedescendant",
-      expect.stringContaining("c1"),
-    );
+    expectActiveOption(input, screen.getByRole("option", { name: /课程2/ }));
 
-    // End → index 3
+    // End → last option.
     await user.keyboard("{End}");
-    expect(input).toHaveAttribute(
-      "aria-activedescendant",
-      expect.stringContaining("c3"),
-    );
+    expectActiveOption(input, screen.getByRole("option", { name: /课程3/ }));
 
-    // Home → index 0
+    // Home → first option.
     await user.keyboard("{Home}");
-    expect(input).toHaveAttribute(
-      "aria-activedescendant",
-      expect.stringContaining("c0"),
-    );
+    expectActiveOption(input, screen.getByRole("option", { name: /课程0/ }));
 
-    // ArrowUp from 0 should clamp to 0 (not go negative)
+    // ArrowUp from 0 should clamp to 0 (not go negative).
     await user.keyboard("{ArrowUp}");
-    expect(input).toHaveAttribute(
-      "aria-activedescendant",
-      expect.stringContaining("c0"),
-    );
+    expectActiveOption(input, screen.getByRole("option", { name: /课程0/ }));
   });
 
   it("Escape closes the popover without selecting", async () => {
@@ -205,6 +238,37 @@ describe("CourseSearchSelect", () => {
     expect(screen.queryByText("课程0")).not.toBeInTheDocument();
     expect(screen.queryByText("课程1")).not.toBeInTheDocument();
     expect(screen.queryByText("课程2")).not.toBeInTheDocument();
+  });
+
+  it("server results that do not literally match the query are kept in full, in server order", async () => {
+    const user = userEvent.setup();
+    renderSelect(makeCourses(3));
+
+    await openPopover(user);
+    await screen.findByRole("option", { name: /课程0/ });
+
+    // The term never appears literally in any returned name: the server
+    // decides hits and order, so the list must not be re-filtered, re-ranked,
+    // or partially dropped by client-side literal matching.
+    apiGet.mockResolvedValueOnce({
+      items: [
+        { id: "s1", name: "安全生产", code: "SA" },
+        { id: "s2", name: "进阶实操", code: "SB" },
+        { id: "s3", name: "考核认证", code: "SC" },
+      ],
+      total: 3,
+      totalPages: 1,
+    } satisfies ListResponse);
+    await user.type(getComboboxInput(), "甲");
+
+    await waitFor(() => {
+      expect(screen.getByText("考核认证")).toBeInTheDocument();
+    });
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(3);
+    expect(options[0]).toHaveTextContent("安全生产");
+    expect(options[1]).toHaveTextContent("进阶实操");
+    expect(options[2]).toHaveTextContent("考核认证");
   });
 
   it("selected remote course label persists after popover closes", async () => {
@@ -258,9 +322,10 @@ describe("CourseSearchSelect", () => {
     );
   });
 
-  it("zero-result remote search displays the no-results state", async () => {
+  it("zero-result search shows the no-results state and Enter selects nothing", async () => {
     const user = userEvent.setup();
-    renderSelect(makeCourses(2));
+    const onChange = vi.fn();
+    renderSelect(makeCourses(2), { onChange });
 
     await openPopover(user);
     apiGet.mockResolvedValueOnce({
@@ -273,6 +338,11 @@ describe("CourseSearchSelect", () => {
     await waitFor(() => {
       expect(screen.getByText("未找到匹配课程")).toBeInTheDocument();
     });
+
+    // Enter on an empty list must not select anything, close, or submit.
+    await user.keyboard("{Enter}");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
   });
 
   it("clearing the search invalidates an older unresolved request", async () => {
@@ -398,52 +468,68 @@ describe("CourseSearchSelect", () => {
     });
   });
 
+  it("courses sharing a name are distinguished by id", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const sameName = [
+      { id: "first", name: "同名课程", code: "X1" },
+      { id: "second", name: "同名课程", code: "X2" },
+    ];
+    renderSelect(sameName, { onChange });
+
+    await openPopover(user);
+    const options = await screen.findAllByRole("option", {
+      name: /同名课程/,
+    });
+    expect(options).toHaveLength(2);
+    await user.click(options[1]!);
+
+    expect(onChange).toHaveBeenCalledWith("second");
+  });
+
   it("accessible relationships and roles are present", async () => {
     const user = userEvent.setup();
     renderSelect(makeCourses(2));
 
     await openPopover(user);
-    const input = getComboboxInput();
 
-    // The search input is the combobox with the ARIA attributes.
-    expect(input).toHaveAttribute("role", "combobox");
+    // The search input is the editable combobox, named after the field.
+    const input = getComboboxInput();
     expect(input).toHaveAttribute("aria-autocomplete", "list");
     expect(input).toHaveAttribute("aria-expanded", "true");
 
+    // The listbox is labelled and referenced from the input by id.
     const listbox = screen.getByRole("listbox", { name: "所属课程" });
+    expect(listbox.id).not.toBe("");
     expect(input).toHaveAttribute("aria-controls", listbox.id);
 
-    // The listbox ID must be unique (generated via useId).
-    expect(listbox.id).toMatch(/^course-search-listbox-/);
-
-    const options = screen.getAllByRole("option");
-    for (const opt of options) {
-      expect(opt).toHaveAttribute("id");
-      expect(opt.id).toMatch(/-option-/);
-    }
+    // On mount the first option is the active one; after navigation the
+    // input references the active option by its element id.
+    expect(screen.getByRole("option", { name: /课程0/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.keyboard("{ArrowDown}");
+    expectActiveOption(input, screen.getByRole("option", { name: /课程1/ }));
 
     // The trigger button should NOT have combobox role.
     const trigger = screen.getByRole("button", { name: "所属课程" });
     expect(trigger).not.toHaveAttribute("role", "combobox");
   });
 
-  it("active option has visible highlight via data attribute", async () => {
+  it("trigger aria-haspopup agrees with the popover it controls", async () => {
     const user = userEvent.setup();
-    renderSelect(makeCourses(3));
+    renderSelect(makeCourses(2));
+    const trigger = screen.getByRole("button", { name: "所属课程" });
 
     await openPopover(user);
-    await screen.findByRole("option", { name: /课程0/ });
-
-    // ArrowDown to first option — it should have data-active="true".
-    await user.keyboard("{ArrowDown}");
-    const firstOption = screen.getByRole("option", { name: /课程0/ });
-    expect(firstOption).toHaveAttribute("data-active", "true");
-
-    // ArrowDown to second option.
-    await user.keyboard("{ArrowDown}");
-    const secondOption = screen.getByRole("option", { name: /课程1/ });
-    expect(secondOption).toHaveAttribute("data-active", "true");
-    expect(firstOption).not.toHaveAttribute("data-active", "true");
+    // Radix owns the trigger wiring: it renders a dialog popup, so the token
+    // must be the Radix default — not a hand-written "listbox" claim that
+    // contradicts the role of the element aria-controls points at.
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    const popup = screen.getByRole("dialog");
+    expect(popup.id).not.toBe("");
+    expect(trigger).toHaveAttribute("aria-controls", popup.id);
   });
 });
 
@@ -706,7 +792,68 @@ describe("CourseSearchSelect query ownership (controlled clock)", () => {
     expect(apiGet).not.toHaveBeenCalled();
   });
 
-  it("keys during IME composition are handed to the IME, not list navigation", async () => {
+  it("Enter inside the debounce window selects nothing and keeps the pending search", async () => {
+    vi.useFakeTimers(FAKE);
+    const onChange = vi.fn();
+    renderSelect(makeCourses(3), { onChange });
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    const input = getComboboxInput();
+
+    // Type a fresh term and press Enter BEFORE the 300ms commit: the stale
+    // list is still rendered, so Enter must be inert — no stale pre-highlight
+    // selection, no close, and the pending debounced search stays scheduled.
+    fireEvent.change(input, { target: { value: "甲" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    const response = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => response.promise);
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // Once the current query settles, its results are selectable again.
+    await settle(response, {
+      items: [{ id: "fresh-1", name: "新词结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("新词结果")).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("fresh-1");
+  });
+
+  it("Enter while the current request is in flight selects nothing from the stale list", async () => {
+    vi.useFakeTimers(FAKE);
+    const onChange = vi.fn();
+    renderSelect(makeCourses(3), { onChange });
+    fireEvent.click(screen.getByRole("button", { name: "所属课程" }));
+    const input = getComboboxInput();
+
+    const response = deferred<ListResponse>();
+    apiGet.mockImplementationOnce(() => response.promise);
+    fireEvent.change(input, { target: { value: "甲" } });
+    await advanceDebounce();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+
+    // The initial list is still rendered while the request is unresolved;
+    // Enter must not pick a stale option, close the popover, or invalidate
+    // the in-flight query.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    await settle(response, {
+      items: [{ id: "fresh-1", name: "在途结果", code: "NEW" }],
+      total: 1,
+      totalPages: 1,
+    });
+    expect(screen.getByText("在途结果")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keys during IME composition are handed to the IME, not selection or dismissal", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderSelect(makeCourses(3), { onChange });
@@ -715,23 +862,16 @@ describe("CourseSearchSelect query ownership (controlled clock)", () => {
     await screen.findByRole("option", { name: /课程0/ });
     const input = getComboboxInput();
 
-    // Highlight the first option so Enter would select it if not guarded.
-    await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("option", { name: /课程0/ })).toHaveAttribute(
-      "data-active",
-      "true",
-    );
-
     // Enter pressed while the IME is composing (keyCode 229 / isComposing):
-    // it confirms the composition text and must not select an option.
-    const composingEnter = new KeyboardEvent("keydown", {
-      key: "Enter",
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(composingEnter, "isComposing", { value: true });
-    Object.defineProperty(composingEnter, "keyCode", { value: 229 });
-    fireEvent(input, composingEnter);
+    // it confirms the composition text and must not select the highlighted
+    // option.
+    fireComposingKey("Enter", input);
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Escape while composing cancels the candidate panel — the popover must
+    // stay open and nothing may be selected.
+    fireComposingKey("Escape", input);
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
 
     // After composition, Enter selects the highlighted option normally.
