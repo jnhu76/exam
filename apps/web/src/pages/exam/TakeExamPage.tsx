@@ -1259,36 +1259,31 @@ export function TakeExamPage() {
     if (!viewRef.current?.canSave) return true;
 
     leaveIntentRef.current = true;
-    let decision: Promise<boolean> | null = null;
     try {
       const before = getSaveQueueSummary();
       if (before.unconfirmedIds.length === 0 && before.failedIds.length === 0) {
         return true;
       }
       setLeavePhase("saving");
-      decision = new Promise<boolean>((resolve) => {
+      const decision = new Promise<boolean>((resolve) => {
         resolveLeaveDecisionRef.current = resolve;
+        void flush().then((result) => {
+          // Cancellation can let another leave start before this flush ends.
+          if (resolveLeaveDecisionRef.current !== resolve) return;
+          if (
+            result.timedOut ||
+            result.pendingCount > 0 ||
+            result.failedQuestionIds.length > 0
+          ) {
+            setLeaveUnconfirmedCount(
+              result.pendingCount + result.failedQuestionIds.length,
+            );
+            setLeavePhase("confirm");
+            return;
+          }
+          resolve(ownsExit());
+        });
       });
-      void (async () => {
-        const result = await flush();
-        // The decision may already be settled: the deadline episode took
-        // ownership, the page unmounted, or the candidate chose to stay.
-        if (resolveLeaveDecisionRef.current === null) return;
-        if (
-          result.timedOut ||
-          result.pendingCount > 0 ||
-          result.failedQuestionIds.length > 0
-        ) {
-          setLeaveUnconfirmedCount(
-            result.pendingCount + result.failedQuestionIds.length,
-          );
-          setLeavePhase("confirm");
-          return;
-        }
-        // The business ACKs released the queue; only now decide the exit.
-        // Ownership may have moved while the flush was awaiting.
-        resolveLeaveDecisionRef.current(ownsExit());
-      })();
       const leave = await decision;
       // Final ownership gate: after the flush ACK or the candidate's explicit
       // abandon confirmation, and before the shell actually navigates. An
@@ -1494,10 +1489,8 @@ export function TakeExamPage() {
     }
     if (!stale()) {
       setDeadlineAutoSubmitting(false);
+      deadlineAutoSubmittingRef.current = false;
     }
-    // The ref mirror clears regardless: once this invocation's episode is
-    // over, exit requests must no longer be declined for it.
-    deadlineAutoSubmittingRef.current = false;
   }, [
     attemptId,
     flush,

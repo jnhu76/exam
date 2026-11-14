@@ -363,6 +363,48 @@ describe("controlled leave-page save (#971 F-01)", () => {
     expect(answerPostCalls()).toHaveLength(1);
   });
 
+  it("a cancelled leave's timeout cannot change the next leave confirmation", async () => {
+    apiGet.mockImplementation(async (path: string) => {
+      if (path.includes("/candidate/attempts/")) {
+        return snapshotWith([fillBlankQuestion("q1")]);
+      }
+      if (path.includes("/api/notifications/unread-count")) return { count: 0 };
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const ack = deferred<SaveAnswerResponseDTO>();
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) return ack.promise;
+      return { ok: true, serverNow: NOW };
+    });
+
+    renderShell();
+    const input = await screen.findByLabelText("第1空答案");
+    vi.useFakeTimers();
+    fireEvent.change(input, { target: { value: "答案甲" } });
+    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+      clickDialogButton("leave-saving-dialog", "留在本页");
+    });
+    fireEvent.click(screen.getByText("去设置"));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(screen.getByTestId("leave-saving-dialog")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("leave-abandon-dialog"),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      ack.resolve(acceptedSave());
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/settings",
+    );
+    expect(answerPostCalls()).toHaveLength(1);
+  });
+
   it("a failed save keeps the page: the abandon dialog names the risk explicitly; 留在本页 stays with the retry entry, and a later confirmed exit succeeds after the retry ACK", async () => {
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
