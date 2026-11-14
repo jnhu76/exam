@@ -38,12 +38,14 @@
 # stamped unconditionally by the verified overlay, so enabling or
 # disabling this leg never recreates the app container.
 #
-# Selection is deployment-distinguishable: the tag pattern below matches
-# THIS deployment's compose container name (`exam-prod` project +
-# `{{.Name}}` tag → `/exam-prod-app-1`). A second Exam deployment on the
-# same host must set its own OBS_LOGS_TAG_PATTERN in its env file — the
-# default matches only the `exam-prod` project, so it would not ingest
-# this deployment's neighbor (and vice versa).
+# Selection is deployment-distinguishable BY CONSTRUCTION: the tag
+# pattern's default DERIVES from THIS deployment's compose project name
+# at interpolation time (`COMPOSE_PROJECT_NAME` — the base file pins
+# `name: exam-prod`, so the canonical deployment derives
+# `^/?exam-prod-app-1$`; a second same-host deployment runs under its own
+# project name and derives its own pattern — the two collectors can never
+# select each other's containers, with no mandatory env var). Override
+# OBS_LOGS_TAG_PATTERN only for non-standard tag shapes.
 #
 # Loki is NOT defined here: it stays in the verified overlay (the Grafana
 # datasource provisions a Loki target unconditionally, so keeping the
@@ -59,10 +61,12 @@ services:
     user: "0:0"
     environment:
       # Deployment-distinguishing tag filter (single default authority).
-      # `$$` renders a literal `$` so the composed pattern anchors the
-      # match end. Override per deployment in .env.production when the
-      # compose project is not `exam-prod` (see header).
-      OBS_LOGS_TAG_PATTERN: ${OBS_LOGS_TAG_PATTERN:-^/?exam-prod-app-1$}
+      # The default derives the project segment from THIS deployment's
+      # compose project name at interpolation time, so every deployment
+      # selects its own `app-1` container by default (see header). `$$`
+      # renders a literal `$` so the composed pattern anchors the match
+      # end. Override only for non-standard tag shapes.
+      OBS_LOGS_TAG_PATTERN: ${OBS_LOGS_TAG_PATTERN:-^/?${COMPOSE_PROJECT_NAME}-app-1$$}
     volumes:
       - ./deploy/observability/otelcol.logs.yaml:/etc/otelcol/config.yaml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro

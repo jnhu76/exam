@@ -125,11 +125,15 @@ docker run --rm -v "$(pwd)/deploy/observability/otelcol.yaml:/etc/otelcol/config
   root-side (not a WSL2/Docker Desktop lab where it is not), running
   the production Docker version.
 - The verified stack is already up per §2 (steps 0–2) and healthy.
-- Exactly one Exam deployment on the host uses the default pattern;
-  a second Exam deployment MUST set its own `OBS_LOGS_TAG_PATTERN`
-  (e.g. `^/?<its-project>-app-1$`) in its `.env.production` before
-  enabling its logs overlay, or it will ingest nothing (and its
-  neighbor with the default will not ingest it either).
+- The deployment's log selector is DERIVED from its own compose project
+  name at interpolation time: `OBS_LOGS_TAG_PATTERN` defaults to
+  `^/?${COMPOSE_PROJECT_NAME}-app-1$$`, so the canonical deployment
+  (`name: exam-prod` in the base file) derives `^/?exam-prod-app-1$`
+  and a second same-host deployment under a different project name
+  derives its own pattern — neither collector can select the other's
+  containers (verified by rendering two projects through Compose).
+  `OBS_LOGS_TAG_PATTERN` remains an explicit override for non-standard
+  tag shapes only.
 
 **Enable** (both profiles explicit; the file alone changes nothing —
 the service is behind the `observability-logs` profile):
@@ -142,10 +146,11 @@ docker compose --env-file .env.production \
   --profile observability --profile observability-logs up -d
 ```
 
-**Config validation** (no start required; the deployment default
-`^/?exam-prod-app-1$` is owned by the logs overlay. The collector-side
-config itself has a match-nothing env fallback `^$`, so a bare run
-without the env validates but collects nothing — never permissive):
+**Config validation** (no start required; the deployment default —
+`^/?<project>-app-1$`, derived from the compose project name — is owned
+by the logs overlay. The collector-side config itself has a
+match-nothing env fallback `^$`, so a bare run without the env validates
+but collects nothing — never permissive):
 
 ```bash
 docker run --rm -e OBS_LOGS_TAG_PATTERN='^/?exam-prod-app-1$' \
@@ -167,8 +172,9 @@ notes; all must pass before the leg is considered enabled):**
    missing `attrs.tag` never matches (fail-closed).
 3. **Same-host deployment isolation.** With a second Exam deployment
    (different compose project) running on the same host, its logs do
-   not appear in this deployment's Loki and vice versa — per-deployment
-   `OBS_LOGS_TAG_PATTERN` values keep the two collectors disjoint.
+   not appear in this deployment's Loki and vice versa — the per-project
+   derived defaults (or explicit overrides) keep the two collectors
+   disjoint.
 4. **Docker direct-read caveat acknowledged.** The ops notes record
    that the leg reads json-file storage against Docker's
    recommendation for external tools, the Docker version it was
@@ -222,6 +228,28 @@ business services) — nothing app-facing changes. Re-enable with §2's
 A whole-project `down` (the same `-f` list WITHOUT the trailing
 service names) is the FULL deployment teardown, not a telemetry
 rollback — use it only when the business stack should stop too.
+
+**Credential precondition.** Both scoped `down` commands interpolate
+the SAME merged compose files as `up`, so they require the same
+`.env.production` — including `OBS_GRAFANA_ADMIN_PASSWORD` (verified:
+without it, compose fails at the interpolation stage with `required
+variable OBS_GRAFANA_ADMIN_PASSWORD is required when the observability
+profile is enabled` before touching any container, because the overlay
+declares it with `:?`). `down` never uses the credential itself; if the
+password was removed from the env file, temporarily restore any
+placeholder value before running the rollback.
+
+**Verify the rollback actually removed the collectors** (plain docker —
+no compose interpolation involved):
+
+```bash
+# expect the "all removed" branch: no observability container is left
+docker ps --format '{{.Names}}' \
+  | grep -E 'otelcol|tempo|prometheus|loki|grafana' \
+  || echo "observability containers: all removed"
+# expect the business services still running (app/web/db/redis)
+docker ps --format '{{.Names}}\t{{.Status}}' | grep -E 'app|web|db|redis'
+```
 
 No business schema or data is touched by either step. A bare
 `docker compose --env-file .env.production -f docker-compose.yml up -d`
@@ -300,6 +328,6 @@ before raising.
 | --- | --- |
 | `telemetry.init_failed` in app stderr at boot | The guard pair: `TELEMETRY_EXPORTER=otlp` requires `TELEMETRY_OTLP_ENDPOINT` (and vice versa); also `exportIntervalMillis ≥ exportTimeoutMillis` reader bounds are code-owned |
 | No traces in Tempo | `docker logs otelcol` for exporter errors; confirm app env reached the container (`docker compose exec app printenv TELEMETRY_OTLP_ENDPOINT`) |
-| No logs in Loki | Expected with the logs leg disabled (§2.1, PENDING VERIFICATION). When the `observability-logs` overlay is enabled: host path `/var/lib/docker/containers` must be mounted read-only into `otelcol-logs` (real Linux Docker host); entries whose `attrs.tag` does not match `OBS_LOGS_TAG_PATTERN` are dropped by design — a same-host second Exam deployment must inject its own pattern |
+| No logs in Loki | Expected with the logs leg disabled (§2.1, PENDING VERIFICATION). When the `observability-logs` overlay is enabled: host path `/var/lib/docker/containers` must be mounted read-only into `otelcol-logs` (real Linux Docker host); entries whose `attrs.tag` does not match `OBS_LOGS_TAG_PATTERN` are dropped by design — each deployment's pattern is derived from its own compose project name (§2.1) |
 | No metrics in Prometheus | `http://otelcol:8889/metrics` (network-internal) should list `exam_loop_*` / `db_client_operation_duration_seconds_*`; check the `otelcol-exam-metrics` target at Prometheus `/targets` |
 | Grafana 403/locked out | `OBS_GRAFANA_ADMIN_PASSWORD` is required when the profile runs (compose fails fast without it); reset by clearing `data/observability/grafana` (loses dashboards) |
