@@ -4533,6 +4533,30 @@ function interferenceProblems({ load1, clockJumpMs = 0 }) {
 }
 
 /**
+ * §6.1 quiet-machine entry wait: the residual load of the previous segment
+ * (co-located runner) decays with the 1-min average, so poll within a
+ * bounded budget instead of deferring on our own tail — an immediate defer
+ * starved back-to-back units (deferrals >= 3 → attempt cap) with zero
+ * external interference. The entry criterion itself is unchanged: whatever
+ * load1 this returns still goes through interferenceProblems fail-closed.
+ */
+async function waitForQuietLoad1({
+  budgetMs = 5 * 60_000,
+  pollMs = 10_000,
+  now = () => Date.now(),
+  pause = (ms) => sleep(ms),
+  readLoad1 = () => Number(readFileSync("/proc/loadavg", "utf8").split(" ")[0]),
+} = {}) {
+  const deadline = now() + budgetMs;
+  let load1 = readLoad1();
+  while (!(load1 <= INTERFERENCE_ENTRY_LIMIT) && now() < deadline) {
+    await pause(pollMs);
+    load1 = readLoad1();
+  }
+  return load1;
+}
+
+/**
  * Gate item 3: prove the /proc channel can produce a valid first+last sample
  * pair BEFORE burning a segment. Spawns a throwaway probe process and runs
  * the real sampler against it.
@@ -5898,10 +5922,9 @@ async function cmdCampaign({ suite, concurrency }) {
         const st = units.get(unitKey);
         // Per-segment precheck: interference recheck before spawning; a
         // deferral does NOT burn an attempt, three consecutive deferrals
-        // starve the unit out.
-        const load1 = Number(
-          readFileSync("/proc/loadavg", "utf8").split(" ")[0],
-        );
+        // starve the unit out. waitForQuietLoad1 first rides out the
+        // previous segment's residual load within its budget.
+        const load1 = await waitForQuietLoad1();
         const interference = interferenceProblems({ load1 });
         if (interference.length > 0) {
           st.deferrals += 1;
@@ -6825,6 +6848,7 @@ export {
   SUITES,
   waitFirstProcSample,
   waitHttp,
+  waitForQuietLoad1,
   withAttemptSaveLock,
   workloadPlanProblems,
   WORKFLOW_ORDER,
