@@ -1,0 +1,153 @@
+{
+  "inputs": {
+    "segments.jsonl": {
+      "sha256": "5345a1a5457c81ceeb2966b1aa5b2a20fbcde58988f5b981974de7da882836ab",
+      "lines": 73
+    },
+    "campaign-summary.json": {
+      "sha256": "17af7cfa5bc120c50a1b7720c122b4bc0f8551a8f6e5536417acb2453192d5a9"
+    }
+  },
+  "totals": {
+    "segments": 73,
+    "valid": 8,
+    "invalid": 65
+  },
+  "bySuite": {
+    "pilot": {
+      "segments": 4,
+      "valid": 0,
+      "invalid": 4,
+      "invalidReasonCodes": {
+        "LOADAVG_IN_WINDOW_EXCEEDED": 4,
+        "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 4
+      }
+    },
+    "isolated": {
+      "segments": 51,
+      "valid": 0,
+      "invalid": 51,
+      "invalidReasonCodes": {
+        "CPU_PAIR_FAIL_CLOSED": 1,
+        "SEED_CONVERGE_DB_STARTING": 1,
+        "SEED_CONVERGE_DB_UNREACHABLE": 49
+      }
+    },
+    "knee": {
+      "segments": 1,
+      "valid": 1,
+      "invalid": 0,
+      "invalidReasonCodes": {}
+    },
+    "equivalence": {
+      "segments": 9,
+      "valid": 7,
+      "invalid": 2,
+      "invalidReasonCodes": {
+        "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 2
+      }
+    },
+    "probe-archive": {
+      "segments": 8,
+      "valid": 0,
+      "invalid": 8,
+      "invalidReasonCodes": {
+        "LOADAVG_IN_WINDOW_EXCEEDED": 8,
+        "ORACLE_VIOLATIONS": 2,
+        "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 8
+      }
+    }
+  },
+  "validSegmentsBySuiteWorkflowConfig": [
+    {
+      "suite": "equivalence",
+      "workflow": "mixed",
+      "config": "H0",
+      "n": 3,
+      "reps": [
+        "run1/round-1",
+        "run2/round-1",
+        "run3-partial/round-1"
+      ],
+      "medianCpuMsPerOp": 95.4286,
+      "medianP50Ms": 19.925,
+      "medianP95Ms": 1064.952,
+      "medianP99Ms": 1416.028,
+      "medianRssMb": 489.65
+    },
+    {
+      "suite": "equivalence",
+      "workflow": "mixed",
+      "config": "H1",
+      "n": 4,
+      "reps": [
+        "run1/round-1",
+        "run2/round-1",
+        "run3-partial/round-1",
+        "run3-partial/round-2"
+      ],
+      "medianCpuMsPerOp": 90.6857,
+      "medianP50Ms": 19.2695,
+      "medianP95Ms": 1067.5915,
+      "medianP99Ms": 1102.2894999999999,
+      "medianRssMb": 500.43
+    },
+    {
+      "suite": "knee",
+      "workflow": "mixed",
+      "config": "H1",
+      "n": 1,
+      "reps": [
+        "sweep-1"
+      ],
+      "medianCpuMsPerOp": 96.2619,
+      "medianP50Ms": 4963.399,
+      "medianP95Ms": 10858.279,
+      "medianP99Ms": 12168.209,
+      "medianRssMb": 2317.87
+    }
+  ],
+  "formalAggregate": {
+    "semantics": "aggregateCore (runner.js:256) over formal rounds only: paired relative delta vs the same-round same-workflow H1 baseline; baseline excluded from rows; cross-workflow pairing never happens",
+    "formalRoundSegmentsInPackage": 0,
+    "rows": [],
+    "exclusionBasis": {
+      "pilot": "PROTOCOL §3.4: pilot/ladder data never enters statistics",
+      "isolated": "as-built: cmdAggregate reads rounds/ only (runner.js:5201); campaign segments are outside rounds/",
+      "knee": "same as isolated; additionally §6.5(b) campaign aggregation path not landed (PROTOCOL-v3)",
+      "equivalence": "superseded interim registers (final h0-equivalence.json absent); §6.6-3 evidence, never a performance judgment channel",
+      "probe-archive": "round-0 probe/verify archives, interim evidence"
+    },
+    "note": "n=0 < 6 → every aggregate cell UNKNOWN (PROTOCOL §6.4); CI containing 0 must be reported INCONCLUSIVE, never 'zero cost'"
+  },
+  "campaignValidPaired": {
+    "mixed": 0,
+    "isolated": 0,
+    "knee": 0
+  },
+  "kneeRecon": {
+    "note": "single harness-valid knee gradient segment (recon; not a formal sampling unit — freeze.json absent, §6.5(b) not landed); no budget judgment",
+    "segments": [
+      {
+        "unit": "H1-c50",
+        "config": "H1",
+        "concurrency": 50,
+        "ops": 2100,
+        "errors": 0,
+        "cpuMsPerOp": 96.2619,
+        "p50Ms": 4963.399,
+        "p95Ms": 10858.279,
+        "p99Ms": 12168.209,
+        "rssMb": 2317.87,
+        "throughputOpsPerSec": 9.81,
+        "maxLoad1": 5.64,
+        "externalLoadIncrement": -1.16,
+        "expiredInProgressAtWindowEntry": 0
+      }
+    ]
+  },
+  "determinism": {
+    "note": "no wall-clock fields; output depends only on the two hashed inputs above; hash authority = system sha256sum binary",
+    "reproduceCommand": "node scripts/perf/otel-workflows/packaged-stats.mjs --check"
+  }
+}

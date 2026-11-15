@@ -1,8 +1,9 @@
 # GAPS-AND-PRIORITIES — 缺口五分类汇总与优先级排序
 
-- **产出**：覆盖矩阵综合员（收敛步骤）。输入与性质声明同 `COVERAGE-MATRIX.md` 文件头：静态清单 WORKFLOW-INVENTORY（@`1d689b4a`）+ ask 提供的三族运行时证据 JSON（转引，本步骤未重跑实验）；本次实际执行的验证仅为读清单、`grep W07`（确认编号空洞）与静态锚点 grep 抽查（见 COVERAGE-MATRIX 文件头）。
+- **产出**：覆盖矩阵综合员（收敛步骤）。输入与性质声明同 `COVERAGE-MATRIX.md` 文件头：静态清单 WORKFLOW-INVENTORY（@`1d689b4a`）+ ask 提供的三族运行时证据 JSON（转引，本步骤未重跑实验）；本次实际执行的验证仅为读清单、`grep W07`（确认编号空洞）与静态锚点 grep 抽查（见 COVERAGE-MATRIX 文件头）。（上为 v1 期口径；v3 修订轮的输入与验证见下方 v3 条目与 COVERAGE-MATRIX 文件头 v3 记录。）
 - **结论边界**：全部 gap 判定限定遥测 On 态形态（H2/H3/H4）。生产默认 Off（`runtime.ts:208`；启用被 W7.2 +10.4% CPU NO_GO，PR #980）——任何优化建议必须适配该默认态与 ADR-028 有界 containment，不得以"补全记录/全量采集"为目标（见 §7 non-goals）。
 - **复核轮修订（v2）**：按复核意见修正 D1/D2/E9/干净面的证据刻画与计数——复核确认各结论方向均不受影响，但对样本的描述以下列落盘事实为准（复核命令与输出见 COVERAGE-MATRIX.md 头部复核记录）。**审计 harness 口径注意**：otlp-sink 有 body cap（E1：requests=18 trace+1 metric、bodiesKept=14、bodiesDroppedForCap=5，淘汰最早 posts）——"sink 保留体不含 X"仅证明落盘保留体不含，不证明未导出；引用纪律见 COVERAGE-MATRIX §3-6。
+- **W07 归位与 D1 状态修订（v3，2026-11-15）**：调度方补发 W07 定义（CoverageCheck 8 条 `W07-*` 项）后，W07 矩阵行收敛 FULL_RUNTIME_VERIFIED（COVERAGE-MATRIX §1/§2.1；静态锚点与运行产物经修订会话独立复现，含三测试文件 25/25 复跑），残留缺口入 **E17/E18**（§3），§7 第 5 条编号空洞条款相应解除。**D1 修复状态经 gh 只读实查**（§1 修复状态小节，修订会话独立重查与调度方 `D1-STATUS` CoverageCheck 一致）：BLOCKER 存续、无修复 PR、无专用跟进 issue。§0 计数、§6 P10、§8.1 W07 行、§8.2 相应更新。证据等级约定同 COVERAGE-MATRIX §0（PROTOCOL-v3:6）；四维分账与 G4 拆账见 COVERAGE-MATRIX §2.4/§5。
 
 ---
 
@@ -12,7 +13,7 @@
 |---|---|---|---|
 | **defect** | 被测系统真实缺陷：违反既有契约/误导下游/泄漏，需要 owner 修复或裁定 | 3 产品 + 1 文档 | D1–D4 |
 | **out_of_scope_v1** | 现契约未要求、属产品/架构边界决策；非本次实现缺陷，需 owner 裁定而非默认施工 | 7 | O1–O7 |
-| **evidence_gap** | 能力可能存在但本 campaign 未获运行证据；需补测/验收 | 16 | E1–E16 |
+| **evidence_gap** | 能力可能存在但本 campaign 未获运行证据；需补测/验收 | 18 | E1–E18 |
 | **inherent_blindspot** | 设计内不可见（head sampling 定义、server-span 生命周期收口等），补测无法消除，只能接受或改变设计 | 2 | B1–B2 |
 | **privacy_omitted** | 按隐私边界刻意不可恢复的省略；非缺陷，列入声明面以防误判为丢失 | 5 | P1–P5 |
 
@@ -24,9 +25,10 @@
 - **证据**（复核轮按落盘样本修正刻画）：【G族/G12 + 复核轮独立核实】500 路径 "Unhandled request error" 的 `err.message` 为 DrizzleQueryError 消息，含**全列 SQL 文本与绑定参数值**：`Failed query: select "id", "organization_id", "username", "password_hash", … from "users" where …` **加** `params: 5f4f1b4d-079b-458d-ac20-43af732cc116,bench-\u0000bad`（/tmp/w964-gfamily/h3/server-out.log:**99**，reqId=8c8294fb…，NUL 字节登录触发；落点为 W01 登录路径 `userRepo.findByOrganizationAndUsername` ← auth.js:115；stack 含内部文件路径）。**绑定参数值（组织 ID UUID 与用户名）随 SQL 一并泄漏——实际比初版"不含绑定参数值"的描述更严重**。span/导出面干净（各自有 scrub）；日志通道对驱动错误消息无等价脱敏（`logRedaction.ts:12-30` 只删 password/token/cookie 类键）。另：checkpoint 扫描器对该泄漏**漏报**（`analyze.mjs:203` sqlKeywords 模式大写，小写 `select…` 不命中，`sqlKeywords.log=0` 为假阴性）——干净判定不能依赖该扫描器，须大小写不敏感复验（复核轮已做，见 §5）。
 - **为什么是 defect**：若以 `docs/contracts/observability.md` 边界为准属真实违反；即使按窄口径，把 users 全列 SQL 与 org ID/用户名绑定值写入通用错误日志也与"统一错误、结构化日志"边界相悖（AGENTS.md §5）。需 owner 裁定日志面是否在契约范围内（见 §6 P1）。
 - **影响面**：任何 500（含 W01 登录、W03 保存等最高频路径的 DB 异常分支）；当前生产默认 Off 态**照常发生**（这是 stdout 排障主通道），是本清单唯一"现在就在发生"的隐私类缺陷，且样本实测已含真实组织标识与用户名。
+- **修复状态（v3，2026-11-15 gh 只读实查）**：**BLOCKED——隐私 BLOCKER 存续，无修复 PR，无专用跟进 issue**。修订会话独立重查（与调度方 `D1-STATUS` CoverageCheck 一致）：`gh issue view 964 --json state,title,updatedAt` → `{state:"OPEN", updatedAt:"2026-11-15T03:14:46Z"}`；`gh api repos/{owner}/{repo}/issues/964/comments --jq length` → **恰 1 条**（2026-11-15T03:14:46Z，jnhu76，观测性战役交付 checkpoint），原文判定："隐私 BLOCKER 判 FAIL：D1 日志通道 500 路径的 `err.message` 含 DrizzleQueryError 全列 SQL + 绑定参数值（org ID + 用户名），生产默认 Off 态即触发；span/导出两通道干净。须先于任何 On 态启用讨论修复"；`gh pr list --state open` → 仅 #996（perf(telemetry) 审计开销与覆盖，docs+harness，分支 `perf/otel-workflow-attribution`）与 #995（commit policy）——**无 D1 修复 PR**；修复关键词 PR 搜索（"D1"/"log redaction SQL"/"leak params"/"privacy SQL"/"redact log"/"日志 泄漏"，D1-STATUS 记录）无命中，issue 搜索无专用 D1 跟进 issue。**任何 On 态启用讨论前必须先修复 D1**；判定原文归属 #964 checkpoint（引如上），本清单不重判，只维护修复状态。
 
 ### D2 — `url.path="(unrouted)"` 跨类型污染
-- **证据**：静态 `urlScrubSpanProcessor.ts:60-74` onEnd 无类型判别；运行实测 run2 **695**/781 spans（复核轮重数与 G12 checkpoint unroutedBySpanName 求和一致；初版 694 为笔误）、H4 导出面 189/205、E2 980/1000 全部被写伪路由【G族/候选缺口9；DB族/G3 note；导出族/G7 note】。
+- **证据**：静态 `urlScrubSpanProcessor.ts:60-74` onEnd 无类型判别；运行实测 run2 **695**/781 spans（复核轮重数与 G12 checkpoint unroutedBySpanName 求和一致；初版 694 为笔误）、H4 导出面 189/205、E2 980/1000 全部被写伪路由【G族/候选缺口9；DB族/G3 note；导出族/G7 note】。**v3 追加（W07 复现）**：W07 两段运行 dump 中全部 biz span url.path="(unrouted)"（/tmp/w07-coverage/out2 407 spans 与 run1 380 spans，修订会话 `analyze-dump.mjs` 复现）——D2 适用于 W07 业务 span（COVERAGE-MATRIX §1 W07 行已记）。
 - **影响**：按 url.path 聚合产生巨型伪路由桶，污染 Tempo/下游查询语义（REALITY §10 E8）。On 态缺陷；生产 Off 态无受害者，但属启用前必须修的正确性问题。
 
 ### D3 — 非业务 span 传播空洞（discovery/heartbeat 语句逃逸父上下文）
@@ -76,6 +78,8 @@
 | E14 | 探针路由导出面 + 503/budget 故障面 | W00 | E1/H4 未逐条解码 |
 | E15 | start restored 分支 / 双击并发运行见证 | W02 | 仅 500 exception 路径注入 |
 | E16 | H2 进程内 meter 探针 | 全局 | 由代码路径+H4 对照支撑，未进程内验证 |
+| E17 | W07 残留形态未见证：deadline 上限拒绝（operatorGrant.ts 冻结序第 11 步 AttemptDeadlineExceedsExamCloseError）、incidentId scope-quadruple 校验路径（operatorGrantExecution.ts:344-347，ADR-014 §10）、disrupted attempt 的 force-submit 终态化（forceSubmitExecution.ts:26 reasonCode=admin_force_submit_terminalization）、并发同 identity 23505 竞态 harness HTTP 级复现（仅有 vitest 并发测试 25/25） | W07 | W07-RESIDUAL(a)-(d)：均有静态锚点（修订会话 CODE_VERIFIED 复现），无 harness 运行见证；核心四形态（granted/replay/terminal/applied/no_change/409）+ bounded_grace 策略拒绝链已获运行级证据（COVERAGE-MATRIX §2.1） |
+| E18 | W07 otlp-face 导出未运行（仅 H3 memory dump face 实证）；W07 无专属业务 metric（词汇面 9 span 无 metric 配对；db metric memory 态 NOOP=G10 语义） | W07 | W07-RESIDUAL(e)(f)；与 W01/W02/W06/W08/W14 的 otlp-face 缺口同构（COVERAGE-MATRIX §2.2 注） |
 
 ---
 
@@ -110,6 +114,7 @@
 | **P7** | **O5 裁定 + E10/E11/E12**（W15 自诊断与部署面） | rank7 | 若 owner 裁定需要最小信号：**单个有界 exporter-terminal-failure 计数或一条 init/first-failure 日志**即为充分——不是加自观测体系；queue 级丢弃数裁定为"外部可观测即可"或补 drop 计数，二选一 |
 | **P8** | **E1 W11 运行证据** | rank9 | retention/摄入为低频低风险路径，一轮观测即可消除整工作流的 TEST_ONLY |
 | **P9** | **O3 HTTP request metric 裁定、O1 词汇扩充裁定、O2 浏览器 trace 裁定、B1 取消 capture 裁定** | rank10/15 及全局 | 全部是 owner 决策而非默认施工：每个都先要"要不要"的裁决，再谈实现 |
+| **P10** | **E17/E18 W07 残留形态与导出 face** | n/a（admin_only 低频，inventory §4 rank 表未含 W07） | 幂等/审计/策略门核心不变量已获运行级证据（FULL，COVERAGE-MATRIX §2.1）；残留为次形态与 otlp-face，证据成本低（一次 harness 变体运行），维持命令式幂等操作的正确性信心 |
 
 （W00 探针的 E14 与 W13/O7 不入排序：探针形态已有运行见证、探针故障面价值低；outbound HTTP 不存在。）
 
@@ -121,7 +126,7 @@
 2. **不默认扩充业务 span 词汇表**（O1）、**不默认引入 HTTP request metric**（O3）、**不默认启用 Loki leg**（E11，合同禁用中）、**不默认加浏览器遥测**（O2）——四项全部停在 owner 裁定。
 3. **不把 W15 自诊断扩成自观测体系**：裁定若需要，最小充分面=单个 exporter-terminal-failure 信号（计数或一条一次性日志），与既有 `telemetry.init_failed`（`runtime.ts:218-226`，endpoint 脱敏）同级。
 4. **不把 privacy_omitted 当缺陷"修复"**：P1-P5 是隐私边界的实现面，恢复任何一项都构成边界变更，需显式决策。
-5. **不据推测填充 W07**：编号空洞保持 UNKNOWN，等待调度方补发定义。
+5. **不据推测填充工作流定义**：v1/v2 的"W07 编号空洞保持 UNKNOWN"条款已解除——调度方 2026-11-15 补发 W07 定义与 CoverageCheck，矩阵按证据归位（COVERAGE-MATRIX §1/§2.1/§4），inventory §2.1 候选点名转正而非推测填充；对任何仍无定义的编号，该原则继续适用。
 
 ---
 
@@ -141,7 +146,7 @@
 | W04 拒绝面 | 恰 1 WARN + reason + envelope（#861 无持久 refusal 属有意设计） | 拒绝形态 span result 属性 | **低-中**：WARN 面已结构化；span 仅同义补充（G7：new-accept 与重放同形） |
 | W05 submit | 终态 + audit + receipt | submit span（幂等/crash 分支无区分，G7 缺口） | **低-中**：成功链增量有限；故障分支证据缺（E5） |
 | W06 restore | restored/already_in_progress 结果 + envelope | restore span 父链；markDisrupted 词汇外（G2） | **中**：terminal/disruption 链路价值未见证（E3） |
-| W07 | —（编号空洞） | — | UNKNOWN |
+| W07 强制交卷/补时（v3 归位） | envelope + attempt.forceSubmit/attempt.timeGrant audit（仅 applied/granted 落审计）+ receipt/ledger 行 | time_grant/force_submit 业务 span 全 outcome 矩阵（granted/idempotent_replay/terminal/applied/no_change/rejected+error_code）、bounded_grace 策略拒绝链（INVALID_STATE_TRANSITION）、pino reqId↔trace_id↔span traceId 精确互证、409/404/403 request span 分类 | **中**：命令式幂等操作的全 outcome 可观测性（零写路径/冲突路径 span 级可见、error_code 归因）是增量；audit+receipt 对账面已可用；admin 409 无 WARN 级日志（观察项，未裁决为缺陷）；残留形态/otlp-face 见 E17/E18 |
 | W08 take | frozen/unchanged 响应 + WARN | deadline_reconcile span + unchanged 20-span 分解 | **中**：读时冻结链路；frozen 形态未见证（E4） |
 | W09 deadline auto-submit | submission_reason=deadline DB 终态（事后） | auto_submit span + scanner cycle + work.count metric 三方实时对账 | **高**：唯一能实时观测后台决策链的工作流，三证 FULL |
 | W10 heartbeat | heartbeat WARN/audit + incident 域表 | 路由 span（词汇外）+ heartbeat cycle + incident_created metric 面 | **中**：incident 腿仅 metric 面见证（E6） |
@@ -151,7 +156,7 @@
 | W14 HTTP 失败 | 404/envelope + WARN | thrown 400/409 span status=error（修正 inventory 旧记载）；**取消/断连不可见（B1 运行实证盲区）** | **低-中**：取消类故障 OTel 同样静默，增量仅 4xx/5xx 分类 |
 | W15 exporter/关机 | `telemetry.init_failed` 一条信号（endpoint 脱敏） | **无自诊断面**（dropSpans/diag 零命中，O5/候选7 FAIL）；应用层零信号属有意 containment | **负增量**：exporter 自身故障 OTel 不提供任何信号，靠外部 sink 对账 |
 
-**综合**：OTel 增量集中于 **W03/W09（高）**、W01/W02/W06/W08/W10/W12（中）；W04/W14 增量被既有 WARN 面与盲区压缩；W15 为负增量。采样盲区 B2（head sampling 定义性后果）意味着 On 态在高采样比下才有效，而高采样比正是成本所在——**价值与成本在同一旋钮上对拉，这正是预算实验（当前 BLOCKED）必须先行重跑的原因**。
+**综合**：OTel 增量集中于 **W03/W09（高）**、W01/W02/W06/W07/W08/W10/W12（中）；W04/W14 增量被既有 WARN 面与盲区压缩；W15 为负增量。采样盲区 B2（head sampling 定义性后果）意味着 On 态在高采样比下才有效，而高采样比正是成本所在——**价值与成本在同一旋钮上对拉，这正是预算实验（当前 BLOCKED）必须先行重跑的原因**。
 
 ### 8.2 组件处置分级（决策证据；本 PR 不实施替换）
 
@@ -160,7 +165,7 @@
 | 组件 | 处置 | 依据 |
 |---|---|---|
 | OTel SDK 核心 + @fastify/otel request/handler span | **KEEP** | Off 态早返回零成本（`runtime.ts:208`【CODE_VERIFIED】）；On 态为全链骨架（W00–W14 span 面基座） |
-| 业务操作 span 层（exam.attempt.*，businessOperationSpan） | **KEEP** | W03/W09 三证 FULL（COVERAGE-MATRIX §2.1）；词汇外缺口（O1）另列 owner 裁决，不影响本体价值 |
+| 业务操作 span 层（exam.attempt.*，businessOperationSpan） | **KEEP** | W03/W07/W09 三证 FULL（COVERAGE-MATRIX §2.1）；词汇外缺口（O1）另列 owner 裁决，不影响本体价值 |
 | db.statement 语句 span（packages/otel-drizzle-postgresjs + scrub） | **KEEP（附 SLIM 候选注）** | DB 故障端到端定位唯一通道（40001/40P01/lockwait）；但每 accepted-save trace 19 条语句 span 为最大 span 量来源（COVERAGE-MATRIX §3-5）——若未来 On 态超预算，**第一裁剪参数**是非业务语句/preHandler 读；裁剪收益未量化，现不裁 |
 | scrub processors（urlScrub/exceptionScrub） | **KEEP** | 隐私边界 P1–P4 的实现面；干净面经复核轮大小写不敏感复验（§5） |
 | metric provider + 4 处生产 metric（仅 otlp 分支，`runtime.ts:373-394`） | **KEEP** | 有意设计（O4 合同）；面积极小（每 H4 段 6 metric posts，MEASURED；HTTP request metric 不存在属 O3 owner 裁决项） |

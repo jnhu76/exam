@@ -1,0 +1,1071 @@
+{
+  "packagedAt": "2026-11-15T14:10:08.515Z",
+  "packagedBy": "scripts/perf/otel-workflows/package-data-v3.mjs",
+  "rawSourceRoot": "out/otel-w964/workflow-audit-v3/",
+  "rawSourceRootNote": "gitignored (.gitignore:77 out/); packaged here as sanitized digests; per-file sha256 recorded in evidence-manifest.json (localRaw part)",
+  "protocolPinned": {
+    "manifest": "scripts/perf/otel-workflows/configs.json",
+    "version": "v4",
+    "contentSha256": "6739a741f4b29f82cb12a74d7b9fc0c3aab77ed474a05e3c954080c5898a6a25",
+    "params": {
+      "P_CONC": 1,
+      "P_STEADY": 300,
+      "P_QUOTA": 2100
+    }
+  },
+  "segmentTotals": {
+    "segments": 73,
+    "valid": 8,
+    "invalid": 65,
+    "bySuite": {
+      "isolated": {
+        "segments": 51,
+        "valid": 0,
+        "invalid": 51
+      },
+      "knee": {
+        "segments": 1,
+        "valid": 1,
+        "invalid": 0
+      },
+      "equivalence": {
+        "segments": 9,
+        "valid": 7,
+        "invalid": 2
+      },
+      "pilot": {
+        "segments": 4,
+        "valid": 0,
+        "invalid": 4
+      },
+      "probe-archive": {
+        "segments": 8,
+        "valid": 0,
+        "invalid": 8
+      }
+    }
+  },
+  "pilot": {
+    "file": "out/otel-w964/workflow-audit-v3/pilot.json",
+    "generatedAt": "2026-11-15T08:32:03.194Z",
+    "config": "H1",
+    "ok": true,
+    "kPilot": 100,
+    "cpuSamplesValid": true,
+    "loadStats": "entry loadavg=0.38; gears maxLoad1=c25=6.24 c50=6.01 c100=6.09 c200=5.2 (in-window limit 4)",
+    "ladder": [
+      {
+        "concurrency": 25,
+        "valid": false,
+        "ops": 2070,
+        "p99Ms": 7775.039,
+        "throughputOpsPerSec": 11.34,
+        "cpuMsPerOp": 81.1498,
+        "maxLoad1": 6.24,
+        "quotaExceededExpected": true,
+        "invalidReasonCodes": [
+          "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW",
+          "LOADAVG_IN_WINDOW_EXCEEDED"
+        ]
+      },
+      {
+        "concurrency": 50,
+        "valid": false,
+        "ops": 2084,
+        "p99Ms": 12251.795,
+        "throughputOpsPerSec": 11.064,
+        "cpuMsPerOp": 83.4597,
+        "maxLoad1": 6.01,
+        "quotaExceededExpected": true,
+        "invalidReasonCodes": [
+          "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW",
+          "LOADAVG_IN_WINDOW_EXCEEDED"
+        ]
+      },
+      {
+        "concurrency": 100,
+        "valid": false,
+        "ops": 2154,
+        "p99Ms": 20629.896,
+        "throughputOpsPerSec": 11.009,
+        "cpuMsPerOp": 84.0529,
+        "maxLoad1": 6.09,
+        "quotaExceededExpected": true,
+        "invalidReasonCodes": [
+          "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW",
+          "LOADAVG_IN_WINDOW_EXCEEDED"
+        ]
+      },
+      {
+        "concurrency": 200,
+        "valid": false,
+        "ops": 2204,
+        "p99Ms": 56426.756,
+        "throughputOpsPerSec": 10.944,
+        "cpuMsPerOp": 85.3221,
+        "maxLoad1": 5.2,
+        "quotaExceededExpected": true,
+        "invalidReasonCodes": [
+          "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW",
+          "LOADAVG_IN_WINDOW_EXCEEDED"
+        ]
+      }
+    ],
+    "recommended": {
+      "steadyMaxSeconds": 180,
+      "quotaOps": 1632,
+      "concurrency": 10,
+      "basis": [
+        "H1-only preliminary (PROTOCOL-v3 §4.2): quotaOps = floor(0.8 × ŷ_max=11.34 ops/s × P_STEADY=180s) — min-over-arms backfill still requires H2/H4 round-0 probes before freeze",
+        "轮窗算术 (§4.2/§5): measured overhead=127.24799999999999s (converge+extend+boot+prep, warmup excluded), s_sc=9.702s (shutdown+collect) → P_STEADY budget 343s",
+        "P_CONC left at manifest value 10: the pilot ladder is knee reconnaissance only; a P_CONC backfill must be covered by its own probe + confirmation segments (PROTOCOL-v3 §5)"
+      ]
+    },
+    "notesDigest": [
+      "gear c25 in-window load1 > 4 — knee gradient faces at this gear eliminated (PROTOCOL-v3 §4.1 mechanical rule)",
+      "gear c50 in-window load1 > 4 — knee gradient faces at this gear eliminated (PROTOCOL-v3 §4.1 mechanical rule)",
+      "gear c100 in-window load1 > 4 — knee gradient faces at this gear eliminated (PROTOCOL-v3 §4.1 mechanical rule)",
+      "gear c200 in-window load1 > 4 — knee gradient faces at this gear eliminated (PROTOCOL-v3 §4.1 mechanical rule)",
+      "knee-gradient gears eliminated by in-window load: c25, c50, c100, c200",
+      "quota-exceeded gears recorded as the designed recon outcome (PROTOCOL-v3 §4.3 rule 3): c25, c50, c100, c200 — P_QUOTA backfill comes from throughput below"
+    ],
+    "registerDigest": {
+      "file": "out/otel-w964/workflow-audit-v3/pilot-register.json",
+      "generatedAt": "2026-11-15T09:40:00Z",
+      "session": "PROTOCOL-v3 parameter backfill (pilot measured); protocol doc = docs/research/observability-workflow-audit/PROTOCOL-v3.md",
+      "idleSeries": {
+        "n": 24,
+        "idleMax1m": 0.62,
+        "idleMed1m": 0.18,
+        "B_entry": 1.24,
+        "finalized": true
+      },
+      "timingInputsUsed": {
+        "overheadSeconds": 127.248,
+        "s_scSeconds": 9.702,
+        "steadyBudgetSeconds": 343.05
+      },
+      "kPilot": 100,
+      "backfill": {
+        "P_STEADY": {
+          "value": 300,
+          "finalized": true
+        },
+        "B_entry": {
+          "value": 1.24,
+          "finalized": true
+        },
+        "P_CONC": {
+          "finalized": false,
+          "status": "BLOCKED"
+        }
+      },
+      "adjudication": {
+        "decision": "option (c): interference criterion redefined as EXTERNAL INCREMENT over a frozen B_self; new pre-registration PROTOCOL-v4.md",
+        "keyParameters": {
+          "B_self": 6.8,
+          "externalIncrementLimit": 1.5,
+          "inSegmentAbsoluteCap": 8,
+          "entryGateUnchanged": 4,
+          "B_entry": 1.24
+        },
+        "flaggedForOwnerReview": true
+      },
+      "escalationState": {
+        "required": true,
+        "state": "formal sampling (Stage D–G) remains BLOCKED until the Owner decision; freeze point NOT reached; freeze.json NOT written"
+      },
+      "noLooseningItems": 8,
+      "measuredLadderRows": [
+        {
+          "c": 1,
+          "throughputOpsPerSec": 9.738,
+          "maxLoad1": 4.86
+        },
+        {
+          "c": 2,
+          "throughputOpsPerSec": 10.532,
+          "maxLoad1": 6
+        },
+        {
+          "c": 5,
+          "throughputOpsPerSec": 11.298,
+          "maxLoad1": 5.8
+        },
+        {
+          "c": 10,
+          "throughputOpsPerSec": 9.774,
+          "maxLoad1": 6.72
+        },
+        {
+          "c": 25,
+          "throughputOpsPerSec": 11.34,
+          "maxLoad1": 6.24
+        },
+        {
+          "c": 50,
+          "throughputOpsPerSec": 11.064,
+          "maxLoad1": 6.01
+        },
+        {
+          "c": 100,
+          "throughputOpsPerSec": 11.009,
+          "maxLoad1": 6.09
+        },
+        {
+          "c": 200,
+          "throughputOpsPerSec": 10.944,
+          "maxLoad1": 5.2
+        }
+      ]
+    }
+  },
+  "campaigns": {
+    "mixed": {
+      "dir": null,
+      "status": "never-started (fail-closed)",
+      "segmentsLaunched": 0,
+      "gateOutcome": "entry precheck gate rejected every attempt; only failing item = H0 §6.6-3 equivalence register missing (gate 6/7 passed; run-meta 1794745651376 et al.)",
+      "evidence": "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md"
+    },
+    "isolated": {
+      "dir": "out/otel-w964/workflow-audit-v3/campaign-isolated/",
+      "generatedAt": "2026-11-15T12:32:33.737Z",
+      "totalValid": 0,
+      "totalAttempts": 72,
+      "totalDeferrals": 27,
+      "units": {
+        "H1:iso-C1": {
+          "config": "H1",
+          "workflow": "iso-C1",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 5,
+            "SEED_CONVERGE_DB_STARTING": 1,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H2:iso-C1": {
+          "config": "H2",
+          "workflow": "iso-C1",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 5,
+            "CPU_PAIR_FAIL_CLOSED": 1,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H4:iso-C1": {
+          "config": "H4",
+          "workflow": "iso-C1",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 5,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H1:iso-C3": {
+          "config": "H1",
+          "workflow": "iso-C3",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 5,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H2:iso-C3": {
+          "config": "H2",
+          "workflow": "iso-C3",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 5,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H4:iso-C3": {
+          "config": "H4",
+          "workflow": "iso-C3",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 6,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H1:iso-C5": {
+          "config": "H1",
+          "workflow": "iso-C5",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 6,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H2:iso-C5": {
+          "config": "H2",
+          "workflow": "iso-C5",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 6,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H4:iso-C5": {
+          "config": "H4",
+          "workflow": "iso-C5",
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "SEED_CONVERGE_DB_UNREACHABLE": 6,
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        }
+      },
+      "overallReasonCodes": {
+        "SEED_CONVERGE_DB_UNREACHABLE": 49,
+        "SEED_CONVERGE_DB_STARTING": 1,
+        "STARVED_INTERFERENCE_RECHECK": 9,
+        "CPU_PAIR_FAIL_CLOSED": 1
+      },
+      "notesDigest": [
+        "[H4:iso-C1] sweep 6 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1:iso-C3] sweep 6 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H2:iso-C3] sweep 6 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1:iso-C5] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H2:iso-C5] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H4:iso-C5] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1:iso-C1] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H2:iso-C1] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H4:iso-C1] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1:iso-C3] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H2:iso-C3] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H4:iso-C3] sweep 7 deferred: 1m loadavg 4.39 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)"
+      ]
+    },
+    "knee": {
+      "dir": "out/otel-w964/workflow-audit-v3/campaign-knee/",
+      "generatedAt": "2026-11-15T12:45:53.255Z",
+      "gears": null,
+      "totalValid": 1,
+      "totalAttempts": 48,
+      "totalDeferrals": 18,
+      "units": {
+        "H1@c50": {
+          "config": "H1",
+          "gear": 50,
+          "valid": 1,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H1@c100": {
+          "config": "H1",
+          "gear": 100,
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H1@c200": {
+          "config": "H1",
+          "gear": 200,
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H4@c50": {
+          "config": "H4",
+          "gear": 50,
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H4@c100": {
+          "config": "H4",
+          "gear": 100,
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        },
+        "H4@c200": {
+          "config": "H4",
+          "gear": 200,
+          "valid": 0,
+          "attempts": 8,
+          "deferrals": 3,
+          "reasonCodes": {
+            "STARVED_INTERFERENCE_RECHECK": 1
+          }
+        }
+      },
+      "validSegments": [
+        {
+          "unit": "H1@c50",
+          "config": "H1",
+          "workflow": "mixed",
+          "concurrency": 50,
+          "ops": 2100,
+          "cpuMsPerOp": 96.2619,
+          "p99Ms": 12168.209,
+          "invalidReasons": []
+        }
+      ],
+      "deferredEntryCount": 18,
+      "notesDigest": [
+        "knee gradient gears: 50, 100, 200 (bracket [⌊K/2⌋, K, min(2K,200)] around K_pilot; derived from the pilot register)",
+        "[H1@c100] sweep 1 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1@c200] sweep 1 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H4@c50] sweep 1 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H4@c100] sweep 1 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H4@c200] sweep 1 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1@c100] sweep 2 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)",
+        "[H1@c200] sweep 2 deferred: 1m loadavg 4.01 > 4 at entry (PROTOCOL §6.5 exclusion 1 / §6.1 quiet-machine)"
+      ]
+    },
+    "kneeAbortedProbe": {
+      "dir": "out/otel-w964/workflow-audit-v3/campaign-knee-aborted-probe-20261115/",
+      "status": "aborted CLI probe (INCIDENT-20261115-knee-gate-probe-aborted.md); no segment-summary, no round.json, no campaign.json judgment face",
+      "opsJsonlLines": 158,
+      "archivedAsIs": true
+    }
+  },
+  "equivalence": {
+    "finalRegister": {
+      "file": "out/otel-w964/workflow-audit-v3/h0-equivalence.json",
+      "present": false
+    },
+    "supersededRuns": [
+      {
+        "id": "run1",
+        "register": "out/otel-w964/workflow-audit-v3/h0-equivalence.superseded-run1.json",
+        "verified": false,
+        "rounds": 1,
+        "targetRoundsPerWorkload": 3,
+        "gear": {
+          "concurrency": 1,
+          "frozenPConc": 1,
+          "quotaOps": 2100,
+          "steadyMaxSeconds": 300
+        },
+        "workloadStatus": {
+          "W01": {
+            "verifiedPairs": 0,
+            "nonComparable": false,
+            "divergences": []
+          },
+          "W03": {
+            "verifiedPairs": 0,
+            "nonComparable": true,
+            "divergences": [
+              "[object Object]"
+            ]
+          },
+          "W05": {
+            "verifiedPairs": 0,
+            "nonComparable": true,
+            "divergences": [
+              "[object Object]",
+              "[object Object]"
+            ]
+          },
+          "W08": {
+            "verifiedPairs": 0,
+            "nonComparable": true,
+            "divergences": [
+              "[object Object]",
+              "[object Object]"
+            ]
+          }
+        },
+        "notes": [
+          "sweep 1: 5 oracle divergence(s) — workload(s) marked NON_COMPARABLE (§6.6-3)"
+        ]
+      },
+      {
+        "id": "run2",
+        "register": "out/otel-w964/workflow-audit-v3/h0-equivalence.superseded-run2.json",
+        "verified": false,
+        "rounds": 2,
+        "targetRoundsPerWorkload": 3,
+        "gear": {
+          "concurrency": 1,
+          "frozenPConc": 1,
+          "quotaOps": 2100,
+          "steadyMaxSeconds": 300
+        },
+        "workloadStatus": {
+          "W01": {
+            "verifiedPairs": 1,
+            "nonComparable": false,
+            "divergences": []
+          },
+          "W03": {
+            "verifiedPairs": 1,
+            "nonComparable": true,
+            "divergences": [
+              "[object Object]"
+            ]
+          },
+          "W05": {
+            "verifiedPairs": 1,
+            "nonComparable": true,
+            "divergences": [
+              "[object Object]"
+            ]
+          },
+          "W08": {
+            "verifiedPairs": 1,
+            "nonComparable": true,
+            "divergences": [
+              "[object Object]"
+            ]
+          }
+        },
+        "notes": [
+          "sweep 2: 3 oracle divergence(s) — workload(s) marked NON_COMPARABLE (§6.6-3)"
+        ]
+      },
+      {
+        "id": "run3-partial",
+        "register": "out/otel-w964/workflow-audit-v3/h0-equivalence.superseded-run3-partial.json",
+        "verified": false,
+        "rounds": 1,
+        "targetRoundsPerWorkload": 3,
+        "gear": {
+          "concurrency": 1,
+          "frozenPConc": 1,
+          "quotaOps": 2100,
+          "steadyMaxSeconds": 300
+        },
+        "workloadStatus": {
+          "W01": {
+            "verifiedPairs": 1,
+            "nonComparable": false,
+            "divergences": []
+          },
+          "W03": {
+            "verifiedPairs": 1,
+            "nonComparable": false,
+            "divergences": []
+          },
+          "W05": {
+            "verifiedPairs": 1,
+            "nonComparable": false,
+            "divergences": []
+          },
+          "W08": {
+            "verifiedPairs": 1,
+            "nonComparable": false,
+            "divergences": []
+          }
+        },
+        "notes": []
+      }
+    ],
+    "run4": {
+      "status": "died at entry — connect ECONNREFUSED (host Docker Desktop shutdown)",
+      "producedSegments": 0,
+      "evidence": "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md"
+    },
+    "emptyDir": "out/otel-w964/workflow-audit-v3/equivalence/ (run4 shell, no segments)"
+  },
+  "supportingEvidence": {
+    "b4Repro": {
+      "pre-fix": {
+        "expectViolations": true,
+        "saves": 24,
+        "concurrency": 8,
+        "result": {
+          "accepted": 7,
+          "rejectedByReason": {
+            "STALE_VERSION": 15
+          },
+          "transportErrors": 0,
+          "violationsTotal": 17,
+          "violationsSample": [
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":3,\"savedAt\":\"2026-11-15T04:44:16.238Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":3,\"savedAt\":\"2026-11-15T04:44:16.237Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":3,\"savedAt\":\"2026-11-15T04:44:16.237Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":3,\"savedAt\":\"2026-11-15T04:44:16.237Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":3,\"savedAt\":\"2026-11-15T04:44:16.238Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":5,\"savedAt\":\"2026-11-15T04:44:16.357Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":5,\"savedAt\":\"2026-11-15T04:44:16.370Z\",\"details\":{\"serverAnswer\":\"A\"}}",
+            "saveAccepted: expected 200 accepted:true, got 200 {\"accepted\":false,\"reason\":\"STALE_VERSION\",\"message\":\"服务器上存在更新的答案版本\",\"serverVersion\":5,\"savedAt\":\"2026-11-15T04:44:16.382Z\",\"details\":{\"serverAnswer\":\"A\"}}"
+          ],
+          "acceptedClientSeqChain": [
+            6,
+            10,
+            11,
+            17,
+            18,
+            22,
+            25
+          ],
+          "acceptedVersionChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "acceptedChainContiguous": true,
+          "finalServerVersion": 8
+        },
+        "concurrentBatch": {
+          "batchSize": 4,
+          "baseline": {
+            "seq": 25,
+            "version": 8
+          },
+          "winnerSeq": 28,
+          "winnerVersion": 9,
+          "batchMs": 94.432,
+          "violations": [],
+          "recs": [
+            {
+              "clientSeq": 26,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 9
+            },
+            {
+              "clientSeq": 27,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 9
+            },
+            {
+              "clientSeq": 28,
+              "statusCode": 200,
+              "accepted": true,
+              "reason": null,
+              "serverVersion": 9
+            },
+            {
+              "clientSeq": 29,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 9
+            }
+          ]
+        }
+      },
+      "post-fix": {
+        "expectViolations": false,
+        "saves": 24,
+        "concurrency": 8,
+        "result": {
+          "accepted": 24,
+          "rejectedByReason": {},
+          "transportErrors": 0,
+          "violationsTotal": 0,
+          "violationsSample": [],
+          "acceptedClientSeqChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "acceptedVersionChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "acceptedChainContiguous": true,
+          "finalServerVersion": 25
+        },
+        "concurrentBatch": {
+          "batchSize": 4,
+          "baseline": {
+            "seq": 25,
+            "version": 25
+          },
+          "winnerSeq": 26,
+          "winnerVersion": 26,
+          "batchMs": 92.295,
+          "violations": [],
+          "recs": [
+            {
+              "clientSeq": 26,
+              "statusCode": 200,
+              "accepted": true,
+              "reason": null,
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 27,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 28,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 29,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            }
+          ]
+        }
+      },
+      "post-fix-final": {
+        "expectViolations": false,
+        "saves": 24,
+        "concurrency": 8,
+        "result": {
+          "accepted": 24,
+          "rejectedByReason": {},
+          "transportErrors": 0,
+          "violationsTotal": 0,
+          "violationsSample": [],
+          "acceptedClientSeqChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "acceptedVersionChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "acceptedChainContiguous": true,
+          "finalServerVersion": 25
+        },
+        "concurrentBatch": {
+          "batchSize": 4,
+          "baseline": {
+            "seq": 25,
+            "version": 25
+          },
+          "winnerSeq": 27,
+          "winnerVersion": 26,
+          "batchMs": 101.037,
+          "violations": [],
+          "recs": [
+            {
+              "clientSeq": 26,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 27,
+              "statusCode": 200,
+              "accepted": true,
+              "reason": null,
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 28,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 29,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            }
+          ]
+        }
+      },
+      "post-fix-v3-final": {
+        "expectViolations": false,
+        "saves": 24,
+        "concurrency": 8,
+        "result": {
+          "accepted": 24,
+          "rejectedByReason": {},
+          "transportErrors": 0,
+          "violationsTotal": 0,
+          "violationsSample": [],
+          "acceptedClientSeqChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "acceptedVersionChain": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "acceptedChainContiguous": true,
+          "finalServerVersion": 25
+        },
+        "concurrentBatch": {
+          "batchSize": 4,
+          "baseline": {
+            "seq": 25,
+            "version": 25
+          },
+          "winnerSeq": 27,
+          "winnerVersion": 26,
+          "batchMs": 93.243,
+          "violations": [],
+          "recs": [
+            {
+              "clientSeq": 26,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 27,
+              "statusCode": 200,
+              "accepted": true,
+              "reason": null,
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 28,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            },
+            {
+              "clientSeq": 29,
+              "statusCode": 200,
+              "accepted": false,
+              "reason": "STALE_VERSION",
+              "serverVersion": 26
+            }
+          ]
+        }
+      },
+      "pre-fix.error": {
+        "label": "pre-fix",
+        "error": "Error: bench exam missing after converge at at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+      },
+      "post-fix.error": {
+        "label": "post-fix",
+        "error": "TypeError: runner.convergeSeed is not a function at at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+      },
+      "mechanismRound0": {
+        "id": "B4-mechanism-confirmation",
+        "title": "B4 background-terminalization root cause: pool-slot candidate aliasing (R2 task item 2)",
+        "root": "buildAttemptPlan mapped 2820 slots onto 1200 candidates via i%1200; post /api/attempts/:exam/start is RESUME semantics (a candidate with a live in_progress attempt gets the SAME row back). Slots of different pools therefore shared attempt ROWS: submit-pool ops (1000 submits), closed-pool prep (backdate now()-1s + freeze, 40) and takeFrozen in-window prepares (400 backdates) all hit rows that were …(truncated)"
+      },
+      "invalidFirstAttemptArchive": {
+        "dir": "out/otel-w964/workflow-audit-v3/b4-repro/invalid-first-attempt-resumed-attempt/",
+        "why": "post /start resume semantics reused a dirty attempt → all saves legally STALE; evidence voided and resampled (runner re-seeds by force now)"
+      }
+    },
+    "w09": {
+      "ok": true,
+      "config": "H1",
+      "pool": 12,
+      "delaySeconds": 3,
+      "poolAttempts": {
+        "total": 12,
+        "deadlineTerminal": 12,
+        "deadlineReasonCount": 12
+      },
+      "sentinels": {
+        "total": 4,
+        "untouched": 4
+      },
+      "untouchedOk": true,
+      "violations": []
+    },
+    "profileH0": {
+      "dir": "out/otel-w964/workflow-audit-v3/profile-H0/",
+      "files": [
+        "CPU.20261115.175036.501488.0.001.cpuprofile",
+        "Heap.20261115.175036.501488.0.002.heapprofile",
+        "profile-err.log",
+        "profile-out.log",
+        "seed-converge.log"
+      ]
+    },
+    "incidents": [
+      {
+        "file": "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md",
+        "head": "# 宿主侧阻断记录（只追加；不删改既有证据） 记录时间：2026-11-15 19:58 (+08:00)｜记录者：campaign门禁修复员（workflow 子代理） 触发：Owner 指示（escalate 回复）——本工作流被 Owner 手动暂停，Windows 侧 Docker"
+      },
+      {
+        "file": "out/otel-w964/workflow-audit-v3/INCIDENT-20261115-knee-gate-probe-aborted.md",
+        "head": "# 事件记录：knee 门探测误启动真实段（已中止，只追加） 时间：2026-11-15 20:4x (+08:00)｜记录者：campaign门禁修复员（workflow 子代理）"
+      }
+    ]
+  },
+  "aggregateState": {
+    "sourceFile": "out/otel-w964/workflow-audit-v3/aggregate.json",
+    "sourceGeneratedAt": "2026-11-15T12:45:53.316Z",
+    "regenerateCommand": "node scripts/perf/otel-workflows/runner.js aggregate",
+    "sanitization": "note strings rewritten: absolute audit-tree prefix → repo-relative; content otherwise verbatim",
+    "interpretation": "rows=[] because cmdAggregate reads rounds/ only (runner.js:5201) and v3 rounds/ holds no round manifests; campaign/isolated/knee segments live outside rounds/ and do not enter this aggregation (as-built). Formal judgment stays UNKNOWN per PROTOCOL §6.4 (n=0 < 6)."
+  }
+}

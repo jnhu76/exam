@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-11-15T12:45:53.316Z",
+  "rows": [],
+  "notes": [
+    "baseline=H1; every row is the paired relative delta vs the same-round H1 segment of the SAME workflow dimension (PROTOCOL §6.3/§7.1); the baseline itself is excluded from rows.",
+    "ciLow/ciHigh = bootstrap 95% CI of the median paired CPU delta (10,000 resamples, percentile method, fixed seed 20261115, PROTOCOL §6.3). cpuRangePct = paired-delta min–max.",
+    "comparable=false / n=0: no same-round valid baseline pair yet. PROTOCOL §6.4: fewer than 6 valid pairs is UNKNOWN, not PASS; CI containing 0 must be reported INCONCLUSIVE, never 'zero cost'.",
+    "All numbers are WSL2 exploration-grade (PROTOCOL §2 boundary declaration): mechanism attribution only, never production capacity.",
+    "Workflow dimension: mixed = C1-C7 mixed stream (T1-T4 acceptance); iso-* = single-class isolated segments (§3.2/§7.1 quantile report face, never T1-T4). Cross-workflow pairing never happens.",
+    "no rounds found under <audit-tree>/out/otel-w964/workflow-audit-v3/rounds — nothing to aggregate"
+  ],
+  "workflows": [
+    "mixed",
+    "iso-C1",
+    "iso-C3",
+    "iso-C5"
+  ],
+  "packagingProvenance": {
+    "sourceFile": "out/otel-w964/workflow-audit-v3/aggregate.json",
+    "sourceGeneratedAt": "2026-11-15T12:45:53.316Z",
+    "regenerateCommand": "node scripts/perf/otel-workflows/runner.js aggregate",
+    "sanitization": "note strings rewritten: absolute audit-tree prefix → repo-relative; content otherwise verbatim",
+    "interpretation": "rows=[] because cmdAggregate reads rounds/ only (runner.js:5201) and v3 rounds/ holds no round manifests; campaign/isolated/knee segments live outside rounds/ and do not enter this aggregation (as-built). Formal judgment stays UNKNOWN per PROTOCOL §6.4 (n=0 < 6)."
+  }
+}
