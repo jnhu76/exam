@@ -5752,7 +5752,7 @@ async function cmdPilot({ configName }) {
  * Units: config (mixed/knee) or config×isolated-class. Segments land under
  * campaign-<suite>/ with an incremental campaign.json progress record.
  */
-async function cmdCampaign({ suite, concurrency }) {
+async function cmdCampaign({ suite, concurrency, target }) {
   const def = SUITES[suite];
   if (!def) {
     throw new Error(`unknown suite "${suite}" (mixed|isolated|knee)`);
@@ -5834,6 +5834,18 @@ async function cmdCampaign({ suite, concurrency }) {
   }
   const keyOf = (config, wfLabel, gear) =>
     wfLabel ? `${config}:${wfLabel}` : gear ? `${config}@c${gear}` : config;
+  // Append-replicate session (v2 §6.4 追加 replicate channel): --target N
+  // with N in (6, 12] resumes a completed campaign to tighten CIs — the
+  // direction is tightening only, prior sweeps/notes are preserved and the
+  // sweep counter continues after the last on-disk sweep (existing sweep
+  // dirs are never rewritten). The 12-attempt ceiling is the v2 §6.4
+  // sampling budget; the decision + reason go into the notes run record.
+  const validTarget =
+    Number.isInteger(target) && target > CAMPAIGN_VALID_TARGET && target <= 12
+      ? target
+      : CAMPAIGN_VALID_TARGET;
+  const attemptCap =
+    validTarget > CAMPAIGN_VALID_TARGET ? 12 : CAMPAIGN_ATTEMPT_CAP;
   const units = new Map();
   for (const u of unitsToRun) {
     units.set(keyOf(u.config, u.wfLabel, u.gear), {
@@ -5872,7 +5884,7 @@ async function cmdCampaign({ suite, concurrency }) {
     workflow: def.workflow,
     concurrency: gearConcurrency ?? MANIFEST.workload.concurrency,
   });
-  const rounds = [];
+  let rounds = [];
   if (!gate.ok) {
     notes.push("precheck gate rejected — campaign not started");
     return {
@@ -5888,16 +5900,79 @@ async function cmdCampaign({ suite, concurrency }) {
 
   const suiteDir = join(OUT_ROOT, `campaign-${suite}`);
   mkdirSync(suiteDir, { recursive: true });
+  // Resume (append-replicate session only): restore unit counters, prior
+  // rounds and notes from the on-disk campaign.json so the append builds
+  // on the recorded state instead of restarting at zero.
+  let startSweep = 1;
+  const priorMarkerPath = join(suiteDir, "campaign.json");
+  if (validTarget === CAMPAIGN_VALID_TARGET && existsSync(priorMarkerPath)) {
+    // Fresh runs must never overwrite recorded campaign state — archive the
+    // directory first (superseded-runN) or resume via --target.
+    return {
+      ok: false,
+      suite,
+      workflow: def.workflow,
+      units: Object.fromEntries(units),
+      rounds: [],
+      gate: {
+        ok: false,
+        checks: [
+          {
+            item: "fresh-run-guard",
+            ok: false,
+            detail: `${priorMarkerPath} already records a campaign — archive it (e.g. campaign-${suite}-superseded-runN) or append replicates with --target 7..12`,
+          },
+        ],
+      },
+      notes: ["fresh run refused — prior campaign state present"],
+    };
+  }
+  if (validTarget > CAMPAIGN_VALID_TARGET) {
+    const priorPath = join(suiteDir, "campaign.json");
+    let prior = null;
+    try {
+      prior = JSON.parse(readFileSync(priorPath, "utf8"));
+    } catch {
+      /* no prior state — append without a base is refused below */
+    }
+    if (!prior || prior.suite !== suite || !prior.units) {
+      return {
+        ok: false,
+        suite,
+        workflow: def.workflow,
+        units: Object.fromEntries(units),
+        rounds: [],
+        gate: {
+          ok: false,
+          checks: [
+            {
+              item: "append-base",
+              ok: false,
+              detail: `--target ${validTarget} requires an existing completed campaign.json for suite "${suite}" (v2 §6.4 append channel)`,
+            },
+          ],
+        },
+        notes: ["append refused — no prior campaign state"],
+      };
+    }
+    for (const [k, st] of Object.entries(prior.units)) {
+      if (units.has(k)) units.set(k, st);
+    }
+    rounds = Array.isArray(prior.rounds) ? prior.rounds : [];
+    notes.push(
+      ...prior.notes,
+      `append-replicate session: target ${validTarget} valid per unit (v2 §6.4 追加 replicate, CI-tightening only); prior state resumed (units/rounds/notes preserved); attempt ceiling 12 per the v2 §6.4 sampling budget`,
+    );
+    startSweep = rounds.reduce((m, r) => Math.max(m, r.sweep ?? 0), 0) + 1;
+  }
   const needsSink = (list) =>
     list.some((u) => MANIFEST.configs[u.config].env.TELEMETRY_OTLP_ENDPOINT);
   const MAX_SWEEPS = 24; // starvation guard: deferrals never consume attempts
-  let sweep = 0;
+  let sweep = startSweep - 1;
   while (true) {
     const pending = unitsToRun.filter((u) => {
       const st = units.get(keyOf(u.config, u.wfLabel, u.gear));
-      return (
-        st.valid < CAMPAIGN_VALID_TARGET && st.attempts < CAMPAIGN_ATTEMPT_CAP
-      );
+      return st.valid < validTarget && st.attempts < attemptCap;
     });
     if (pending.length === 0) break;
     if (sweep >= MAX_SWEEPS) {
@@ -6002,17 +6077,14 @@ async function cmdCampaign({ suite, concurrency }) {
     }
   }
 
-  const allValid = [...units.values()].every(
-    (s) => s.valid >= CAMPAIGN_VALID_TARGET,
-  );
+  const allValid = [...units.values()].every((s) => s.valid >= validTarget);
   const anyCapped = [...units.values()].some(
-    (s) =>
-      s.valid < CAMPAIGN_VALID_TARGET && s.attempts >= CAMPAIGN_ATTEMPT_CAP,
+    (s) => s.valid < validTarget && s.attempts >= attemptCap,
   );
   const stoppedReason = allValid
-    ? `all units reached ${CAMPAIGN_VALID_TARGET} valid segments`
+    ? `all units reached ${validTarget} valid segments${validTarget > CAMPAIGN_VALID_TARGET ? " (append-replicate session)" : ""}`
     : anyCapped
-      ? `attempt cap ${CAMPAIGN_ATTEMPT_CAP} reached for some unit(s) before ${CAMPAIGN_VALID_TARGET} valid — those units stay UNKNOWN per PROTOCOL-v2 §6.4`
+      ? `attempt cap ${attemptCap} reached for some unit(s) before ${validTarget} valid — those units stay UNKNOWN per PROTOCOL-v2 §6.4`
       : "sweep cap reached (starvation guard)";
   return {
     ok: allValid,
@@ -6617,10 +6689,12 @@ const USAGE = `usage:
   runner.js validate --round N
   runner.js aggregate
   runner.js pilot    --config X [--attempt N]
-  runner.js campaign --suite mixed|isolated|knee [--concurrency N]
+  runner.js campaign --suite mixed|isolated|knee [--concurrency N] [--target N]
   runner.js equivalence [--rounds N] [--concurrency N]
   runner.js w09      --config X [--pool N] [--delay-seconds S] [--wait-seconds S]
   runner.js profile  --config X --out <dir>
+  (--target N ∈ (6,12] resumes a recorded campaign as a v2 §6.4
+   append-replicate session; a fresh run is refused while campaign.json exists)
   (--attempt N / --retry N are accepted and ignored on all commands: the caller's retry marker)`;
 
 async function main() {
@@ -6725,11 +6799,27 @@ async function main() {
       if (typeof cli.suite !== "string")
         throw new Error("--suite mixed|isolated|knee required");
       const campaignConc = Number(cli.concurrency);
+      const campaignTarget = Number(cli.target);
+      if (
+        cli.target !== undefined &&
+        !(
+          Number.isInteger(campaignTarget) &&
+          campaignTarget > 6 &&
+          campaignTarget <= 12
+        )
+      )
+        throw new Error(
+          "--target N must be an integer in (6, 12] (v2 §6.4 append-replicate channel)",
+        );
       const result = await cmdCampaign({
         suite: cli.suite,
         concurrency:
           Number.isInteger(campaignConc) && campaignConc > 0
             ? campaignConc
+            : undefined,
+        target:
+          Number.isInteger(campaignTarget) && campaignTarget > 0
+            ? campaignTarget
             : undefined,
       });
       lastLine = `###CAMPAIGN###${JSON.stringify(result)}`;
@@ -6841,6 +6931,8 @@ export {
   runOpStream,
   runPrep,
   setActiveManifest,
+  BOOTSTRAP_RESAMPLES,
+  BOOTSTRAP_SEED,
   sourceShaProblems,
   spawnServer,
   startProcSampler,
