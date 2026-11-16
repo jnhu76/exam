@@ -20,6 +20,10 @@ import {
 import type { EmailSender, Organization } from "@exam/domain";
 import { createEmailSender } from "../email/senders.js";
 import { EmailOutboxService } from "../email/outboxService.js";
+import {
+  BOOTSTRAP_PENDING_MESSAGE,
+  sanitizeEmailError,
+} from "../email/sanitizeError.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { migratePostgres } from "@exam/db/postgres";
 import { randomUUID } from "node:crypto";
@@ -31,8 +35,11 @@ import { fileURLToPath } from "node:url";
 
 const WORKER_NAME = "email-delivery";
 
-export const BOOTSTRAP_PENDING_MESSAGE =
-  "bootstrap_pending: initial organization not initialized";
+// #1012: the fixed bootstrap state label lives in the email privacy policy
+// (email/sanitizeError.ts) so the diagnostics read-side projection can
+// recognize it without importing this worker entry. Re-exported here for the
+// existing importers.
+export { BOOTSTRAP_PENDING_MESSAGE };
 
 // ── State ───────────────────────────────────────────────────────────
 
@@ -128,8 +135,9 @@ export async function waitForSingleOrganization(
         lastError: BOOTSTRAP_PENDING_MESSAGE,
       });
     } catch (err) {
+      // #1012: lifecycle failures carry the safe classification only.
       deps.log("warn", "heartbeat write failed (non-fatal)", {
-        error: err instanceof Error ? err.message : String(err),
+        error: sanitizeEmailError(err),
       });
     }
 
@@ -167,9 +175,11 @@ export async function main(): Promise<void> {
   setupShutdown();
 
   // 1. Database connection
-  log("info", "connecting to database", {
-    databaseUrl: config.database.url.replace(/\/\/.*@/, "//***@"),
-  });
+  // #1012: the URL itself is not printed. Masking only the userinfo left the
+  // database name, query, and path bytes in the log; a connection target is
+  // deployment configuration, not an observable an unprivileged log reader
+  // should see.
+  log("info", "connecting to database");
   const conn = await createDatabase(config.database.url);
   const { db, sql } = conn;
   let sender: EmailSender | undefined;
@@ -221,9 +231,6 @@ export async function main(): Promise<void> {
       ctx: orgScope,
       sender,
       retryBaseSeconds: config.email.retryBaseSeconds,
-      scrubSecrets: config.email.smtp?.password
-        ? [config.email.smtp.password]
-        : [],
       // #800: dead-letter transitions surface as error-level lines on the
       // worker's structured stdout log.
       logger: {
@@ -283,13 +290,14 @@ export async function main(): Promise<void> {
           });
         } catch (err) {
           log("warn", "heartbeat write failed (non-fatal)", {
-            error: err instanceof Error ? err.message : String(err),
+            error: sanitizeEmailError(err),
           });
         }
       } catch (err) {
-        log("error", "poll cycle failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
+        // #1012: one safe representation feeds BOTH exits (the stderr JSON
+        // line and the persisted heartbeat) so they cannot disagree.
+        const safeError = sanitizeEmailError(err);
+        log("error", "poll cycle failed", { error: safeError });
 
         // Persist error heartbeat
         try {
@@ -299,7 +307,7 @@ export async function main(): Promise<void> {
             lastPollAt: new Date(),
             lastSuccessAt: null,
             lastErrorAt: new Date(),
-            lastError: err instanceof Error ? err.message : String(err),
+            lastError: safeError,
           });
         } catch {
           // heartbeat write failure is non-fatal
@@ -318,7 +326,7 @@ export async function main(): Promise<void> {
         await sender.close?.();
       } catch (err) {
         log("error", "sender close error", {
-          error: err instanceof Error ? err.message : String(err),
+          error: sanitizeEmailError(err),
         });
       }
     }
@@ -369,9 +377,11 @@ const isMain =
 
 if (isMain) {
   void main().catch((err) => {
+    // #1012: the startup failure carries the safe classification only — no
+    // raw message (config loaders interpolate raw env values into it) and no
+    // stack (source paths). The non-zero exit code remains the failure signal.
     log("error", "worker failed to start", {
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
+      error: sanitizeEmailError(err),
     });
     process.exit(1);
   });

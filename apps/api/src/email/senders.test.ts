@@ -65,14 +65,14 @@ describe("FakeEmailSender", () => {
     expect(result).toEqual({ providerMessageId: null });
   });
 
-  it("failure mode rejects with the fixed message", async () => {
+  it("failure mode rejects with the fixed safe classification", async () => {
     await expect(
       new FakeEmailSender("failure").send({
         to: "x@example.com",
         subject: "s",
         text: "t",
       }),
-    ).rejects.toThrow("Fake email sender failure");
+    ).rejects.toThrow("email_error:internal_error");
   });
 
   it("writes the send-entered witness BEFORE the simulated delay resolves (#482)", async () => {
@@ -121,8 +121,10 @@ describe("FakeEmailSender", () => {
     }
   });
 
-  it("fails the send (not silently) when the witness path is unwritable", async () => {
+  it("fails the send (not silently) when the witness path is unwritable, without leaking the path", async () => {
     // A regular file where a directory would be needed: mkdir/writes fail.
+    // #1012: the send must still FAIL loudly (a silent witness miss would
+    // hang a test) but the path never enters the error payload.
     const blocker = join(tmpdir(), `exam-fake-witness-blocker-${randomUUID()}`);
     writeFileSync(blocker, "not a directory");
     try {
@@ -132,7 +134,12 @@ describe("FakeEmailSender", () => {
           subject: "s",
           text: "t",
         }),
-      ).rejects.toThrow(/fake-send-entered witness/);
+      ).rejects.toSatisfy((err: Error) => {
+        expect(err).toBeInstanceOf(Error);
+        expect(err.message).toBe("email_error:internal_error");
+        expect(err.message).not.toContain(blocker);
+        return true;
+      });
     } finally {
       rmSync(blocker, { force: true, recursive: true });
     }
@@ -190,10 +197,12 @@ describe("SmtpEmailSender", () => {
     expect(captured[0]?.from).toBe("no-reply@example.local");
   });
 
-  it("sanitizes a transport failure (no password leak) and rethrows", async () => {
+  it("classifies a transport failure and rethrows without the provider's free text", async () => {
     const SECRET = "super-secret-password-123";
     // Transporter.sendMail returns a rejected Promise (the nodemailer
-    // Promise-style API). The SmtpEmailSender must sanitize the rejection.
+    // Promise-style API). The SmtpEmailSender must classify the rejection —
+    // the allowlisted SMTP code survives, the echoed password does not (the
+    // caller does NOT have to know the secret for the policy to contain it).
     const failingTransporter = {
       sendMail: () =>
         Promise.reject(
@@ -207,14 +216,14 @@ describe("SmtpEmailSender", () => {
     const sender = new SmtpEmailSender({
       from: "no-reply@example.local",
       transporter: failingTransporter,
-      scrubSecrets: [SECRET],
     });
-    // The thrown sanitized error must contain the SMTP code but NOT the password.
     await expect(
       sender.send({ to: "to@example.com", subject: "s", text: "t" }),
     ).rejects.toSatisfy((err: Error) => {
       expect(err.message).not.toContain(SECRET);
-      expect(err.message).toContain("EAUTH");
+      expect(err.message).toBe(
+        "email_error:smtp_auth_failed code=EAUTH rc=535",
+      );
       return true;
     });
   });
@@ -236,7 +245,7 @@ describe("SmtpEmailSender", () => {
     expect(result).toEqual({ providerMessageId: null });
   });
 
-  it("rejects when the transport indicates the single recipient was rejected", async () => {
+  it("rejects on a rejected recipient with a fixed category that keeps the address out", async () => {
     const transporter = {
       sendMail: () =>
         Promise.resolve({
@@ -250,9 +259,15 @@ describe("SmtpEmailSender", () => {
       from: "no-reply@example.local",
       transporter,
     });
+    // Delivery-failure semantics preserved (still rejects — the outbox marks
+    // retry/dead), but the recipient address never enters the payload.
     await expect(
       sender.send({ to: "to@example.com", subject: "s", text: "t" }),
-    ).rejects.toThrow("was rejected by the SMTP server");
+    ).rejects.toSatisfy((err: Error) => {
+      expect(err.message).toBe("email_error:smtp_recipient_rejected");
+      expect(err.message).not.toContain("to@example.com");
+      return true;
+    });
   });
 });
 

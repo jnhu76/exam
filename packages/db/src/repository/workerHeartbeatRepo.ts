@@ -5,7 +5,15 @@ import { workerHeartbeats } from "../schema/pg.js";
 import type { Database } from "../types.js";
 import { now } from "./baseRepo.js";
 
-/** Input for upserting a worker heartbeat record. */
+/**
+ * Input for upserting a worker heartbeat record.
+ *
+ * OWNERSHIP (#1012): this repo is a storage passthrough — `lastError` content
+ * safety is owned by the email privacy policy at the WRITE side (callers pass
+ * only its safe representation), and readers (diagnostics projection) must
+ * treat any stored value as untrusted input. History written by older
+ * workers is covered by the read-side projection, not by rewrites here.
+ */
 export interface UpsertHeartbeatInput {
   workerName: string;
   workerInstanceId: string;

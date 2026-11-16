@@ -9,6 +9,7 @@ import {
   type WorkerHeartbeatRepo,
 } from "@exam/db/repository/workerHeartbeatRepo";
 import { EmailOutboxService } from "../email/outboxService.js";
+import { sanitizeEmailError } from "../email/sanitizeError.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import {
   interruptibleSleep,
@@ -69,8 +70,9 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
         lastError,
       });
     } catch (err) {
+      // #1012: lifecycle failures carry the safe classification only.
       log("warn", "heartbeat write failed (non-fatal)", {
-        error: err instanceof Error ? err.message : String(err),
+        error: sanitizeEmailError(err),
       });
     }
   };
@@ -95,9 +97,6 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
       ctx: orgScope,
       sender: fastify.emailSender,
       retryBaseSeconds: config.email.retryBaseSeconds,
-      scrubSecrets: config.email.smtp?.password
-        ? [config.email.smtp.password]
-        : [],
       // #800: dead-letter transitions surface as error-level lines on the
       // same loop logger (Pino via fastify.log).
       logger: {
@@ -143,10 +142,11 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
 
         await writeHeartbeat(null);
       } catch (err) {
-        log("error", "poll cycle failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await writeHeartbeat(err instanceof Error ? err.message : String(err));
+        // #1012: one safe representation feeds BOTH exits (Pino line and the
+        // persisted heartbeat) so they cannot disagree.
+        const safeError = sanitizeEmailError(err);
+        log("error", "poll cycle failed", { error: safeError });
+        await writeHeartbeat(safeError);
       }
 
       if (!stopping) {
@@ -161,14 +161,15 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
         await runLoop();
         return;
       } catch (err) {
+        const safeError = sanitizeEmailError(err);
         log(
           "error",
           "email outbox loop crashed; retrying after poll interval",
           {
-            error: err instanceof Error ? err.message : String(err),
+            error: safeError,
           },
         );
-        await writeHeartbeat(err instanceof Error ? err.message : String(err));
+        await writeHeartbeat(safeError);
         await interruptibleSleep(pollIntervalMs, () => stopping);
       }
     }
@@ -196,7 +197,7 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
           () => true,
           (err) => {
             log("error", "email outbox loop failed during shutdown", {
-              error: err instanceof Error ? err.message : String(err),
+              error: sanitizeEmailError(err),
             });
             return true;
           },

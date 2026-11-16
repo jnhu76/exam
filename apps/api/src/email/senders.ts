@@ -2,7 +2,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { EmailMessage, EmailSender, EmailSendResult } from "@exam/domain";
-import { sanitizeEmailError } from "./sanitizeError.js";
+import { classifyEmailError, EmailSendError } from "./sanitizeError.js";
 
 /**
  * Email sender configuration derived from runtime config (M3). Kept free of
@@ -58,14 +58,14 @@ export class DisabledEmailSender implements EmailSender {
 
 /**
  * Deterministic fake sender for tests and local dev. `success` always
- * resolves; `failure` always rejects with a fixed message so `lastError` is
- * assertable. Never touches the network. `delayMs` simulates transport
- * latency before resolving/rejecting (0 = immediate).
+ * resolves; `failure` always rejects with a fixed safe classification so
+ * `lastError` is assertable. Never touches the network. `delayMs` simulates
+ * transport latency before resolving/rejecting (0 = immediate).
  *
  * When `sendEnteredFile` is set (test/deployment-rehearsal seam), the
  * file is written synchronously on entry to `send()`, BEFORE the delay —
- * "witness exists" therefore implies "send body entered and the fake delay
- * is now in flight". The real SMTP path never writes it.
+ * "witness exists" therefore implies "send entered and the fake delay is
+ * in flight". The real SMTP path never writes it.
  */
 export class FakeEmailSender implements EmailSender {
   constructor(
@@ -86,19 +86,26 @@ export class FakeEmailSender implements EmailSender {
           this.sendEnteredFile,
           `${process.pid} ${new Date().toISOString()}\n`,
         );
-      } catch (err) {
-        throw new EmailSendError(
-          `failed to write fake-send-entered witness ${this.sendEnteredFile}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+      } catch {
+        // #1012: the failure stays observable (the send fails loudly, so a
+        // test waiting on the witness cannot hang) but the path — filesystem
+        // state — never reaches the error payload.
+        throw new EmailSendError({
+          category: "internal_error",
+          code: null,
+          smtpResponseCode: null,
+        });
       }
     }
     if (this.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     }
     if (this.mode === "failure") {
-      throw new EmailSendError("Fake email sender failure");
+      throw new EmailSendError({
+        category: "internal_error",
+        code: null,
+        smtpResponseCode: null,
+      });
     }
     return { providerMessageId: null };
   }
@@ -113,25 +120,18 @@ export class FakeEmailSender implements EmailSender {
  *    without touching the network.
  *
  * `send` conforms to the `EmailSender` contract (returns `Promise<void>`).
- * Errors are sanitized (no password/config leak) and rethrown as
- * {@link EmailSendError} so the worker stores a safe string.
+ * Any rejection — Error, string, or hostile object — is classified by the
+ * single privacy policy and rethrown as an {@link EmailSendError} carrying
+ * the closed safe classification, so the worker persists a safe string.
  */
 export class SmtpEmailSender implements EmailSender {
-  /** Secrets to scrub from any send error (e.g. the SMTP password). */
-  private readonly scrubSecrets: string[];
-
   constructor(
     private readonly opts: {
       from: string;
       fromName?: string | null;
       transporter: Transporter;
-      scrubSecrets?: string[];
     },
-  ) {
-    this.scrubSecrets = (opts.scrubSecrets ?? []).filter(
-      (s): s is string => typeof s === "string" && s.length > 0,
-    );
-  }
+  ) {}
 
   async send(message: EmailMessage): Promise<EmailSendResult> {
     // Pass `from` as an object when a display name is set: nodemailer then
@@ -163,9 +163,13 @@ export class SmtpEmailSender implements EmailSender {
         info.rejected.length > 0 &&
         info.rejected.includes(message.to)
       ) {
-        throw new EmailSendError(
-          `Recipient ${message.to} was rejected by the SMTP server`,
-        );
+        // Delivery-failure semantics preserved, but the recipient address
+        // (personal data echoed by the provider) never enters the payload.
+        throw new EmailSendError({
+          category: "smtp_recipient_rejected",
+          code: null,
+          smtpResponseCode: null,
+        });
       }
 
       return { providerMessageId: messageId };
@@ -173,24 +177,13 @@ export class SmtpEmailSender implements EmailSender {
       if (err instanceof EmailSendError) {
         throw err;
       }
-      throw new EmailSendError(sanitizeEmailError(err, this.scrubSecrets));
+      throw new EmailSendError(classifyEmailError(err));
     }
   }
 
   /** Release the underlying transporter's resources (pooled SMTP connections). */
   close(): void {
     this.opts.transporter.close?.();
-  }
-}
-
-/**
- * Error thrown by all senders on failure, carrying an already-sanitized
- * message. The worker stores `err.message` directly into `lastError`.
- */
-export class EmailSendError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "EmailSendError";
   }
 }
 
@@ -247,9 +240,6 @@ export function createEmailSender(config: EmailSenderConfig): EmailSender {
       from: config.from,
       fromName: config.fromName,
       transporter,
-      // The SMTP password is the one secret the SMTP sender knows; scrubbing
-      // it from any provider-echoed error text is the sanitizer's job.
-      scrubSecrets: [config.smtp.password],
     });
   }
   throw new Error(

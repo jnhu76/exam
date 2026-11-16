@@ -154,7 +154,8 @@ describe("waitForSingleOrganization", () => {
     expect(deps.log).toHaveBeenCalledWith(
       "warn",
       "heartbeat write failed (non-fatal)",
-      { error: "connection reset" },
+      // #1012 closed field: the DB error's raw message never reaches the log.
+      { error: "email_error:internal_error" },
     );
     expect(deps.log).toHaveBeenCalledWith(
       "info",

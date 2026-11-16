@@ -47,8 +47,6 @@ export class EmailOutboxService {
       ctx: EmailRepoContext;
       sender: EmailSender;
       retryBaseSeconds: number;
-      /** Literal secrets to scrub from persisted `lastError` (e.g. SMTP password). */
-      scrubSecrets?: string[];
       /** Optional audit emitter for email outbox events. */
       auditEmitter?: (event: {
         action: string;
@@ -121,7 +119,10 @@ export class EmailOutboxService {
       } catch (err) {
         // attemptCount is already incremented by the claim SQL
         const currentAttemptCount = row.attemptCount;
-        const lastError = sanitizeEmailError(err, this.deps.scrubSecrets ?? []);
+        // #1012: `lastError` is ONLY ever the policy's safe classification
+        // string (fixed category + allowlisted code) — never raw error
+        // content, recipient addresses, or provider-echoed text.
+        const lastError = sanitizeEmailError(err);
         if (currentAttemptCount >= row.maxAttempts) {
           const dead = await repo.markDead(
             ctx,
@@ -134,16 +135,23 @@ export class EmailOutboxService {
             result.dead += 1;
             // #800: one error-level line per dead-letter transition, into the
             // existing logging contract (no new channel). `lastError` is the
-            // sanitized value above — category/stable-code only, never raw
+            // sanitized value above — closed category/code only, never raw
             // error content; no recipient address or body content is logged.
-            this.deps.logger?.error(
-              {
-                emailId: row.id,
-                attemptCount: currentAttemptCount,
-                lastError,
-              },
-              "Email delivery failed permanently; outbox row moved to dead-letter",
-            );
+            // Observation-failure isolation: the DB transition is already
+            // committed, so a throwing logger must neither corrupt the result
+            // nor stop the remaining claimed rows from being processed.
+            try {
+              this.deps.logger?.error(
+                {
+                  emailId: row.id,
+                  attemptCount: currentAttemptCount,
+                  lastError,
+                },
+                "Email delivery failed permanently; outbox row moved to dead-letter",
+              );
+            } catch {
+              // best-effort observation only (#1012 B4 failure isolation)
+            }
             this.deps.auditEmitter?.({
               action: "email.send_failed",
               targetType: "email_outbox",

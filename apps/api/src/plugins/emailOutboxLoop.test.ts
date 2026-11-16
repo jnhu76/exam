@@ -245,7 +245,9 @@ describe("emailOutboxLoop plugin", () => {
         10000,
       );
       const dead = await getRow(db, deadRow.id);
-      expect(dead.lastError).toContain("smtp unavailable");
+      // #1012 closed field: the sender's free text never persists; only the
+      // fixed safe classification does.
+      expect(dead.lastError).toBe("email_error:internal_error");
 
       // The loop must survive the failure: a later row still gets delivered.
       const followupRow = await seedRow(db, ctx.organizationId);
