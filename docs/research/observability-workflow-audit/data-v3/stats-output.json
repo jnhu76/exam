@@ -1,17 +1,17 @@
 {
   "inputs": {
     "segments.jsonl": {
-      "sha256": "5345a1a5457c81ceeb2966b1aa5b2a20fbcde58988f5b981974de7da882836ab",
-      "lines": 73
+      "sha256": "bc215781794f58fad81d3f7191f78c91ac8a473118115202d15130248020c27a",
+      "lines": 130
     },
     "campaign-summary.json": {
-      "sha256": "17af7cfa5bc120c50a1b7720c122b4bc0f8551a8f6e5536417acb2453192d5a9"
+      "sha256": "32a06d1dceb872ccf4a0fad05bdfc56e44f04a2687dc0e763f342f56e27f685c"
     }
   },
   "totals": {
-    "segments": 73,
-    "valid": 8,
-    "invalid": 65
+    "segments": 130,
+    "valid": 63,
+    "invalid": 67
   },
   "bySuite": {
     "pilot": {
@@ -22,6 +22,20 @@
         "LOADAVG_IN_WINDOW_EXCEEDED": 4,
         "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 4
       }
+    },
+    "mixed-campaign": {
+      "segments": 49,
+      "valid": 47,
+      "invalid": 2,
+      "invalidReasonCodes": {
+        "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 2
+      }
+    },
+    "mixed-superseded-run1": {
+      "segments": 2,
+      "valid": 2,
+      "invalid": 0,
+      "invalidReasonCodes": {}
     },
     "isolated": {
       "segments": 51,
@@ -36,6 +50,12 @@
     "knee": {
       "segments": 1,
       "valid": 1,
+      "invalid": 0,
+      "invalidReasonCodes": {}
+    },
+    "equivalence-final": {
+      "segments": 6,
+      "valid": 6,
       "invalid": 0,
       "invalidReasonCodes": {}
     },
@@ -59,6 +79,38 @@
     }
   },
   "validSegmentsBySuiteWorkflowConfig": [
+    {
+      "suite": "equivalence-final",
+      "workflow": "mixed",
+      "config": "H0",
+      "n": 3,
+      "reps": [
+        "round-1",
+        "round-2",
+        "round-3"
+      ],
+      "medianCpuMsPerOp": 87.9,
+      "medianP50Ms": 18.564,
+      "medianP95Ms": 1061.537,
+      "medianP99Ms": 1084.755,
+      "medianRssMb": 493.31
+    },
+    {
+      "suite": "equivalence-final",
+      "workflow": "mixed",
+      "config": "H1",
+      "n": 3,
+      "reps": [
+        "round-1",
+        "round-2",
+        "round-3"
+      ],
+      "medianCpuMsPerOp": 87.6048,
+      "medianP50Ms": 18.502,
+      "medianP95Ms": 1061.059,
+      "medianP99Ms": 1087.943,
+      "medianRssMb": 500
+    },
     {
       "suite": "equivalence",
       "workflow": "mixed",
@@ -105,23 +157,250 @@
       "medianP95Ms": 10858.279,
       "medianP99Ms": 12168.209,
       "medianRssMb": 2317.87
+    },
+    {
+      "suite": "mixed-campaign",
+      "workflow": "mixed",
+      "config": "H0",
+      "n": 10,
+      "reps": [
+        "sweep-1",
+        "sweep-10",
+        "sweep-2",
+        "sweep-3",
+        "sweep-4",
+        "sweep-5",
+        "sweep-6",
+        "sweep-7",
+        "sweep-8",
+        "sweep-9"
+      ],
+      "medianCpuMsPerOp": 93.2214,
+      "medianP50Ms": 20.066000000000003,
+      "medianP95Ms": 1085.76,
+      "medianP99Ms": 1126.8355,
+      "medianRssMb": 495.015
+    },
+    {
+      "suite": "mixed-campaign",
+      "workflow": "mixed",
+      "config": "H1",
+      "n": 10,
+      "reps": [
+        "sweep-1",
+        "sweep-10",
+        "sweep-2",
+        "sweep-3",
+        "sweep-4",
+        "sweep-5",
+        "sweep-6",
+        "sweep-7",
+        "sweep-8",
+        "sweep-9"
+      ],
+      "medianCpuMsPerOp": 87.91905,
+      "medianP50Ms": 18.825000000000003,
+      "medianP95Ms": 1047.393,
+      "medianP99Ms": 1078.0455,
+      "medianRssMb": 500.945
+    },
+    {
+      "suite": "mixed-campaign",
+      "workflow": "mixed",
+      "config": "H2",
+      "n": 10,
+      "reps": [
+        "sweep-1",
+        "sweep-10",
+        "sweep-2",
+        "sweep-3",
+        "sweep-4",
+        "sweep-5",
+        "sweep-6",
+        "sweep-7",
+        "sweep-8",
+        "sweep-9"
+      ],
+      "medianCpuMsPerOp": 91.8476,
+      "medianP50Ms": 19.8535,
+      "medianP95Ms": 1071.973,
+      "medianP99Ms": 1128.654,
+      "medianRssMb": 542.115
+    },
+    {
+      "suite": "mixed-campaign",
+      "workflow": "mixed",
+      "config": "H3",
+      "n": 9,
+      "reps": [
+        "sweep-1",
+        "sweep-2",
+        "sweep-3",
+        "sweep-4",
+        "sweep-5",
+        "sweep-6",
+        "sweep-7",
+        "sweep-8",
+        "sweep-9"
+      ],
+      "medianCpuMsPerOp": 91.8714,
+      "medianP50Ms": 19.83,
+      "medianP95Ms": 1069.645,
+      "medianP99Ms": 1102.526,
+      "medianRssMb": 538.36
+    },
+    {
+      "suite": "mixed-campaign",
+      "workflow": "mixed",
+      "config": "H4",
+      "n": 8,
+      "reps": [
+        "sweep-1",
+        "sweep-2",
+        "sweep-3",
+        "sweep-4",
+        "sweep-5",
+        "sweep-6",
+        "sweep-7",
+        "sweep-8"
+      ],
+      "medianCpuMsPerOp": 98.11905,
+      "medianP50Ms": 20.068,
+      "medianP95Ms": 1110.5695,
+      "medianP99Ms": 1186.406,
+      "medianRssMb": 542.3599999999999
+    },
+    {
+      "suite": "mixed-superseded-run1",
+      "workflow": "mixed",
+      "config": "H0",
+      "n": 1,
+      "reps": [
+        "sweep-1"
+      ],
+      "medianCpuMsPerOp": 87.081,
+      "medianP50Ms": 18.798,
+      "medianP95Ms": 1044.974,
+      "medianP99Ms": 1075.646,
+      "medianRssMb": 503.75
+    },
+    {
+      "suite": "mixed-superseded-run1",
+      "workflow": "mixed",
+      "config": "H1",
+      "n": 1,
+      "reps": [
+        "sweep-1"
+      ],
+      "medianCpuMsPerOp": 88.181,
+      "medianP50Ms": 18.602,
+      "medianP95Ms": 1053.437,
+      "medianP99Ms": 1080.997,
+      "medianRssMb": 497.69
     }
   ],
   "formalAggregate": {
     "semantics": "aggregateCore (runner.js:256) over formal rounds only: paired relative delta vs the same-round same-workflow H1 baseline; baseline excluded from rows; cross-workflow pairing never happens",
-    "formalRoundSegmentsInPackage": 0,
-    "rows": [],
+    "formalRoundSegmentsInPackage": 49,
+    "rows": [
+      {
+        "workflow": "mixed",
+        "config": "H0",
+        "comparable": true,
+        "cpuDeltaPct": 0.2952553267718754,
+        "cpuCiPct": [
+          -0.696,
+          7.535
+        ],
+        "p50DeltaPct": 1.0926010726315132,
+        "p95DeltaPct": 0.36605598175605175,
+        "p99DeltaPct": 0.098152608679046,
+        "p99CiPct": [
+          -0.705,
+          10.207
+        ],
+        "rssDeltaMb": -6.004999999999967,
+        "cpuIqrPp": 2.366,
+        "p99IqrPp": 8.39,
+        "n": 10
+      },
+      {
+        "workflow": "mixed",
+        "config": "H2",
+        "comparable": true,
+        "cpuDeltaPct": 3.91402007221643,
+        "cpuCiPct": [
+          2.878,
+          5.37
+        ],
+        "p50DeltaPct": 4.798732206143846,
+        "p95DeltaPct": 1.7408352445227604,
+        "p99DeltaPct": 2.29042311955393,
+        "p99CiPct": [
+          1.259,
+          10.248
+        ],
+        "rssDeltaMb": 43.66500000000002,
+        "cpuIqrPp": 1.658,
+        "p99IqrPp": 8.085,
+        "n": 10
+      },
+      {
+        "workflow": "mixed",
+        "config": "H3",
+        "comparable": true,
+        "cpuDeltaPct": 4.777986946635872,
+        "cpuCiPct": [
+          3.226,
+          7.166
+        ],
+        "p50DeltaPct": 5.117252201203031,
+        "p95DeltaPct": 2.179436966842759,
+        "p99DeltaPct": 2.4212652188372723,
+        "p99CiPct": [
+          1.389,
+          9.971
+        ],
+        "rssDeltaMb": 44.370000000000005,
+        "cpuIqrPp": 2.028,
+        "p99IqrPp": 4.091,
+        "n": 9
+      },
+      {
+        "workflow": "mixed",
+        "config": "H4",
+        "comparable": true,
+        "cpuDeltaPct": 10.143589741868126,
+        "cpuCiPct": [
+          8.374,
+          16.943
+        ],
+        "p50DeltaPct": 6.937420953340191,
+        "p95DeltaPct": 6.369673198962749,
+        "p99DeltaPct": 5.740447055109956,
+        "p99CiPct": [
+          4.692,
+          17.249
+        ],
+        "rssDeltaMb": 42.799999999999955,
+        "cpuIqrPp": 7.492,
+        "p99IqrPp": 10.186,
+        "n": 8
+      }
+    ],
     "exclusionBasis": {
       "pilot": "PROTOCOL §3.4: pilot/ladder data never enters statistics",
+      "mixed-superseded-run1": "superseded harness-gap run (defer-starve, pre waitForQuietLoad1 fix); not for judgment",
       "isolated": "as-built: cmdAggregate reads rounds/ only (runner.js:5201); campaign segments are outside rounds/",
       "knee": "same as isolated; additionally §6.5(b) campaign aggregation path not landed (PROTOCOL-v3)",
+      "equivalence-final": "§6.6-3 comparability evidence (0 oracle violations, terminal fields equal); not a performance judgment channel",
       "equivalence": "superseded interim registers (final h0-equivalence.json absent); §6.6-3 evidence, never a performance judgment channel",
       "probe-archive": "round-0 probe/verify archives, interim evidence"
     },
-    "note": "n=0 < 6 → every aggregate cell UNKNOWN (PROTOCOL §6.4); CI containing 0 must be reported INCONCLUSIVE, never 'zero cost'"
+    "note": "n < 6 → the cell is UNKNOWN (PROTOCOL §6.4); CI containing 0 must be reported INCONCLUSIVE, never 'zero cost'; CI straddling +5% is UNKNOWN→Owner; CI low > +5% is FAIL; IQR > 5pp is UNKNOWN (the frozen table gives FAIL and UNKNOWN-no-precedence when both hit)"
   },
   "campaignValidPaired": {
-    "mixed": 0,
+    "mixed": 8,
     "isolated": 0,
     "knee": 0
   },

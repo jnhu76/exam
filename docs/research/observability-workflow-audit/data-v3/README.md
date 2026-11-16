@@ -6,17 +6,17 @@
 [`evidence-manifest.json`](../evidence-manifest.json) 的 `localRaw` 部分以
 本地路径 + sha256 + 再生成命令登记（R2-09 双清单）。
 
-打包时间：2026-11-15；打包者：`scripts/perf/otel-workflows/package-data-v3.mjs`。
-原始根当日状态：73 个 `segment-summary.json`（8 valid / 65 invalid）。
+打包时间：2026-11-16（v3.1 重打包：正式 mixed campaign 落地后）；打包者：`scripts/perf/otel-workflows/package-data-v3.mjs`。
+原始根当日状态：130 个 `segment-summary.json`（63 valid / 67 invalid）。v3.1 新增：`campaign-mixed/` 正式段（49 段，47 valid）、最终 H0 等价登记 `h0-equivalence.json`（verified，3 sweeps × W01/W03/W05/W08 全 0 oracle 违规、终态字段 H0/H1 逐项相等）、`campaign-mixed/aggregate-campaign.json`（§6.5(a) 聚合桥判定）。
 
 ## 文件清单
 
 | 文件 | 内容 |
 | --- | --- |
-| `segments.jsonl` | 73 行、每段一行：`suite / status / workflow / config / rep / unit / concurrency / valid / ops / errors / cpuMsPerOp / p50Ms / p95Ms / p99Ms / rssMb / rssMaxMb / throughputOpsPerSec / wallSeconds / maxLoad1 / externalLoadIncrement / expiredInProgressAtWindowEntry / invalidReasonCodes / invalidReasons / source`。无效段对应字段为 `null`（不补数）。`source` 指回原始段目录（仓库相对路径）。 |
-| `campaign-summary.json` | 三套件 + pilot + 等价性登记 + 配套证据的脱敏摘要：mixed（从未启动，门拒绝）、isolated（51 段全无效：49 `SEED_CONVERGE_DB_UNREACHABLE` + 1 `SEED_CONVERGE_DB_STARTING` + 1 `CPU_PAIR_FAIL_CLOSED`；27 次 entry defer + 9 次 starved——逐段明细见 `segments.jsonl` 的 `invalidReasonCodes`）、knee（6 单元、恰 1 个 valid 段 H1@c50）、knee 中止探针、equivalence（最终登记缺席 + 3 份 superseded 中间登记）、b4-repro / w09 / profile-H0 摘要、事件记录索引。 |
+| `segments.jsonl` | 130 行、每段一行：`suite / status / workflow / config / rep / unit / concurrency / valid / ops / errors / cpuMsPerOp / p50Ms / p95Ms / p99Ms / rssMb / rssMaxMb / throughputOpsPerSec / wallSeconds / maxLoad1 / externalLoadIncrement / expiredInProgressAtWindowEntry / invalidReasonCodes / invalidReasons / source`。无效段对应字段为 `null`（不补数）。`source` 指回原始段目录（仓库相对路径）。 |
+| `campaign-summary.json` | 三套件 + pilot + 等价性登记 + 配套证据的脱敏摘要：mixed（**正式判定单元：10 sweeps、47 valid/49 段、H2 n=10 / H3 n=9 / H4 n=8 有效配对；含 §6.5(a) 聚合桥的判定行**；Owner 指令停止于 sweep-10 中途，`stoppedByOwner: true`；run1 defer-starve 前史见 `prehistory`）、isolated（51 段全无效：49 `SEED_CONVERGE_DB_UNREACHABLE` + 1 `SEED_CONVERGE_DB_STARTING` + 1 `CPU_PAIR_FAIL_CLOSED`；27 次 entry defer + 9 次 starved——逐段明细见 `segments.jsonl` 的 `invalidReasonCodes`）、knee（6 单元、恰 1 个 valid 段 H1@c50）、knee 中止探针、equivalence（**最终登记 verified=true**：3 sweeps × 4 工作流 0 违规 + 3 份 superseded 中间登记）、b4-repro / w09 / profile-H0 摘要、事件记录索引。 |
 | `aggregate.json` | 官方 `runner.js aggregate` 产物的脱敏副本（notes 中绝对路径改写为仓库相对路径，其余逐字）+ `packagingProvenance`（来源、再生成命令、as-built 解释：`cmdAggregate` 只读 `rounds/`（`runner.js:5201`），v3 `rounds/` 无轮次清单 → `rows: []`）。 |
-| `stats-output.json` | `packaged-stats.mjs` 的重算输出：总数、按 suite 的无效原因码直方图、valid 段按 (suite, workflow, config) 的中位数（侦察级描述统计）、formal aggregate 行（本轮为空）、campaign validPaired（0/0/0）、knee 侦察段字段。 |
+| `stats-output.json` | `packaged-stats.mjs` 的重算输出：总数、按 suite 的无效原因码直方图、valid 段按 (suite, workflow, config) 的中位数（侦察级描述统计）、formal aggregate 行（**mixed-campaign 正式配对：H2/H3/H4 vs H1 与 H0 血缘行，含 bootstrap CI 与 IQR，评审侧自含重算=对权威实现的交叉验证**）、campaign validPaired（mixed=8 / isolated=0 / knee=0）、knee 侦察段字段。 |
 | `SHA256SUMS` | 本目录 5 个数据文件的 sha256（`sha256sum -c` 兼容格式；不含自身）。 |
 
 ## 生成链（原始 → 打包，顺序固定）

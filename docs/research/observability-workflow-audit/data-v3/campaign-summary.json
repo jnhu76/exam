@@ -1,5 +1,5 @@
 {
-  "packagedAt": "2026-11-15T14:10:08.515Z",
+  "packagedAt": "2026-11-16T00:30:39.047Z",
   "packagedBy": "scripts/perf/otel-workflows/package-data-v3.mjs",
   "rawSourceRoot": "out/otel-w964/workflow-audit-v3/",
   "rawSourceRootNote": "gitignored (.gitignore:77 out/); packaged here as sanitized digests; per-file sha256 recorded in evidence-manifest.json (localRaw part)",
@@ -14,9 +14,9 @@
     }
   },
   "segmentTotals": {
-    "segments": 73,
-    "valid": 8,
-    "invalid": 65,
+    "segments": 130,
+    "valid": 63,
+    "invalid": 67,
     "bySuite": {
       "isolated": {
         "segments": 51,
@@ -28,10 +28,25 @@
         "valid": 1,
         "invalid": 0
       },
+      "mixed-superseded-run1": {
+        "segments": 2,
+        "valid": 2,
+        "invalid": 0
+      },
+      "mixed-campaign": {
+        "segments": 49,
+        "valid": 47,
+        "invalid": 2
+      },
       "equivalence": {
         "segments": 9,
         "valid": 7,
         "invalid": 2
+      },
+      "equivalence-final": {
+        "segments": 6,
+        "valid": 6,
+        "invalid": 0
       },
       "pilot": {
         "segments": 4,
@@ -222,11 +237,199 @@
   },
   "campaigns": {
     "mixed": {
-      "dir": null,
-      "status": "never-started (fail-closed)",
-      "segmentsLaunched": 0,
-      "gateOutcome": "entry precheck gate rejected every attempt; only failing item = H0 §6.6-3 equivalence register missing (gate 6/7 passed; run-meta 1794745651376 et al.)",
-      "evidence": "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md"
+      "dir": "out/otel-w964/workflow-audit-v3/campaign-mixed/",
+      "generatedAt": "2026-11-15T23:52:24.594Z",
+      "totalValid": 44,
+      "totalAttempts": 45,
+      "totalDeferrals": 0,
+      "units": {
+        "H0": {
+          "config": "H0",
+          "workflow": "mixed",
+          "valid": 9,
+          "attempts": 9,
+          "deferrals": 0,
+          "reasonCodes": {}
+        },
+        "H1": {
+          "config": "H1",
+          "workflow": "mixed",
+          "valid": 9,
+          "attempts": 9,
+          "deferrals": 0,
+          "reasonCodes": {}
+        },
+        "H2": {
+          "config": "H2",
+          "workflow": "mixed",
+          "valid": 9,
+          "attempts": 9,
+          "deferrals": 0,
+          "reasonCodes": {}
+        },
+        "H3": {
+          "config": "H3",
+          "workflow": "mixed",
+          "valid": 9,
+          "attempts": 9,
+          "deferrals": 0,
+          "reasonCodes": {}
+        },
+        "H4": {
+          "config": "H4",
+          "workflow": "mixed",
+          "valid": 8,
+          "attempts": 9,
+          "deferrals": 0,
+          "reasonCodes": {
+            "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 1
+          }
+        }
+      },
+      "overallReasonCodes": {
+        "QUOTA_NOT_COMPLETED_IN_STEADY_WINDOW": 1
+      },
+      "appendSessionNote": "append-replicate session: target 12 valid per unit (v2 §6.4 追加 replicate, CI-tightening only); prior state resumed (units/rounds/notes preserved); attempt ceiling 12 per the v2 §6.4 sampling budget",
+      "stoppedByOwner": true,
+      "aggregate": {
+        "baseline": "H1",
+        "sweeps": 10,
+        "rows": [
+          {
+            "workflow": "mixed",
+            "config": "H2",
+            "n": 10,
+            "cpuDeltaPctMedian": 3.914,
+            "cpuCiPct": [
+              2.878,
+              5.37
+            ],
+            "p99DeltaPctMedian": 2.29,
+            "p99CiPct": [
+              1.259,
+              10.248
+            ],
+            "p50DeltaPctMedian": 4.799,
+            "p95DeltaPctMedian": 1.741,
+            "rssDeltaMbMedian": 43.665,
+            "cpuVerdict": {
+              "verdict": "UNKNOWN",
+              "why": "CI [2.878, 5.370]% vs +5%",
+              "containsZero": false
+            },
+            "p99Verdict": {
+              "verdict": "UNKNOWN",
+              "why": "IQR 8.085pp > 5pp"
+            },
+            "overall": "UNKNOWN"
+          },
+          {
+            "workflow": "mixed",
+            "config": "H3",
+            "n": 9,
+            "cpuDeltaPctMedian": 4.778,
+            "cpuCiPct": [
+              3.226,
+              7.166
+            ],
+            "p99DeltaPctMedian": 2.421,
+            "p99CiPct": [
+              1.389,
+              9.971
+            ],
+            "p50DeltaPctMedian": 5.117,
+            "p95DeltaPctMedian": 2.179,
+            "rssDeltaMbMedian": 44.37,
+            "cpuVerdict": {
+              "verdict": "UNKNOWN",
+              "why": "CI [3.226, 7.166]% vs +5%",
+              "containsZero": false
+            },
+            "p99Verdict": {
+              "verdict": "UNKNOWN",
+              "why": "CI [1.389, 9.971]% vs +5%",
+              "containsZero": false
+            },
+            "overall": "UNKNOWN"
+          },
+          {
+            "workflow": "mixed",
+            "config": "H4",
+            "n": 8,
+            "cpuDeltaPctMedian": 10.144,
+            "cpuCiPct": [
+              8.374,
+              16.943
+            ],
+            "p99DeltaPctMedian": 5.74,
+            "p99CiPct": [
+              4.692,
+              17.249
+            ],
+            "p50DeltaPctMedian": 6.937,
+            "p95DeltaPctMedian": 6.37,
+            "rssDeltaMbMedian": 42.8,
+            "cpuVerdict": {
+              "verdict": "UNKNOWN",
+              "why": "IQR 7.492pp > 5pp"
+            },
+            "p99Verdict": {
+              "verdict": "UNKNOWN",
+              "why": "IQR 10.186pp > 5pp"
+            },
+            "overall": "UNKNOWN"
+          }
+        ],
+        "h0DriftContext": [
+          {
+            "workflow": "mixed",
+            "config": "H1",
+            "n": 10,
+            "cpuDeltaPctMedian": -0.294,
+            "cpuCiPct": [
+              -6.722,
+              0.701
+            ]
+          },
+          {
+            "workflow": "mixed",
+            "config": "H2",
+            "n": 10,
+            "cpuDeltaPctMedian": 3.378,
+            "cpuCiPct": [
+              -4.558,
+              4.02
+            ]
+          },
+          {
+            "workflow": "mixed",
+            "config": "H3",
+            "n": 9,
+            "cpuDeltaPctMedian": 3.897,
+            "cpuCiPct": [
+              -0.957,
+              4.905
+            ]
+          },
+          {
+            "workflow": "mixed",
+            "config": "H4",
+            "n": 8,
+            "cpuDeltaPctMedian": 9.745,
+            "cpuCiPct": [
+              -2.643,
+              17.683
+            ]
+          }
+        ]
+      },
+      "notesDigest": [
+        "append-replicate session: target 12 valid per unit (v2 §6.4 追加 replicate, CI-tightening only); prior state resumed (units/rounds/notes preserved); attempt ceiling 12 per the v2 §6.4 sampling budget"
+      ],
+      "prehistory": {
+        "status": "run1 superseded (defer-starve harness gap, waitForQuietLoad1 fix; see campaign-mixed-superseded-run1/)",
+        "evidence": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/ + BLOCKED-20261115-hostside-docker-desktop-shutdown.md"
+      }
     },
     "isolated": {
       "dir": "out/otel-w964/workflow-audit-v3/campaign-isolated/",
@@ -461,7 +664,7 @@
   "equivalence": {
     "finalRegister": {
       "file": "out/otel-w964/workflow-audit-v3/h0-equivalence.json",
-      "present": false
+      "present": true
     },
     "supersededRuns": [
       {

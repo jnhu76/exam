@@ -1,29 +1,29 @@
 {
-  "generatedAt": "2026-11-15T15:13:53.311Z",
+  "generatedAt": "2026-11-16T00:31:50.072Z",
   "generator": "scripts/perf/otel-workflows/gen-evidence-manifest.mjs",
   "hashTool": "sha256sum",
-  "gitHead": "7a2de31e80038709ff609d62135076b9fd187ea2",
+  "gitHead": "e0c6714eb6b4e2e1cbca0f6faf6696e6cb1ddac4",
   "reviewable": {
     "meaning": "files delivered inside the PR; verifiable by any reviewer without the producing machine",
     "dataV3": {
       "root": "docs/research/observability-workflow-audit/data-v3",
       "fileCount": 6,
-      "totalBytes": 108457,
+      "totalBytes": 160130,
       "files": [
         {
           "path": "docs/research/observability-workflow-audit/data-v3/README.md",
-          "sha256": "8a81e114c149ab5b47326789f1a536bf711ad3879ce6130b7a1f7ab9349d63f6",
-          "bytes": 7265
+          "sha256": "46241a0ae665de29fd59d62d32d0ad3eb29ff1612a06d35d38378866f82d2d3a",
+          "bytes": 8027
         },
         {
           "path": "docs/research/observability-workflow-audit/data-v3/segments.jsonl",
-          "sha256": "5345a1a5457c81ceeb2966b1aa5b2a20fbcde58988f5b981974de7da882836ab",
-          "bytes": 60960
+          "sha256": "bc215781794f58fad81d3f7191f78c91ac8a473118115202d15130248020c27a",
+          "bytes": 99838
         },
         {
           "path": "docs/research/observability-workflow-audit/data-v3/campaign-summary.json",
-          "sha256": "17af7cfa5bc120c50a1b7720c122b4bc0f8551a8f6e5536417acb2453192d5a9",
-          "bytes": 33610
+          "sha256": "32a06d1dceb872ccf4a0fad05bdfc56e44f04a2687dc0e763f342f56e27f685c",
+          "bytes": 39064
         },
         {
           "path": "docs/research/observability-workflow-audit/data-v3/aggregate.json",
@@ -32,12 +32,12 @@
         },
         {
           "path": "docs/research/observability-workflow-audit/data-v3/stats-output.json",
-          "sha256": "9bd48ac06ed532595d833c81075c66902e502d05ed665e605e86ae8f9aeba98d",
-          "bytes": 4401
+          "sha256": "5b7766e78fe363431e110955715e38f9b227add53e3027c5e84377680f2fbe35",
+          "bytes": 10980
         },
         {
           "path": "docs/research/observability-workflow-audit/data-v3/SHA256SUMS",
-          "sha256": "8c520c9adeac3c1e05b5fffccf9f010f541c47116d59b436c43353f1cd16b97c",
+          "sha256": "1317184e5ff04afce8eef41f2f2363a4f8c490ad1993981cb81b3c140f62c9a6",
           "bytes": 410
         }
       ]
@@ -88,8 +88,8 @@
     "groups": {
       "v3": {
         "root": "out/otel-w964/workflow-audit-v3",
-        "fileCount": 403,
-        "totalBytes": 216275414,
+        "fileCount": 771,
+        "totalBytes": 700579921,
         "files": [
           {
             "path": "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md",
@@ -100,6 +100,11 @@
             "path": "out/otel-w964/workflow-audit-v3/INCIDENT-20261115-knee-gate-probe-aborted.md",
             "sha256": "9db9deb965265fe1e10e3d9813e4110b2b5327075c64abd64dcf2ecb9df6198b",
             "bytes": 2230
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/STOPPED-20261116-owner-command.md",
+            "sha256": "47236b111e11f34f92c126b56100dba1f5c72b30ffe0bdac24fd33fa2d98bc53",
+            "bytes": 720
           },
           {
             "path": "out/otel-w964/workflow-audit-v3/aggregate.json",
@@ -1102,6 +1107,1616 @@
             "bytes": 4814266
           },
           {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/campaign.json",
+            "sha256": "592bdea59a0e8394d18d5b2c07e5d6094c32c27d9cccecafc2622aad440eef1a",
+            "bytes": 3703
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H0/ops.jsonl",
+            "sha256": "462725d404b2491374219a169fbd517bb1cc6f197c0a1b1d3a2897d00aee8ff2",
+            "bytes": 3056629
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H0/samples.json",
+            "sha256": "5e0353ce971009abdc223b4ef738ce589bdfd2ea353bba8cdaa8449447308d5c",
+            "bytes": 27017
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H0/segment-summary.json",
+            "sha256": "a669cfcd3ee560325dfc2db71ab83715afccf0ca51e5ea3c6de770a0964e4246",
+            "bytes": 4659
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H0/server-out.log",
+            "sha256": "bf21d9c7837a676eca846508e10f3b8fff1b92d34ea1d3c927c1529a388f0385",
+            "bytes": 4793891
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H1/ops.jsonl",
+            "sha256": "8bc523d328e7a0e1f4ed182aba29f20aad335c0181523d1644a9081dc076e183",
+            "bytes": 3052220
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H1/samples.json",
+            "sha256": "7ee6743868d5bbc266bb1573bced5e5951a7520b6600726bfa951e3c936944d8",
+            "bytes": 27258
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H1/segment-summary.json",
+            "sha256": "34f9a8e541736ec01ea37cda0bf4d1eadb13bb571eb2006a42097f41833eb6e3",
+            "bytes": 4658
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/sweep-1/H1/server-out.log",
+            "sha256": "c2c84d7d8e39ca72e55884a91e73e5c58802a4beed528bfba6209a79cb44c66f",
+            "bytes": 4798830
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/aggregate-campaign.json",
+            "sha256": "f93ba78d764dd7b9906a3311e26b1cf0bde8e18d5a11c7b8a13b7c8d52ff9513",
+            "bytes": 3759
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/campaign.json",
+            "sha256": "a6d252831172190531b7f8455ced7d12c03c1d003bedc38e23962be2446d55f0",
+            "bytes": 14123
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H0/ops.jsonl",
+            "sha256": "626d3b4ace10417b014e3f9155b3e0d7169e5db41085da97d3eb02bc9846ec14",
+            "bytes": 3056653
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H0/samples.json",
+            "sha256": "91e1c32730ecd2ff289eea282113170683e39ba816adea469c276112055098f6",
+            "bytes": 27027
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H0/segment-summary.json",
+            "sha256": "64ec20edf2f0ff3cdaa1a2527e62c6b32952568faad2149d2a8e741f403b1884",
+            "bytes": 4659
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H0/server-out.log",
+            "sha256": "f33576798f48520ff0c35755f6d2fb37e65a9d2ff2741733b56d6576e5134206",
+            "bytes": 4794248
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H1/ops.jsonl",
+            "sha256": "62059e1bf7f8636e9a46968aca807f9cc03ab1872a6d9cde92685ada44124be7",
+            "bytes": 3045808
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H1/samples.json",
+            "sha256": "83e17180eb0c446abe4838a878870391d83c25652d61dd630a55d342a8195c2e",
+            "bytes": 27361
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H1/segment-summary.json",
+            "sha256": "8bcc05ef45d148c075d9a5c8b7d844ba29085e75cd7543d26870bd8fd7caeb03",
+            "bytes": 4661
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H1/server-out.log",
+            "sha256": "1f958de4fd2ba72a0a04d2a53b17078fe9bd5d139b907001b34d42d540506a71",
+            "bytes": 4798788
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H2/ops.jsonl",
+            "sha256": "c9c67e1b94671bca841f4116823c85404aa2073f7d57d47b19dcbb6f6ecce69e",
+            "bytes": 3037846
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H2/samples.json",
+            "sha256": "6dbca341b2f5affe13287b3fc0f4dcf6d94523cea95af3eff1b127ba1c270661",
+            "bytes": 27718
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H2/segment-summary.json",
+            "sha256": "e13f0915e110d02671f18e9bdd64da9325a35c5df5e4633c5f7235bcedfb0934",
+            "bytes": 4660
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H2/server-out.log",
+            "sha256": "f424302d443e0d77c9133259e46b9a4f8b29e5e476fc13517290651bf8ec5a17",
+            "bytes": 5825536
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/ops.jsonl",
+            "sha256": "bc7abf831a3eee924e8f79ddb0a0eab9275d1f8c98f8d66fd9dba1e3e41ac32b",
+            "bytes": 3044534
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/samples.json",
+            "sha256": "8c7710c6ce3a32390d9c0351924f8e529ce4e1d88cc77b3077880bc7229429fc",
+            "bytes": 28619
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/segment-summary.json",
+            "sha256": "afbca1a9d4cc7ced45ec1fc17c1e882672c61649ec14144083462486ef47e78b",
+            "bytes": 4710
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/server-out.log",
+            "sha256": "5edb39b20a8847b171dac25eb4b8a13ce1f8bbafdc2c8960cd3a30bf46e2738a",
+            "bytes": 5859010
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H3/telemetry-memory-dump.jsonl",
+            "sha256": "53594f8547e21f959a7178b329dff8b53e5b03fdc6cde691a7f16681787ba47a",
+            "bytes": 305973
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H4/ops.jsonl",
+            "sha256": "4b97bcaaf82fe6a098fbeabf2a4cad98707aed9d8ecc8b8d4c815e3f6daedf32",
+            "bytes": 3036520
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H4/samples.json",
+            "sha256": "66117158ea40035ea4d2af9b063f4e62a0bf0bbf7944d839e16e399a1573f8ea",
+            "bytes": 28717
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H4/segment-summary.json",
+            "sha256": "bc8bd33c7f378c9e5250d9c33fb1729d3d7c4aed062e2d03ed98d6eefed23433",
+            "bytes": 4824
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-1/H4/server-out.log",
+            "sha256": "25ce262893e3fb797be2129b55e08ff5da9fd754f2894e26184b32f4c11ffb02",
+            "bytes": 5856576
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H0/ops.jsonl",
+            "sha256": "2ce2cfc26a13c8d6b803f4d442c22e3a1e537e9b15f36bed13f2304b215e99e3",
+            "bytes": 2974212
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H0/samples.json",
+            "sha256": "1d62b2c0425c616c9809aabeaa24ad7c78210a2d73dbdf8db27eef88161a8a63",
+            "bytes": 32877
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H0/segment-summary.json",
+            "sha256": "921db5b260559040cbf57e3763a50db17ab89f4a05bd26d80d060051dbab0658",
+            "bytes": 4824
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H0/server-out.log",
+            "sha256": "e161253ea093506a0b080cc0381819d9b47a389ac6b61d8d7f7e1446a9eb1b09",
+            "bytes": 4721334
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H1/ops.jsonl",
+            "sha256": "e491e778fcc16b231f9fcff36ef63647468097b1bb103fa96a2df8ca51383a58",
+            "bytes": 2977843
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H1/samples.json",
+            "sha256": "abcaaa06861ae579efd4700d343f2b5849779aa1b3bc9e4c5a63f6338f71f6e5",
+            "bytes": 32262
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H1/segment-summary.json",
+            "sha256": "4f2474d0adf6f2a1b4b42970aa4f5e37143da838aa64511360380eef512f6032",
+            "bytes": 4823
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H1/server-out.log",
+            "sha256": "fa986a8cb44cc003d363d746c277ef6837dbb5909f2db5c3598bd5918d1d865e",
+            "bytes": 4746678
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H2/ops.jsonl",
+            "sha256": "dc76b320dcff8843d850909fdd0ab49765018551917ec2d8a6deeca5a460a9a9",
+            "bytes": 2990057
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H2/samples.json",
+            "sha256": "0da60524c6a895cea6f7729e4346e5424fdf17cb389d19b825960cd773a12246",
+            "bytes": 33335
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H2/segment-summary.json",
+            "sha256": "a2119545593cfc2d800d2390fda9fb9b13554b33c068fe01825b850c4dc901e6",
+            "bytes": 4831
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H2/server-out.log",
+            "sha256": "43e7232309a5f32a8b175cb5a4659c88b9de5a7a1ec6a5173f2792535d803800",
+            "bytes": 5814010
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H3/ops.jsonl",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H3/server-out.log",
+            "sha256": "9288f9fa491951381c2b670fb04b599341b7175c0acdea616ab710725b43b7b8",
+            "bytes": 3941526
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H4/ops.jsonl",
+            "sha256": "609154d33f384eb804309ef2efe155531717dc63e1d4d68f7b22c88e9ee4d542",
+            "bytes": 2939078
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H4/samples.json",
+            "sha256": "5ba8f3d081cc22717dbb3bbf5f67816176f3754d9c6736a7ff6c4b40264149ac",
+            "bytes": 34179
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H4/segment-summary.json",
+            "sha256": "e8ab56ee9310edec8945864017b3c90b9a72d572462ca4cea5b008f1cf250a8f",
+            "bytes": 4925
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-10/H4/server-out.log",
+            "sha256": "023074cbc9019c4c69259c059288a0622bff2178a39d0fb7a46c9b28535b4bdf",
+            "bytes": 5794328
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H0/ops.jsonl",
+            "sha256": "c6b7dbedccbda1cbcc9fca241192468568e9aa4ba7697e443844c37fd8d331bf",
+            "bytes": 3056565
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H0/samples.json",
+            "sha256": "d097bc99767904c17242dd93e186742c62b04f3da0436ecddcdb0263f7a12cea",
+            "bytes": 27366
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H0/segment-summary.json",
+            "sha256": "bf6bf187c1bfd490c0f0311d16d11afc135000e0b265a9225b8911d85a7ce57c",
+            "bytes": 4825
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H0/server-out.log",
+            "sha256": "8418f3297504fe1964f54b61fffd9d341a48d80474f18b28aaa985a12717ad46",
+            "bytes": 4792345
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H1/ops.jsonl",
+            "sha256": "ebf07d8344807dde7ecd6fb1a849f132975cc229a29d46a69e93317253fba6f6",
+            "bytes": 3052626
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H1/samples.json",
+            "sha256": "cc67d0beffacb37146a93429d51e0330bea89a6d61af2761082197de944b6910",
+            "bytes": 27140
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H1/segment-summary.json",
+            "sha256": "3c23974936c20359f8f850517abcd9f4acd4736900763f5ae3daeeebe765f088",
+            "bytes": 4665
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H1/server-out.log",
+            "sha256": "7b7c187b6bb0bcb352a057a431870adce1c9e9c13efeed3dd62c8ff4c5a4ed9e",
+            "bytes": 4796782
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H2/ops.jsonl",
+            "sha256": "6b72ab428efefbe3bd5ae405ff9cdbf897f900689743cbab9459af771be8ebe7",
+            "bytes": 3040250
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H2/samples.json",
+            "sha256": "9cc636e7dc773c019f4027381ab050e0eb876097b7025ea264c625e17dfbe39e",
+            "bytes": 28380
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H2/segment-summary.json",
+            "sha256": "dcb56d2970452245d39b4d9c7b5eadc2c4711380ddf31f75fcd24f5f7195a64b",
+            "bytes": 4667
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H2/server-out.log",
+            "sha256": "79c957ded6e521d98f9b966c59e2155b2a5f30b35ad58ac49d2c378d13827ae7",
+            "bytes": 5848338
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/ops.jsonl",
+            "sha256": "15d750c04e148554e00047ba1483acd427e70027c68c56aa87b25cf6ed561b23",
+            "bytes": 3046149
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/samples.json",
+            "sha256": "0b54b25f5e5eb49bc0416177402d7e5d2f24f0ff12d0b140745cc7a7bd5a91a0",
+            "bytes": 27597
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/segment-summary.json",
+            "sha256": "75f5f6bcd17717992acb796f439db89179742238f365ec2794ce70b0e935d161",
+            "bytes": 4712
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/server-out.log",
+            "sha256": "a934aa33cb6f048192baa18d82484ca611026b90ba040a67facdaa246d7a8654",
+            "bytes": 5830803
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H3/telemetry-memory-dump.jsonl",
+            "sha256": "3ed68c3025f0ed16c0734aea803582c7850dca60294689d11b6072f906c6176b",
+            "bytes": 306129
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H4/ops.jsonl",
+            "sha256": "2c30634d386b18fd9a31fd37f1bb45e0682d146d2ff0be82cd50c0552b0aa001",
+            "bytes": 3031309
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H4/samples.json",
+            "sha256": "b590a152e5f1f19b71c2c9e5a2efebd6d597ab66f62d05da004290e263737c61",
+            "bytes": 31421
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H4/segment-summary.json",
+            "sha256": "53d97037986e8dc80f8db7a641ed6a9ecace5b5d849ae0f13c873edc76a52b86",
+            "bytes": 4825
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-2/H4/server-out.log",
+            "sha256": "768e47b71adcd96465d86fe94a791faf545fc8fbf08f94c702a2afca75179d9a",
+            "bytes": 5842772
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H0/ops.jsonl",
+            "sha256": "daa78a1f760fc65464e9d2d32295264012fa0e7bb16e0f6581ee3f60639db3e1",
+            "bytes": 3045295
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H0/samples.json",
+            "sha256": "b6fc5f903fc5f3b4be27190202666dedcbd3e602ba111b35b52b5f38d0fb4851",
+            "bytes": 27007
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H0/segment-summary.json",
+            "sha256": "e1ba41288853eff1a435488e1c76b9f041fffa214eba17a14f76f43f88514018",
+            "bytes": 4829
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H0/server-out.log",
+            "sha256": "fc6dcbdd26ff967f93772551c1798f7c5aa5c3e1a5809d6e267f52ed11366de0",
+            "bytes": 4768902
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H1/ops.jsonl",
+            "sha256": "d8a8e6961a51854a8f3210e2265d6a39978d57d0620ff70f94e8586489e23cc8",
+            "bytes": 3051467
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H1/samples.json",
+            "sha256": "bf0ac76432ed1eebc153828e669392bc845aa959db8b4e964e5644f5ee983857",
+            "bytes": 27139
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H1/segment-summary.json",
+            "sha256": "ef4864febe725a7b95502d860e00a1ad1aa50f59a6b9be4421b46873579d78b9",
+            "bytes": 4826
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H1/server-out.log",
+            "sha256": "3826c5c056b06aa5435ddb88e3ff8a4b6ec42297da9d97bc4eaa6862d110011f",
+            "bytes": 4786588
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H2/ops.jsonl",
+            "sha256": "c3cba2693f99624db7a76ec76ab123630a0281fda1f85deb641a0833ac98f152",
+            "bytes": 3047679
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H2/samples.json",
+            "sha256": "8063df6ba19dd58a82c2de5b8e2bf5c3967bb66f677ef6581cc76cf5c548b017",
+            "bytes": 27592
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H2/segment-summary.json",
+            "sha256": "c9eddf1d76d9e6650ac4b07c41804d38d2fc63ac6224920f7f75e8db4390baa6",
+            "bytes": 4670
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H2/server-out.log",
+            "sha256": "f693983177cf1e0b8aea29f5167577d245656eaffc92db2ce43135510aca10c2",
+            "bytes": 5836080
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/ops.jsonl",
+            "sha256": "624a63b0e41e71399f1c9c2f5f40348d423ec1b553661be3289b7dc8d3aab341",
+            "bytes": 3049150
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/samples.json",
+            "sha256": "ad950b06f11fffb54da7c5933f33c89914e8a3f22c7e3ae7a5bcb9d7713e80c4",
+            "bytes": 27695
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/segment-summary.json",
+            "sha256": "ae60c0ac5494ebe1bcf8c0ebe9a4254c42251ef1f4a614e07de9b23b76a5ac25",
+            "bytes": 4713
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/server-out.log",
+            "sha256": "62c442a54ba3d7be2f8ce2d108862abb1c2cac0d5b6e607b676696187acbe5fa",
+            "bytes": 5874242
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H3/telemetry-memory-dump.jsonl",
+            "sha256": "122ead9e2700d0ce1a2c65ced10d3daa56e727d1feebffb4b69219aab87dd407",
+            "bytes": 310787
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H4/ops.jsonl",
+            "sha256": "14f102d029e8c3e745edd79aacec8e4c42a44ee777dad13fb82d2398c468a483",
+            "bytes": 3026038
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H4/samples.json",
+            "sha256": "5af200bdcc14d20a8348500fbda226e77e6125b3f44d10998ed7a3c4cefda4db",
+            "bytes": 28732
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H4/segment-summary.json",
+            "sha256": "94080d4735357e36bdf92e2513e571fd6e9640d93d55a4b8d6b88a81eda290c1",
+            "bytes": 4828
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-3/H4/server-out.log",
+            "sha256": "7b8d4a5a3f9b8ff7eb95e6af84c2f15930031f8cb237a2d6a682ab6b954187a1",
+            "bytes": 5824011
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H0/ops.jsonl",
+            "sha256": "e46d6833652c2a18f399d0661a42e6372c16bbacd7684782efdad427b66533d8",
+            "bytes": 3055001
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H0/samples.json",
+            "sha256": "e13e1d3e2d3314c47629332a7cb5d33a62e657c3a29edef8f5920862479ed877",
+            "bytes": 27474
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H0/segment-summary.json",
+            "sha256": "699528bf61d48148fa74335bf69be7fe9aea7b6549e994cbd7c5a4c8e8c78c14",
+            "bytes": 4831
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H0/server-out.log",
+            "sha256": "dab402aaf414448dd79c93037a49ed712654689586cf3795f664261d849b64df",
+            "bytes": 4788780
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H1/ops.jsonl",
+            "sha256": "45d592311c0cc159702835c66c0e76beccc48c8d417f758c32247e14337b906f",
+            "bytes": 3055819
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H1/samples.json",
+            "sha256": "225490f7b484d53d628864ea587dc298834c5ed036a79034f3a32eb062e13ac2",
+            "bytes": 27197
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H1/segment-summary.json",
+            "sha256": "24cc8a4709bf48ef13d39c33e2dc18cc77cf963328bbc896c978e3957fa775ef",
+            "bytes": 4819
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H1/server-out.log",
+            "sha256": "da996123dc2957e7501235cd4411d9885ae4b23ed02c59402a43a197b3213c17",
+            "bytes": 4761611
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H2/ops.jsonl",
+            "sha256": "15f18cd1e38c5517c9dc490ddae5dca05a14a2269ab30dcd0dfe9646ef71f27c",
+            "bytes": 3048712
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H2/samples.json",
+            "sha256": "4d6f21f4bb216bd2bb7d11d50ef8e5417f2cc1ca12def7aeaebe7918f1fbaea8",
+            "bytes": 27581
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H2/segment-summary.json",
+            "sha256": "3049b68acefe4d755520364eb6b438d87293ec6ae2bae637e41c419e730b12fb",
+            "bytes": 4828
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H2/server-out.log",
+            "sha256": "2f8ed00bf0fe7df5bb9e40112bdbf7ccbd48335c6defbbdf463ca00867946001",
+            "bytes": 5822256
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/ops.jsonl",
+            "sha256": "a1fd88029548854490a11eec8d7c9c438d147cff4213da162ab9b6fd87d515af",
+            "bytes": 3049670
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/samples.json",
+            "sha256": "2c235b0c51ebae3e9285ca32cdf924dae6a9f3bee2014584256bc6312f3bbf02",
+            "bytes": 27720
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/segment-summary.json",
+            "sha256": "c7a1dc9199754c311daa1b083607c17523a3399ba46b14e922e9f4fa64de285e",
+            "bytes": 4712
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/server-out.log",
+            "sha256": "da2b5c312f082869cfc339aab95ff352fda610ba953118019d219778fc429096",
+            "bytes": 5851558
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H3/telemetry-memory-dump.jsonl",
+            "sha256": "e3ddfdb6e0fc49ea84f7f81ae1a36e3298941b43f241a378461fda1fc3101a67",
+            "bytes": 308447
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H4/ops.jsonl",
+            "sha256": "dd8d47aba9d9196f9013763a57808ac39537bb8c55632a8590b96e351046af5b",
+            "bytes": 3032098
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H4/samples.json",
+            "sha256": "fadf849957537f29bc68b7dda02dbfe6905e2667fd8006f060d41ee84d477c0d",
+            "bytes": 28471
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H4/segment-summary.json",
+            "sha256": "37599cf7d8d24cb1882c4744e9ae83de54ded0363d3548e2145b572e666ee29d",
+            "bytes": 4826
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-4/H4/server-out.log",
+            "sha256": "43ea0014bfffe0331d3295efe63998f823b920d05797c06a6b38a5115470f3b8",
+            "bytes": 5848668
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H0/ops.jsonl",
+            "sha256": "15f804bedc71193bc1bd9d23eb75394f3ce177e72e6bc5348b68e3404121574f",
+            "bytes": 3032608
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H0/samples.json",
+            "sha256": "e1a379335a8c598003acdb9d3dcf597760d48a74a6dacf656a3c70a35c0a43c2",
+            "bytes": 29846
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H0/segment-summary.json",
+            "sha256": "b8f517e306832c6cab4ecd8d2f0753e1af38254fb0957cb049b8787013584992",
+            "bytes": 4826
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H0/server-out.log",
+            "sha256": "1f1d210e0e4898702cefc040b2141161c63135e49265ed1e54f9ea51f4933e64",
+            "bytes": 4762498
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H1/ops.jsonl",
+            "sha256": "067dd1eb7ea716eb004a230802d8c2ffa3c2f746a9bcf64b1243c395a10c6018",
+            "bytes": 3052219
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H1/samples.json",
+            "sha256": "3c6e86c6efeee372ae39dc456b8dfa1440b0e56a47ad852e8f2c9cef2bb30cfa",
+            "bytes": 27026
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H1/segment-summary.json",
+            "sha256": "071dcce3343476dfb6803bab47ee46b0a5d6131ec6b1619d829dc12694408b51",
+            "bytes": 4824
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H1/server-out.log",
+            "sha256": "6a334bde764c8d67a7626ebf162dc2019b364c076b8d5c5f02f6690bd91bc155",
+            "bytes": 4765048
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H2/ops.jsonl",
+            "sha256": "d82be66b7db2375f0537fef23ecb96ae320ab91a588213e29d0fff5f8068c0b5",
+            "bytes": 3049516
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H2/samples.json",
+            "sha256": "eb75619203294deaa60b5caade723b189f93d9004e14dbcc2fd4dc9480f44121",
+            "bytes": 27606
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H2/segment-summary.json",
+            "sha256": "3be7ef2ebc759bff947b1d060a5a0a1e8f4b589a4393ffb394c55951e3784b8c",
+            "bytes": 4824
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H2/server-out.log",
+            "sha256": "28593915dc9279ecef4e9feebf8907b02f89c5721e2e762555783c1d6107bd3b",
+            "bytes": 5856668
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/ops.jsonl",
+            "sha256": "670191f70a59cfabed5792df29efa70d403cd6428c7f54c75aa33acef55fa71d",
+            "bytes": 3039373
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/samples.json",
+            "sha256": "c7b62e4abfd800cc318ee1ebbf426a5e6d59057de3d2756eb681b17dc11afd4b",
+            "bytes": 27935
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/segment-summary.json",
+            "sha256": "1c20f52f54ea53944333f8ad5ee28d5337554a1ccba182bd2a86eaa0b25b651f",
+            "bytes": 4875
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/server-out.log",
+            "sha256": "aed70010006d5904eda10f0b2bc3d5197271cb19f14b1f51549b91015f313c28",
+            "bytes": 5802955
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H3/telemetry-memory-dump.jsonl",
+            "sha256": "8a9c44552c04f4b067177cf358d9539953ed870a2d623a73a0d8135ee6e69c88",
+            "bytes": 306538
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H4/ops.jsonl",
+            "sha256": "fd15124f4888539f8fe27ad22ffd33339d9354d27a04d1349bcc245c77688944",
+            "bytes": 3034374
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H4/samples.json",
+            "sha256": "e78e2a166ea9535ce41c1fe61e807dba978a00e5235979ac1adf1ef31800fd9f",
+            "bytes": 28390
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H4/segment-summary.json",
+            "sha256": "b849e8b342a5c5e0b7d7581d80dcdd83e9b2edb87e1232bc52069c01ac3e9609",
+            "bytes": 4821
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-5/H4/server-out.log",
+            "sha256": "3490206f140de7fe09f570322c348b9b9cbaa23df75a236f341c98a9fb4cc4c7",
+            "bytes": 5813583
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H0/ops.jsonl",
+            "sha256": "ec567c8c47896a2b533502c6b5250f2643e40af83e607f1ead622dfbb428e4aa",
+            "bytes": 3058237
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H0/samples.json",
+            "sha256": "2242d6d38a01257e9513d37799ff78eeb9186fae2692ac624cb06c84d352f5ed",
+            "bytes": 27140
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H0/segment-summary.json",
+            "sha256": "d892ebb234ec8f4dbb31f7d12fb8dfbe519282a5c0f80197653d982ae2169493",
+            "bytes": 4665
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H0/server-out.log",
+            "sha256": "8b9f2f31180300166bfce96024ce75cc9bb3ba8a8fed9ef7af71e25c2711354b",
+            "bytes": 4800866
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H1/ops.jsonl",
+            "sha256": "26530a4464a26762cc1545d2cd32195dc3aa6c9864ee82d87ba90c1260e02f4b",
+            "bytes": 3059278
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H1/samples.json",
+            "sha256": "3f9d1a0c73695f17abaf086796d1430575067970daa03d6ab8ce3f881b64c73e",
+            "bytes": 27007
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H1/segment-summary.json",
+            "sha256": "6cf97a909129f732574de7fa924706314891dc2df0e840d09a3ce7cc88046cb3",
+            "bytes": 4665
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H1/server-out.log",
+            "sha256": "76c21866f6293949ab8aee19affc7df1225af8cd213d5037c6e3378dfceb49e8",
+            "bytes": 4803435
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H2/ops.jsonl",
+            "sha256": "28c4411e4879ee3d88ac7a52db62eb3afae28fbe5a002ac5790bd810f579bec4",
+            "bytes": 3044416
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H2/samples.json",
+            "sha256": "79eb520846bff6a31717fdc631b7884973efc819b5578e5dbf0221e4f70c6579",
+            "bytes": 27798
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H2/segment-summary.json",
+            "sha256": "5a4e23560f4f3f34dab2d73ed723696089d821e11e70a1260a9c2060395a1472",
+            "bytes": 4663
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H2/server-out.log",
+            "sha256": "41a228dfa817ffa8cdf2f3ae7d873650ad15d852585ac8cf28fc7223df1fecb2",
+            "bytes": 5842734
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/ops.jsonl",
+            "sha256": "d8ddafeef414ae5f73b873c60ab828f1228fa87fd056fee9c0b69ccf6b76f8c1",
+            "bytes": 3043298
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/samples.json",
+            "sha256": "ae300cc3f832772461a389f7a8b65784385fad23580b3939730e476a7b3d0d4b",
+            "bytes": 27685
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/segment-summary.json",
+            "sha256": "baf265abd932ad7329b78781b02e375b4f0dc4643f5f770df46d74f69c0fc6f1",
+            "bytes": 4714
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/server-out.log",
+            "sha256": "eff8b11154ef626635e174f0d46c1797fd2189159fa96cdb9b28486c23009e24",
+            "bytes": 5839692
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H3/telemetry-memory-dump.jsonl",
+            "sha256": "c15bb73900d28b2ebe73bd00371f3abd9047df41af2754920116ef1582ce50c7",
+            "bytes": 309042
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H4/ops.jsonl",
+            "sha256": "5cdf00bbaeeee69be8cfb91f0029995204e779191d47a38b5c3cdda721f6b06e",
+            "bytes": 2978861
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H4/samples.json",
+            "sha256": "927a57774609af72ac1951816d717fc533d75a359e2824959035c5030f7577a1",
+            "bytes": 30186
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H4/segment-summary.json",
+            "sha256": "5f659f4ede842484fb72d37831d1d6aa896ce134b299b772591eff76b312149c",
+            "bytes": 4829
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-6/H4/server-out.log",
+            "sha256": "0c9b8b121c1c81aa5ec5428e7ad8120f631aa8d41017d5641759f1713a7806e6",
+            "bytes": 5816198
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H0/ops.jsonl",
+            "sha256": "425d25b42fde642d9038d75de84cd4880c27c7351c5effd27c11e2098a061d59",
+            "bytes": 3005379
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H0/samples.json",
+            "sha256": "cd35771bef9ee311ed6fad8f9cf6a5d9b71885b493b981cecc04cf26a3d5c11e",
+            "bytes": 30746
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H0/segment-summary.json",
+            "sha256": "45f3c09ab5a92084b0cb9744a738b421ddc2aa94339742fec51c76b96b5ad262",
+            "bytes": 4823
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H0/server-out.log",
+            "sha256": "373eeed12670a1ea8a9781920c71ef3574cefa23643f6c6d2e249a2490a0b5c6",
+            "bytes": 4758588
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H1/ops.jsonl",
+            "sha256": "d21fcdeaf133c91d78e566cf23db5f7e5b934ffb62ef6f3b7c986b58fe65860b",
+            "bytes": 3052137
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H1/samples.json",
+            "sha256": "f0e347dda473044158712d3d4604e3f1749b37f9f88fe028d3b5c274bc484ceb",
+            "bytes": 26796
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H1/segment-summary.json",
+            "sha256": "b4d10c2867425b464004fd27b33defe77e17d44659274f1dfe1fad7422cec454",
+            "bytes": 4664
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H1/server-out.log",
+            "sha256": "f0ec25fa91a1c8a52fa994c79a80c2c5a3e63d48b8435609e21f836fbd4a5569",
+            "bytes": 4768770
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H2/ops.jsonl",
+            "sha256": "3dacc2d5502797d8190c91565bd9465a7ea8fd48bcc1436a232aa333aa6f757d",
+            "bytes": 3051417
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H2/samples.json",
+            "sha256": "f77573accc6933c65f5b93cda369b08adc02d0f10bf3915396cf1fc6161110fc",
+            "bytes": 28496
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H2/segment-summary.json",
+            "sha256": "9f04aeb52ba762e544f647079740511bb0a9531ccfc716ab7f9af2c63d2ff450",
+            "bytes": 4659
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H2/server-out.log",
+            "sha256": "07d6ac0b289b815b77a742a459ad73b097cc9dbbdd60874d16609d19c7fe2ac4",
+            "bytes": 5863019
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/ops.jsonl",
+            "sha256": "a69b9a2738da978e9daa68996ce6f46315a72d92a38332fa17b793c8070365a0",
+            "bytes": 2997195
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/samples.json",
+            "sha256": "4efb0445a03e4cda8e14d17707ef2c7000bc30373b24c0569932c295c7e6bc69",
+            "bytes": 30151
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/segment-summary.json",
+            "sha256": "0081010bc2775db8fe731c3b0d7260fb56b54735dc095d0206f4c1ac4455123a",
+            "bytes": 4708
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/server-out.log",
+            "sha256": "884a0148cbcadaa2d91fcfc54eca914fb6d44b5ab4c4dc61c8b1b59b7acc1a85",
+            "bytes": 5836941
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H3/telemetry-memory-dump.jsonl",
+            "sha256": "1b5a0399371d4882465ca8d3fbe53e3feabe74bd430412db639fbe8051943215",
+            "bytes": 307788
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H4/ops.jsonl",
+            "sha256": "bfe3738ddd15b687c404ff8d869e092eeb43f1e2a1c9875a0626611b2366455a",
+            "bytes": 3021516
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H4/samples.json",
+            "sha256": "31e110caf0b8e4a7c45f77e55d9110a7551c364a78bc716daf09d04fc2b0f938",
+            "bytes": 29660
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H4/segment-summary.json",
+            "sha256": "825d81c7aef31aeb013db76b88ef7da11c799ae496b10172820f506a0c77d5b9",
+            "bytes": 4825
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-7/H4/server-out.log",
+            "sha256": "2f0851977f5068cbb341468e49e77fc889eeb86e879aebcaf731398bf8080c8b",
+            "bytes": 5848711
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H0/ops.jsonl",
+            "sha256": "3aa2ffaaf6448b8cacbe774ed581a785027acc58b30ba5efe706c4ef310317d3",
+            "bytes": 2993533
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H0/samples.json",
+            "sha256": "733fa8b4aee9998ebf51be3271f8f5e7f21cb835e7e6ac88dece2160d5946fde",
+            "bytes": 32742
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H0/segment-summary.json",
+            "sha256": "216e95f46f97086eeb2d3947021e23b62a64c2449a8ee2b70e458a589dc926e4",
+            "bytes": 4822
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H0/server-out.log",
+            "sha256": "befbaed967e7f48af215229cda17f3f9e584fbe63b0125374925c02b02527197",
+            "bytes": 4775636
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H1/ops.jsonl",
+            "sha256": "3a6f4fe5a7d11c90ef2053a75a5d9a3f9486a6b54a1828b0d6f22458699e1b00",
+            "bytes": 2988564
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H1/samples.json",
+            "sha256": "e16e35f49d7d1a8f2887264953f8104593e740110ce8d15a0afe6d3ee6b91c1e",
+            "bytes": 32607
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H1/segment-summary.json",
+            "sha256": "dd339fd1cf03f006d9688b2d32910cb2bd73ff8992652914872cadd34a50bf37",
+            "bytes": 4827
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H1/server-out.log",
+            "sha256": "bcfb85b281e4ec382e3c5735e8a942049b5b36cd5a87dbf5ffc8d9156d9c91a1",
+            "bytes": 4748026
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H2/ops.jsonl",
+            "sha256": "47446e99268d42f262ac3cb5c0d8f5eeaf296355429f05b5206b6d0a164bd2e5",
+            "bytes": 3014517
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H2/samples.json",
+            "sha256": "e230cee6f8e66061e24d8c8b6141dd9a7f6801deea3be51eb3a43286a8701563",
+            "bytes": 30888
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H2/segment-summary.json",
+            "sha256": "1d25067a6146be1a252ab825ab9d7792ca0971ee10b7606dc7572e10bbf8ec74",
+            "bytes": 4664
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H2/server-out.log",
+            "sha256": "7eef699be3633f22d4bd51e00a4a9cc362558a58ac9f1f7c857759776c05f1f2",
+            "bytes": 5847082
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/ops.jsonl",
+            "sha256": "46a72178cd5defda2ba5e5eda82989c440ef82440ccfbd2323b4506bb324082e",
+            "bytes": 2991400
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/samples.json",
+            "sha256": "6f982c857a8d6b0f0f9fe84a5e22450fde6cf7111773a7c219e0df02d32059ab",
+            "bytes": 32724
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/segment-summary.json",
+            "sha256": "d788db4e7641ebc4b7223f5a94e1e41691c2665c3e1eb34368ef9e85a82f9df8",
+            "bytes": 4711
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/server-out.log",
+            "sha256": "75c9d8b359ca4b1b9cd226fe59c422b5d99be9165a986e8b000ac42d4486acfd",
+            "bytes": 5854448
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H3/telemetry-memory-dump.jsonl",
+            "sha256": "91e8adc15280d5d240891e1cce7679369043c61e4f80354cb689eddf12dedb80",
+            "bytes": 311061
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H4/ops.jsonl",
+            "sha256": "a8525830743d82f88dd0c6d7ec2095af33e397176e8c91756b3e64ffdeb681b1",
+            "bytes": 2982825
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H4/samples.json",
+            "sha256": "33044639e969f7fd5fec28fb8b62647583e5dae61c984ad8337243b83b74af5e",
+            "bytes": 33939
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H4/segment-summary.json",
+            "sha256": "6d55f948b3f2130326df5315ac303856eecb73aebfef6182861a082b2461ddc4",
+            "bytes": 4826
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-8/H4/server-out.log",
+            "sha256": "cd950c3749d7701f1d67f829422a59aaf000e89f367e76e31cd45d70440e00fa",
+            "bytes": 5859109
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H0/ops.jsonl",
+            "sha256": "0d80cd7b8745d453dc62596a04d93190db92eb9e5a86b503a7fa6dae1b546227",
+            "bytes": 2994766
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H0/samples.json",
+            "sha256": "c01b5951ab5e36da4829c2347fd56f0202739371e1f39669c8cff34a5fa0ce53",
+            "bytes": 32812
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H0/segment-summary.json",
+            "sha256": "61625fe048a5a8b5d006e6580335dbf076243c1dfaa8516243816ca2fd249159",
+            "bytes": 4827
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H0/server-out.log",
+            "sha256": "2f847f6f8dbb3e4179c7881d99fb355075d22ae17373b4d1a82a16e7b66ac951",
+            "bytes": 4790871
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H1/ops.jsonl",
+            "sha256": "1a85ef5eec8ac80c7500ad49bd82133862b2364758859e6645a4191a358579ff",
+            "bytes": 2974284
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H1/samples.json",
+            "sha256": "80357afc96adc1339c6cb55ca86674ac7440d7f6e39587f5a735df55e20ab804",
+            "bytes": 32204
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H1/segment-summary.json",
+            "sha256": "2beb4b28a01ca6568c16fa8623428e80557f2b5331a135bb5a7c6803b64adea6",
+            "bytes": 4824
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H1/server-out.log",
+            "sha256": "c9fe0dd356fe401bb637f52a8c7e6da091fa3129f39ab361b11643bcc0c3d8f0",
+            "bytes": 4759369
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H2/ops.jsonl",
+            "sha256": "e460623faa4b87013e798ae344b9fe98d4650ff023d08847ff75da15faf5016f",
+            "bytes": 2986787
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H2/samples.json",
+            "sha256": "98fe4ca962519a124ef25e9376c91d34817fa6ebc12657a427a11e148a017005",
+            "bytes": 33379
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H2/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H2/segment-summary.json",
+            "sha256": "e288209f5aed36b3a76d92671fc91f12e2efd19a3d455795d6de7ca9dbf9eef5",
+            "bytes": 4828
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H2/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H2/server-out.log",
+            "sha256": "4acf7ce6b150eacab2c271f8bcc2b18d4d648af1ccf69bab9cb709be747e62a2",
+            "bytes": 5819534
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/ops.jsonl",
+            "sha256": "190ac7522369f1424a7e7275f326a3fd4860e24aff3b8857534015c1494ebf7b",
+            "bytes": 2986541
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/samples.json",
+            "sha256": "781ed062d786f8c754d39e58f4cf18fc7e25eeb640a4e853ced2f0ed585848a7",
+            "bytes": 33472
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/segment-summary.json",
+            "sha256": "dec4c7f82a520c8e02c4a37c43839e0c1368760e7ae3a7ff48c0a2d57ac976b4",
+            "bytes": 4717
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/server-out.log",
+            "sha256": "9f883e0e45f5a216130d5a35d7d949f0d4c383deb9b8ff32a90a7bab7ab0dcaa",
+            "bytes": 5817870
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H3/telemetry-memory-dump.jsonl",
+            "sha256": "7a2805c4089085ac9bbddf9921bc8414c7a92c5ac4e551d4a9ddb5a322ea5ed4",
+            "bytes": 307788
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H4/ops.jsonl",
+            "sha256": "1319aa2e999cb00bdd55331bf3b04001e747dce586744c933ad006a0b4cfa49f",
+            "bytes": 2936494
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H4/samples.json",
+            "sha256": "43a57bc75dfbf13721422aecbafc06f5eb42f0200e224c21065637b45861bfe4",
+            "bytes": 34325
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H4/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H4/segment-summary.json",
+            "sha256": "01d3cea620a7cdb2c4cdcfbed55199ff46ca1a1d5054005b475907623204defb",
+            "bytes": 4919
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H4/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/campaign-mixed/sweep-9/H4/server-out.log",
+            "sha256": "aa5899349371ef1380d498dfdc5455f690811b3d2d6a1c0863d4495ab244c504",
+            "bytes": 5810994
+          },
+          {
             "path": "out/otel-w964/workflow-audit-v3/equivalence-superseded-run1/round-1/H0/ops.jsonl",
             "sha256": "3b5c8a9b6b7b99ce0ef46fe4bee97276851ffd0f2581f17270ae4ee7ec426b07",
             "bytes": 2952330
@@ -1390,6 +3005,191 @@
             "path": "out/otel-w964/workflow-audit-v3/equivalence-superseded-run3-partial/round-2/H1/server-out.log",
             "sha256": "e0074535ae5d82dd6b0e4b9e4138b8dbab37bbc947b776e243286bf75e750d00",
             "bytes": 4794526
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H0/ops.jsonl",
+            "sha256": "92179aabab876f0e36179eb9889c407723588cd35141c7dec15cb7e9fbc9096d",
+            "bytes": 3056685
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H0/samples.json",
+            "sha256": "63f8343f020fd53c4ea6fa9cd56b41bfc817dc04b6acf796113a09fcec268c6f",
+            "bytes": 27375
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H0/segment-summary.json",
+            "sha256": "56b78925b4e40bf517c899257ea99c6b0389d5573e677e28439ad2b106249e08",
+            "bytes": 4347
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H0/server-out.log",
+            "sha256": "92f1b73a8bff936353217cd58fc83e4b08e0a9098aa437dddbca8d1986a45cdb",
+            "bytes": 4777132
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H1/ops.jsonl",
+            "sha256": "4e830bb556a3af08a68e7f7ec1716172abc87651157b9afcf1a26fc6dfb9eeb1",
+            "bytes": 3052242
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H1/samples.json",
+            "sha256": "51892f7c75ecfcf764750ad368c08da06c17b584b2975fe67a4f2617e90c7a0e",
+            "bytes": 27591
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H1/segment-summary.json",
+            "sha256": "3f2158d11e64224e09195e0f1f4d86cbf45420be28d3a3e3a1293d04382fcb9d",
+            "bytes": 4347
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-1/H1/server-out.log",
+            "sha256": "c123a88b05aca399cb26e8641a130e2884be5de9cc0ac0c8acc3e5326a32b6ee",
+            "bytes": 4779910
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H0/ops.jsonl",
+            "sha256": "f5394ed531afa58895d1adf3cc00d27beb0b2ae742a2a0c3cacbf369b2f901e1",
+            "bytes": 3047319
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H0/samples.json",
+            "sha256": "e51a339c310d0a54ead4cfe5dd830daba2797c97130e6348205ab5a834bcbb50",
+            "bytes": 27305
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H0/segment-summary.json",
+            "sha256": "8fb301aedee512fe28a635404f148bb6a59605f75925b16d972b979777fac8fb",
+            "bytes": 4353
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H0/server-out.log",
+            "sha256": "fda8af73dded6fcca326ee86f3ebd513db1037766089b0c2809f25531cf4770d",
+            "bytes": 4766774
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H1/ops.jsonl",
+            "sha256": "c61590c163d512ee281b2fa70961953df253adb85d93aef99f2288cc25fb2313",
+            "bytes": 3052613
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H1/samples.json",
+            "sha256": "9122aa0bcc65e795754d3249be4f0ae1c9184aa5da272305d0dfa29818269df8",
+            "bytes": 27360
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H1/segment-summary.json",
+            "sha256": "4f114730b52da507916bdc1b12c528bda84cd4108abda605f80267745fc6b14c",
+            "bytes": 4350
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-2/H1/server-out.log",
+            "sha256": "fd5fefb9714aa68d9cece5a35696d8bed47fd59addd20b12d07b559f26f31a58",
+            "bytes": 4777555
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H0/ops.jsonl",
+            "sha256": "5ea77a111b004ad379e6e23c23b7173f83a81c937b9f195a593c73c1d5394f4b",
+            "bytes": 3038874
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H0/samples.json",
+            "sha256": "441e143e763ec35dbd1116d006012f65eff09f5b76fe29b456d0807997521c60",
+            "bytes": 27484
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H0/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H0/segment-summary.json",
+            "sha256": "9e9137f3332a7a3193faa647f336d20f092a2b4e11afed87209360faaf705cd2",
+            "bytes": 4353
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H0/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H0/server-out.log",
+            "sha256": "54da4164ac7f3c107e5d7870e3f4dff0e19753e49720572e884a4b5afcbd8c2c",
+            "bytes": 4768818
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H1/ops.jsonl",
+            "sha256": "bd2d91409987089e5e0f17efff2c61b29c74690054a24ac67c346ee53bd0a54d",
+            "bytes": 3045071
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H1/samples.json",
+            "sha256": "1e839b9b32d0ffc565272aa74386053b796a5d826e9bfd030946253735676467",
+            "bytes": 27100
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H1/seed-converge.log",
+            "sha256": "316d0eede0c062e25e428d2cab7cc810bef888a2b0e526e4d5008f97c9e13687",
+            "bytes": 882
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H1/segment-summary.json",
+            "sha256": "9339d6f1aed91dd22cda9c7cb473c3d7e6d51198dc6cd18d063c47c9e890fd47",
+            "bytes": 4356
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H1/server-err.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/equivalence/round-3/H1/server-out.log",
+            "sha256": "5c0544fcf508cc904fa48d59b2a895e8f32e461b1483eb53c6aaa744345c9c4c",
+            "bytes": 4783437
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/h0-equivalence.json",
+            "sha256": "c2effd3d906f71c863c944fe0843e43bcd1547b0242d752b736160d898c55882",
+            "bytes": 11200
           },
           {
             "path": "out/otel-w964/workflow-audit-v3/h0-equivalence.superseded-run1.json",
@@ -1795,6 +3595,46 @@
             "path": "out/otel-w964/workflow-audit-v3/run-meta/1794746753316-pid432896-aggregate.json",
             "sha256": "8c3922ab1f62550a948bdb0c0f2c9a82e687cb42868a8c284aae4dac112c1353",
             "bytes": 1975
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794756507451-pid449980-selftest.json",
+            "sha256": "e5179c1b05dbc6028344d5df09588db9d631bd59e70b394a8bc63f01d8f90a4c",
+            "bytes": 1973
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794761794942-pid465797-equivalence.json",
+            "sha256": "b2873e0319be521494bbc73edc502bf1b4aab80121361d41043dc5836574deb9",
+            "bytes": 2004
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794764669160-pid1352780-campaign.json",
+            "sha256": "8205f87231b2b0b65d85fc11df725a19df07c8b8f190781f57d0f2e824fd7519",
+            "bytes": 2001
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794765748601-pid1649523-campaign.json",
+            "sha256": "c54471527392d99e0807162c9d07de853deee0236602c4621f3e6989676b3725",
+            "bytes": 2002
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794779465607-pid1884910-campaign.json",
+            "sha256": "3888b5b73719f582681d6ccf4125b14a71a60b176f6735bfe81feaf19badf372",
+            "bytes": 2028
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794779465647-pid1884920-campaign.json",
+            "sha256": "3ce79d8158655f08f5b7a2b030f9b322ce521b376cb300aff2e050b193719ba0",
+            "bytes": 2005
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794779465958-pid1884950-campaign.json",
+            "sha256": "eec89cdfdd5eaec980cb7ff636cf9c4528398920aef6c4e070ddcade6ac2f0bf",
+            "bytes": 2001
+          },
+          {
+            "path": "out/otel-w964/workflow-audit-v3/run-meta/1794779510422-pid1885632-campaign.json",
+            "sha256": "fcb2a6896c62318b47e0fcc423d261fd665c6df5a45c9f87f805eda9f9dd2357",
+            "bytes": 2027
           },
           {
             "path": "out/otel-w964/workflow-audit-v3/run-meta/archive/pilot-reaper-test-c25-20261115T1430/ops.jsonl",

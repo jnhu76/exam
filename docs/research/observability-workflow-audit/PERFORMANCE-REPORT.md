@@ -227,3 +227,24 @@ aggregate 契约 11 字段（`workflow, config, comparable, cpuDeltaPct, p50Delt
 2. **T1–T4 预算判定维持 UNKNOWN**；历史 PR #980 数字（+10.4%/+9.1%，§5.1 转引）与 v1 探索值（§5）**只作参考不作判定**。
 3. **正面机制见证（非判定）**：R2-01/02/03 修复 + v4 判据在真实 boot 下产生了全战役第一个 `valid:true` 段；`expiredInProgressAtWindowEntry=0`、oracle 0 违例、entry 门对 loadavg 4.01 的 defer 行为正确（INCIDENT 记录确认为 Docker Desktop 恢复期负载峰，真阳性）。
 4. **解除条件收敛为一条链**：完成 §6.6-3 H0 等价登记（≥3 verified pair/workload，续 run3 已有 1 对）→ 写 `run-meta/freeze.json` → 确认段 → 正式采样 ≥6 有效配对 → `aggregate`（需 §6.5(a)/(b) 机器路径落地）→ 方可产出 §9.3 矩阵的真实 Δ/CI。
+
+### 9.6 v3.1 正式 campaign 配对判定（2026-11-16；PROTOCOL-v4 冻结参数下的首份判定数据）
+
+**执行链（§9.5 解除条件逐项落地）**：H0 等价登记定稿（`h0-equivalence.json` verified=true：3 sweeps × W01/W03/W05/W08 全部 verified pair，oracle 0 违规，终态字段 H0/H1 逐项相等 211/172/116；sweep 顺序交替 H0-first/H1-first 消序偏）→ mixed 门 7/7 通过 → 正式采样 6 sweeps × H0–H4 = 30/30 全有效 → v2 §6.4 追加 replicate 会话（`--target 12`，决策与理由记入 campaign.json notes）至 sweep-10，Owner 指令停止（`STOPPED-20261116-owner-command.md`）。合计 49 段 / 47 valid（2 个无效均为 H4 `steady window exceeded 300s`——机器连跑 ~7h 后绝对吞吐漂移 −15~25%，最慢配置最先触窗；规则内作废）。
+
+**第三项 harness 修复（本轮新发现并修复）**：campaign 段间残余负载使入口 1m loadavg 停在 4.06–4.42 > 4.0，连续 3 次 defer 即饿死单元（run1：H2/H3/H4 全灭，归档 `campaign-mixed-superseded-run1/`）。修复 = `waitForQuietLoad1`（入口有界等待 ≤5min，判据不变仍走 `interferenceProblems` fail-closed 门；注入测试 10/10，`6d704ee2`）。同批落地 §6.5(a) 聚合桥 `campaign-aggregate.mjs`（campaign sweep → 权威 `aggregateCore` 配对，统计无第二实现）与 campaign 追加 resume + 防覆盖闸（`e0c6714e`）。
+
+**配对判定（vs 同 sweep H1，C=1 闭环吞吐语义，bootstrap 10000/种子 20261115，中位数效应量；权威=`aggregate-campaign.json`，评审侧交叉验证=`data-v3/stats-output.json`，两实现逐位一致）**：
+
+| 配置 | n | CPU Δ% 中位 [95% CI] | CPU IQR | p99 Δ% 中位 [95% CI] | p99 IQR | 判定（v2 §6.4 规则表） |
+| --- | --- | --- | --- | --- | --- | --- |
+| H2 On/无导出 | 10 | **+3.91 [+2.878, +5.370]** | 1.66pp | +2.29 [+1.259, +10.248] | 8.09pp | CPU：CI 跨 +5 → UNKNOWN（上界仅超 0.37pp）；p99：IQR>5pp → UNKNOWN；**总体 UNKNOWN** |
+| H3 On+dump | 9 | **+4.78 [+3.226, +7.166]** | 2.03pp | +2.42 [+1.389, +9.971] | 4.09pp | CPU：CI 跨 +5 → UNKNOWN；p99：CI 跨 +5 → UNKNOWN；**总体 UNKNOWN** |
+| H4 On+全 OTLP | 8 | **+10.14 [+8.374, +16.943]** | 7.49pp | +5.74 [+4.692, +17.249] | 10.19pp | CPU：CI 下界 8.37 > +5 → **FAIL 条件成立**；同击 IQR>5pp → UNKNOWN 条件（冻结表无优先级，**呈 Owner**）；**任何读法下不可 PASS** |
+| H0 血缘背景 | 10 | +0.30 [−0.696, +7.535] | 2.37pp | +0.10 [−0.705, +10.207] | 8.39pp | CI 含 0 → **INCONCLUSIVE@0**（v0.0.15→当前 SHA 无可测 CPU 血缘漂移） |
+
+配套数字（H2/H3/H4 一致）：RSS 中位增量 ≈ **+43 MB**（OTel 运行时常驻面）；p50 中位 +4.8/+5.1/+6.9%、p95 中位 +1.7/+2.2/+6.4%。
+
+**读数边界（如实）**：①全部数字为 WSL2 探索级、C=1 闭环吞吐语义（`ops/s = C/latency`），只作机制归因，不外推生产容量；②追加会话（sweeps 7–10）机器绝对吞吐漂移 −15~25%（疑似热节流），配对设计消除共同漂移，但 p99 的 IQR 显著变宽（H2 8.09pp / H4 10.19pp）——p99 判定力因此受限；③`run-meta/freeze.json` 机械标记 as-built 无写入方、未落盘——正式段全部在 v4 冻结参数 + 7/7 门下执行，该程序性缺口如实呈 Owner；④判定只认本表实测配对，历史 #980/+10.4%/+9.1% 仍仅作背景。
+
+**结论**：T1（CPU）——H4（全 OTLP 导出）**实测超预算**（中位 +10.14%，CI 下界 +8.37%，任何规则读法下不满足 ≤5%）；H2/H3 CI 跨 5% 上界，判定力不足以出 PASS/FAIL。T2（p99）——三配置 IQR/CI 均未收敛到可判定（中位 +2.3/+2.4/+5.7%）。ADR-028 ≤5% 双预算在当前数据下**无任何配置可达 PASS**。

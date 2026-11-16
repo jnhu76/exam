@@ -51,6 +51,58 @@ function median(values) {
     : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+// Self-contained mirror of the frozen PROTOCOL §6.3 bootstrap (mulberry32,
+// 10,000 resamples, seed 20261115, median statistic, 2.5/97.5 percentiles).
+// Deliberately independent of runner.js so this file cross-validates the
+// authoritative implementation rather than importing it.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const BOOTSTRAP_RESAMPLES = 10_000;
+const BOOTSTRAP_SEED = 20261115;
+function bootstrapCiMedian(deltas) {
+  if (deltas.length === 0) return [null, null];
+  const rand = mulberry32(BOOTSTRAP_SEED);
+  const n = deltas.length;
+  const stats = new Array(BOOTSTRAP_RESAMPLES);
+  const buf = new Array(n);
+  for (let b = 0; b < BOOTSTRAP_RESAMPLES; b++) {
+    for (let i = 0; i < n; i++) buf[i] = deltas[Math.floor(rand() * n)];
+    stats[b] = median(buf);
+  }
+  stats.sort((a, b) => a - b);
+  const r3 = (x) => (x === null ? null : +x.toFixed(3));
+  return [
+    r3(stats[Math.floor(BOOTSTRAP_RESAMPLES * 0.025)]),
+    r3(
+      stats[
+        Math.min(
+          BOOTSTRAP_RESAMPLES - 1,
+          Math.ceil(BOOTSTRAP_RESAMPLES * 0.975) - 1,
+        )
+      ],
+    ),
+  ];
+}
+function iqrPp(xs) {
+  if (xs.length === 0) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const q = (p) => {
+    const idx = (s.length - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    return s[lo] + (s[hi] - s[lo]) * (idx - lo);
+  };
+  return +(q(0.75) - q(0.25)).toFixed(3);
+}
+
 const segmentsPath = join(dataDir, "segments.jsonl");
 const campaignPath = join(dataDir, "campaign-summary.json");
 const segments = readFileSync(segmentsPath, "utf8")
@@ -83,8 +135,11 @@ for (const s of segments) {
 }
 const suiteOrder = [
   "pilot",
+  "mixed-campaign",
+  "mixed-superseded-run1",
   "isolated",
   "knee",
+  "equivalence-final",
   "equivalence",
   "probe-archive",
 ];
@@ -136,7 +191,9 @@ const validSegmentsBySuiteWorkflowConfig = [...groups.entries()]
 
 // --- formal aggregate (aggregateCore semantics over formal rounds) ------------
 
-const FORMAL_ROUND_SUITES = []; // v3 rounds/ holds no round manifests
+// The formal judgment carrier is the mixed campaign (PROTOCOL-v3 §6.3);
+// its sweeps are the formal "rounds" for pairing (§6.5(a) bridge).
+const FORMAL_ROUND_SUITES = ["mixed-campaign"];
 const formalSegments = segments.filter((s) =>
   FORMAL_ROUND_SUITES.includes(s.suite),
 );
@@ -175,10 +232,14 @@ const rows = [];
         config,
         comparable: n > 0,
         cpuDeltaPct: median(pairs.cpu),
+        cpuCiPct: bootstrapCiMedian(pairs.cpu),
         p50DeltaPct: median(pairs.p50),
         p95DeltaPct: median(pairs.p95),
         p99DeltaPct: median(pairs.p99),
+        p99CiPct: bootstrapCiMedian(pairs.p99),
         rssDeltaMb: median(pairs.rss),
+        cpuIqrPp: iqrPp(pairs.cpu),
+        p99IqrPp: iqrPp(pairs.p99),
         n,
       });
     }
@@ -190,8 +251,13 @@ const rows = [];
 const campaigns = campaign.campaigns ?? {};
 const campaignValidPaired = {};
 {
-  campaignValidPaired.mixed =
-    campaigns.mixed?.segmentsLaunched === 0 ? 0 : null;
+  {
+    const units = campaigns.mixed?.units;
+    campaignValidPaired.mixed =
+      units && Object.keys(units).length > 0
+        ? Math.min(...Object.values(units).map((u) => u.valid))
+        : 0;
+  }
   for (const suite of ["isolated", "knee"]) {
     const units = campaigns[suite]?.units;
     campaignValidPaired[suite] =
@@ -221,14 +287,18 @@ const output = {
     rows,
     exclusionBasis: {
       pilot: "PROTOCOL §3.4: pilot/ladder data never enters statistics",
+      "mixed-superseded-run1":
+        "superseded harness-gap run (defer-starve, pre waitForQuietLoad1 fix); not for judgment",
       isolated:
         "as-built: cmdAggregate reads rounds/ only (runner.js:5201); campaign segments are outside rounds/",
       knee: "same as isolated; additionally §6.5(b) campaign aggregation path not landed (PROTOCOL-v3)",
+      "equivalence-final":
+        "§6.6-3 comparability evidence (0 oracle violations, terminal fields equal); not a performance judgment channel",
       equivalence:
         "superseded interim registers (final h0-equivalence.json absent); §6.6-3 evidence, never a performance judgment channel",
       "probe-archive": "round-0 probe/verify archives, interim evidence",
     },
-    note: "n=0 < 6 → every aggregate cell UNKNOWN (PROTOCOL §6.4); CI containing 0 must be reported INCONCLUSIVE, never 'zero cost'",
+    note: "n < 6 → the cell is UNKNOWN (PROTOCOL §6.4); CI containing 0 must be reported INCONCLUSIVE, never 'zero cost'; CI straddling +5% is UNKNOWN→Owner; CI low > +5% is FAIL; IQR > 5pp is UNKNOWN (the frozen table gives FAIL and UNKNOWN-no-precedence when both hit)",
   },
   campaignValidPaired,
   kneeRecon: {

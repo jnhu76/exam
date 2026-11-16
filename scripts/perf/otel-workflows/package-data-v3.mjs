@@ -142,6 +142,35 @@ function classifySegment(relFromRaw) {
       gear,
     };
   }
+  if (parts[0] === "campaign-mixed") {
+    // Formal mixed campaign (PROTOCOL-v3 §6.3 carrier): sweep-N/<config>/.
+    return {
+      suite: "mixed-campaign",
+      rep: parts[1],
+      unit: parts[2],
+      config: parts[2],
+      workflow: "mixed",
+    };
+  }
+  if (parts[0] === "campaign-mixed-superseded-run1") {
+    return {
+      suite: "mixed-superseded-run1",
+      rep: parts[1],
+      unit: parts[2],
+      config: parts[2],
+      workflow: "mixed",
+    };
+  }
+  if (parts[0] === "equivalence") {
+    // Final register-backed equivalence rounds (h0-equivalence.json verified).
+    return {
+      suite: "equivalence-final",
+      rep: parts[1],
+      unit: parts[2],
+      config: parts[2],
+      workflow: "mixed",
+    };
+  }
   if (
     parts[0] === "equivalence-superseded-run1" ||
     parts[0] === "equivalence-superseded-run2" ||
@@ -178,9 +207,15 @@ function buildSegmentRows() {
     const cls = classifySegment(relFromRaw);
     const statusBySuite = {
       pilot: "recon-ladder (pilot; never enters statistics — PROTOCOL §3.4)",
+      "mixed-campaign":
+        "FORMAL carrier (PROTOCOL-v3 §6.3): sweep-interleaved H0–H4, ≥6 valid pairs; aggregation via campaign-aggregate.mjs §6.5(a) bridge + packaged-stats formal aggregate",
+      "mixed-superseded-run1":
+        "superseded (defer-starve harness gap, pre waitForQuietLoad1 fix; not for judgment)",
       isolated:
         "campaign (as-built: cmdAggregate reads rounds/ only — runner.js:5201)",
       knee: "campaign-recon (as-built: outside rounds/; §6.5(b) aggregation path not landed)",
+      "equivalence-final":
+        "final H0 equivalence register rounds (verified=true, 3 sweeps × W01/W03/W05/W08); §6.6-3 evidence",
       equivalence:
         "superseded interim (final h0-equivalence.json absent; not for judgment)",
       "probe-archive": "interim probe archive (round-0 probes/verifies)",
@@ -232,15 +267,71 @@ function digestReasonList(list) {
 function buildCampaigns() {
   const campaigns = {};
 
-  campaigns.mixed = {
-    dir: null,
-    status: "never-started (fail-closed)",
-    segmentsLaunched: 0,
-    gateOutcome:
-      "entry precheck gate rejected every attempt; only failing item = H0 §6.6-3 equivalence register missing (gate 6/7 passed; run-meta 1794745651376 et al.)",
-    evidence:
-      "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md",
-  };
+  const mixedDir = join(rawRoot, "campaign-mixed");
+  if (existsSync(join(mixedDir, "campaign.json"))) {
+    const c = JSON.parse(readFileSync(join(mixedDir, "campaign.json"), "utf8"));
+    const units = {};
+    let reasonTexts = [];
+    for (const [unit, u] of Object.entries(c.units ?? {})) {
+      units[unit] = {
+        config: u.config,
+        workflow: u.workflow,
+        valid: u.valid,
+        attempts: u.attempts,
+        deferrals: u.deferrals,
+        reasonCodes: digestReasonList(u.reasons),
+      };
+      reasonTexts = reasonTexts.concat(u.reasons ?? []);
+    }
+    const appendNote = (c.notes ?? []).find((n) =>
+      String(n).includes("append-replicate session"),
+    );
+    const aggregateDigest = existsSync(
+      join(mixedDir, "aggregate-campaign.json"),
+    )
+      ? JSON.parse(
+          readFileSync(join(mixedDir, "aggregate-campaign.json"), "utf8"),
+        )
+      : null;
+    campaigns.mixed = {
+      dir: "out/otel-w964/workflow-audit-v3/campaign-mixed/",
+      generatedAt: c.generatedAt,
+      totalValid: Object.values(units).reduce((s, u) => s + u.valid, 0),
+      totalAttempts: Object.values(units).reduce((s, u) => s + u.attempts, 0),
+      totalDeferrals: Object.values(units).reduce((s, u) => s + u.deferrals, 0),
+      units,
+      overallReasonCodes: digestReasonList(reasonTexts),
+      appendSessionNote: appendNote ? sanitizeAll([appendNote])[0] : null,
+      stoppedByOwner: existsSync(
+        join(rawRoot, "STOPPED-20261116-owner-command.md"),
+      ),
+      aggregate: aggregateDigest
+        ? {
+            baseline: aggregateDigest.baseline,
+            sweeps: aggregateDigest.sweeps,
+            rows: aggregateDigest.rows,
+            h0DriftContext: aggregateDigest.h0DriftContext,
+          }
+        : null,
+      notesDigest: sanitizeAll(c.notes ?? []).slice(0, 12),
+      prehistory: {
+        status:
+          "run1 superseded (defer-starve harness gap, waitForQuietLoad1 fix; see campaign-mixed-superseded-run1/)",
+        evidence:
+          "out/otel-w964/workflow-audit-v3/campaign-mixed-superseded-run1/ + BLOCKED-20261115-hostside-docker-desktop-shutdown.md",
+      },
+    };
+  } else {
+    campaigns.mixed = {
+      dir: null,
+      status: "never-started (fail-closed)",
+      segmentsLaunched: 0,
+      gateOutcome:
+        "entry precheck gate rejected every attempt; only failing item = H0 §6.6-3 equivalence register missing (gate 6/7 passed; run-meta 1794745651376 et al.)",
+      evidence:
+        "out/otel-w964/workflow-audit-v3/BLOCKED-20261115-hostside-docker-desktop-shutdown.md",
+    };
+  }
 
   const isolatedDir = join(rawRoot, "campaign-isolated");
   if (existsSync(join(isolatedDir, "campaign.json"))) {

@@ -118,11 +118,15 @@ node scripts/perf/otel-workflows/runner.js pilot --config X [--attempt N]
 #       "cpuSamplesValid":bool,"loadStats":"…","violations":[],"notes":[]}
 # ，退出码 0/1
 
-node scripts/perf/otel-workflows/runner.js campaign --suite mixed|isolated|knee [--concurrency N]
+node scripts/perf/otel-workflows/runner.js campaign --suite mixed|isolated|knee [--concurrency N] [--target N]
 # campaign 骨架（PROTOCOL-v3 草案组成，§6.2/§6.4 停机规则沿用）：配置交错（每
-# sweep 轮转起点）、入口七项预检门 + 每段前干扰复查（loadavg>4 推迟该段且不烧
-# attempt，连续 3 次推迟判 starved）、每单元有效段计数（≥6 有效或 8 次尝试即
-# 停）。v3 三套件：mixed=系统总成本套件 {H0,H1,H2,H3,H4}（H0 由 gate item 7
+# sweep 轮转起点）、入口七项预检门 + 每段前干扰复查 + 每段前干扰复查：waitForQuietLoad1
+# 先在 ≤5min 预算内等残余负载衰减（co-located runner 的上一段尾迹不是外部干扰，
+# 2026-11-16 修复——此前 run1 被自己的尾迹 defer-starve）；仍未达标才推迟该段且
+# 不烧 attempt，连续 3 次推迟判 starved）、每单元有效段计数（≥6 有效或 8 次尝试即
+# 停）。--target N ∈ (6,12] 以 v2 §6.4 追加 replicate 通道 resume 既有 campaign
+# （units/rounds/notes 从 campaign.json 恢复、sweep 编号续写、尝试上限 12）；
+# fresh 运行在 campaign.json 已存在时拒绝（防覆盖既有证据，先归档或改用 --target）。v3 三套件：mixed=系统总成本套件 {H0,H1,H2,H3,H4}（H0 由 gate item 7
 # 的 §6.6-3 等价性登记 fail-closed 把关，登记缺失即整 suite 拒绝启动）；\
 # isolated=单工作流隔离套件 {H1,H2,H4} × {iso-C1 health, iso-C3 save-accepted,
 # iso-C5 submit-grade}（类配额从冻结 quotas 投影）；knee=容量拐点套件 {H1,H4}
@@ -135,6 +139,15 @@ node scripts/perf/otel-workflows/runner.js campaign --suite mixed|isolated|knee 
 # 末行: ###CAMPAIGN###{"ok":bool,"suite":…,"gears":[…(knee)],
 #       "units":{unit:{valid,attempts,…}},"rounds":[…],"gate":{…},
 #       "stoppedReason":…,"throughputSemantics":…,"notes":[]}，退出码 0/1
+
+node scripts/perf/otel-workflows/campaign-aggregate.mjs [--suite mixed|isolated|knee]
+# §6.5(a) campaign 聚合桥（2026-11-16）：cmdAggregate 只读 rounds/，campaign 段
+# 无机器配对路径——本桥把 campaign-<suite>/sweep-N 段喂给同一权威 aggregateCore
+# （同 sweep 同 workflow 配对 vs H1、bootstrap 10000/种子 20261115），补 p99 CI
+# （bootstrapCi）并按 v2 §6.4 规则表出判定（CI 上界 ≤+5 PASS / 下界 >+5 FAIL /
+# 跨 +5 或 n<6 或 IQR>5pp UNKNOWN；CI 含 0 另标 INCONCLUSIVE@0）。统计零第二
+# 实现。写 campaign-<suite>/aggregate-campaign.json；末行
+# ###AGG-CAMPAIGN###<json>，退出码 0/1。
 # 骨架边界：段执行复用 runSegment 原链路；Stage D–G 真实采样仍另行授权。
 
 node scripts/perf/otel-workflows/runner.js equivalence [--rounds N] [--concurrency N] [--max-sweeps N]
