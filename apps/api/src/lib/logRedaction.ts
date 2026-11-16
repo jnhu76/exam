@@ -1,3 +1,5 @@
+import { isErrorCode } from "@exam/contracts";
+
 /**
  * Pino redaction configuration for sensitive fields.
  *
@@ -41,14 +43,59 @@ export const REDACT_CONFIG = {
   remove: true,
 };
 
-/** Whitelisted own properties kept for the top-level logged error. */
-const ERR_TOP_LEVEL_PROPS = ["name", "code", "statusCode"] as const;
+/**
+ * Constant replacing every raw error message in the `err` channel (#998).
+ *
+ * WHY: error messages have no proven trusted source at runtime. A
+ * DrizzleQueryError's top-level message embeds the full SQL text and bound
+ * parameter values; a wrapped driver/serialization error embeds rejected
+ * payload data. Authored-in-repo messages cannot be distinguished from
+ * data-derived ones structurally, so the policy withholds them uniformly.
+ */
+export const REDACTED_ERROR_MESSAGE = "[redacted error message]";
 
-/** Whitelisted own properties kept for each `cause` in the error chain. */
-const ERR_CAUSE_PROPS = ["name", "code", "statusCode"] as const;
+/**
+ * Fixed classification labels for known error classes (#998). The key is the
+ * constructor name (or `name`) of a class we recognize; the value is the
+ * label we emit. Name-based recognition is spoofable, but spoofing only
+ * SELECTS one of these fixed labels — no input text ever flows to the log.
+ */
+const ERROR_CLASS_LABELS: Readonly<Record<string, string>> = {
+  DrizzleQueryError: "drizzle_query_error",
+  DrizzleError: "drizzle_error",
+  ResponseSerializationError: "response_serialization_error",
+  ZodError: "zod_error",
+};
+
+/** Label for every Error not matched by {@link ERROR_CLASS_LABELS}. */
+const GENERIC_ERROR_LABEL = "error";
+
+/**
+ * SQLSTATE codes preserved as safe diagnostic `code` values. Exact-match set,
+ * not format validation: 23505/40001 are the constraint codes the error
+ * handler already recognizes (plugins/errors.ts, message contract D0.6/C1-A);
+ * 23503/42P01 are common operational PG failures. Unlisted codes are omitted.
+ */
+const RECOGNIZED_SQLSTATE_CODES: ReadonlySet<string> = new Set([
+  "23505",
+  "40001",
+  "23503",
+  "42P01",
+]);
+
+/**
+ * Framework error codes authored by our dependencies that are safe to echo
+ * for diagnosis. Exact-match set; also used as a classification key.
+ */
+const RECOGNIZED_FRAMEWORK_CODES: ReadonlySet<string> = new Set([
+  "FST_ERR_RESPONSE_SERIALIZATION",
+]);
 
 /** Depth cap guards against circular `cause` chains (Error options allow them). */
 const MAX_CAUSE_DEPTH = 5;
+
+/** Marker emitted where a cause chain is cut by the depth cap. */
+const CAUSE_TRUNCATION_MARKER = "[cause chain truncated]";
 
 /**
  * Shape of the serialized `err` entry. The identity fields are always
@@ -74,30 +121,94 @@ function typeMarker(value: unknown): SerializedErrorForLog {
 }
 
 /**
+ * Fixed classification label for a logged Error (#998).
+ *
+ * Recognition order: constructor name, then the framework `code` key, then
+ * `name`. Every lookup key only selects from {@link ERROR_CLASS_LABELS};
+ * recognizing a known class never grants access to its message or stack.
+ */
+function classifyError(source: Error & Record<string, unknown>): string {
+  const constructorName = source.constructor?.name;
+  if (constructorName !== undefined) {
+    const byConstructor = ERROR_CLASS_LABELS[constructorName];
+    if (byConstructor !== undefined) return byConstructor;
+  }
+  const code = source.code;
+  if (typeof code === "string" && RECOGNIZED_FRAMEWORK_CODES.has(code)) {
+    return ERROR_CLASS_LABELS["ResponseSerializationError"]!;
+  }
+  const byName = ERROR_CLASS_LABELS[source.name];
+  if (byName !== undefined) return byName;
+  return GENERIC_ERROR_LABEL;
+}
+
+/**
+ * Safe `code` projection (#998): the value is echoed only when it is an
+ * exact member of a closed authoritative set — the `ErrorCode` domain
+ * registry (`@exam/contracts`, same authority as the error envelope), the
+ * recognized SQLSTATEs, or the recognized framework codes. Anything else
+ * (arbitrary strings, objects, data-derived values) is omitted.
+ */
+function safeCodeOf(
+  source: Error & Record<string, unknown>,
+): string | undefined {
+  const code = source.code;
+  if (typeof code !== "string") return undefined;
+  if (isErrorCode(code)) return code;
+  if (RECOGNIZED_SQLSTATE_CODES.has(code)) return code;
+  if (RECOGNIZED_FRAMEWORK_CODES.has(code)) return code;
+  return undefined;
+}
+
+/**
+ * Safe `statusCode` projection (#998): a plausibly-ranged integer HTTP
+ * status. Other shapes (strings, NaN, out-of-range numbers) are omitted —
+ * the value is untrusted input that must not ride into the log verbatim.
+ */
+function safeStatusCodeOf(
+  source: Error & Record<string, unknown>,
+): number | undefined {
+  const statusCode = source.statusCode;
+  if (
+    typeof statusCode !== "number" ||
+    !Number.isInteger(statusCode) ||
+    statusCode < 400 ||
+    statusCode > 599
+  ) {
+    return undefined;
+  }
+  return statusCode;
+}
+
+/**
  * Whitelist serializer for the pino `err` channel.
  *
  * WHY: pino's default error serializer copies every own enumerable property,
  * so one `log.error({ err })` of a wrapped error dumps its payload into the
- * log — e.g. a ResponseSerializationError whose ZodError `cause` embeds the
- * rejected response values (standard answers) in its issue messages, a domain
- * error carrying `details`, or a driver error carrying row data. Path
- * redaction cannot reach inside the serialized error.
+ * log — e.g. a DrizzleQueryError whose top-level message is
+ * `Failed query: <sql>\nparams: <bindings>`, a ResponseSerializationError
+ * whose ZodError `cause` embeds the rejected response values (standard
+ * answers) in its issue messages, or a driver error carrying row data. Path
+ * redaction cannot reach inside the serialized error, and no runtime marker
+ * distinguishes "authored" from "data-derived" message text, so text is not
+ * the trust boundary at all (#998).
  *
- * Policy: log lines keep error identity and classification only.
- * - Top level keeps `type`/`name`/`message`/`stack` plus `code`/`statusCode`:
- *   messages are authored at throw sites in this codebase and the stack
- *   points at them (the error handler routes raw ZodErrors to the 400 branch
- *   before any `{ err }` logging, so data-derived messages do not reach the
- *   top level through request logging).
- * - `cause` chains keep ONLY type/name/code/statusCode. Message AND stack are
- *   dropped: an Error stack's header embeds its message ("Type: message"),
- *   so for data-derived causes (a ZodError cause embeds the rejected payload
- *   values in both) either would carry them into the log. Constraint
- *   diagnosis survives through the preserved SQLSTATE `code` (e.g. 23505).
+ * Field policy (top level and every cause level alike):
+ * - `type`/`name`: fixed classification label (see {@link classifyError});
+ *   never an echo of the input's constructor/name.
+ * - `message`: the constant {@link REDACTED_ERROR_MESSAGE}.
+ * - `stack`: always `""` (the Fastify/pino `err` serializer contract expects
+ *   the field; stack headers embed the message and frames embed SQL text).
+ * - `code`: only exact members of the closed safe sets ({@link safeCodeOf}).
+ * - `statusCode`: only a plausible integer HTTP status
+ *   ({@link safeStatusCodeOf}).
+ * - `cause`: same policy recursively, depth-capped and circular-safe.
  * - Non-Error values reduce to a type marker; their contents are never
  *   copied.
- * - Everything else (`details`, `issues`, `validation`, driver `detail`)
- *   is structurally absent from the log line, not merely censored.
+ * - Everything else (`details`, `issues`, `validation`, `query`, `params`,
+ *   driver `detail`, `url`, ...) is structurally absent from the log line,
+ *   not merely censored, and the input's own `toJSON`/`toString` are never
+ *   invoked.
  */
 export function serializeErrorForLog(error: unknown): SerializedErrorForLog {
   if (
@@ -108,16 +219,18 @@ export function serializeErrorForLog(error: unknown): SerializedErrorForLog {
     return typeMarker(error);
   }
   const source = error as Error & Record<string, unknown>;
+  const label = classifyError(source);
 
   const out: Record<string, unknown> = {
-    type: source.constructor?.name ?? "Error",
-    name: source.name,
-    message: source.message,
-    stack: source.stack ?? "",
+    type: label,
+    name: label,
+    message: REDACTED_ERROR_MESSAGE,
+    stack: "",
   };
-  for (const key of ERR_TOP_LEVEL_PROPS) {
-    if (source[key] !== undefined) out[key] = source[key];
-  }
+  const code = safeCodeOf(source);
+  if (code !== undefined) out.code = code;
+  const statusCode = safeStatusCodeOf(source);
+  if (statusCode !== undefined) out.statusCode = statusCode;
   if (source.cause !== undefined) {
     out.cause = serializeCause(source.cause, 0);
   }
@@ -129,7 +242,7 @@ function serializeCause(
   depth: number,
 ): SerializedErrorForLog | unknown {
   if (depth >= MAX_CAUSE_DEPTH) {
-    return { type: "Error", message: "[cause chain truncated]" };
+    return { type: GENERIC_ERROR_LABEL, message: CAUSE_TRUNCATION_MARKER };
   }
   if (
     typeof cause !== "object" ||
@@ -141,16 +254,18 @@ function serializeCause(
     return typeMarker(cause);
   }
   const source = cause as Error & Record<string, unknown>;
+  const label = classifyError(source);
 
   const out: Record<string, unknown> = {
-    type: source.constructor?.name ?? "Error",
-    name: source.name,
-    // Stack intentionally omitted: its header embeds the cause message,
-    // which is data-derived for wrapped errors (see policy above).
+    type: label,
+    name: label,
+    // Message and stack intentionally absent entirely: both are data-derived
+    // for wrapped errors (see the serializer field policy above).
   };
-  for (const key of ERR_CAUSE_PROPS) {
-    if (source[key] !== undefined) out[key] = source[key];
-  }
+  const code = safeCodeOf(source);
+  if (code !== undefined) out.code = code;
+  const statusCode = safeStatusCodeOf(source);
+  if (statusCode !== undefined) out.statusCode = statusCode;
   if (source.cause !== undefined) {
     out.cause = serializeCause(source.cause, depth + 1);
   }
