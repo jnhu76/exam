@@ -10,6 +10,8 @@
     "build": "turbo build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "commit:check": "node scripts/check-commit-messages.mjs",
+    "test:commit-messages": "node --test scripts/check-commit-messages.test.mjs",
     "lint": "node scripts/check-code-quality.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",
     "lint:db-config": "node scripts/check-db-config.mjs",
@@ -63,6 +65,8 @@
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
+    "@commitlint/lint": "^21.0.2",
+    "@commitlint/load": "^21.0.2",
     "dotenv": "^17.4.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.7",

@@ -34,6 +34,20 @@ pnpm db:seed          # seed test users
 pnpm dev              # start API + Web dev servers
 ```
 
+## Commit Messages
+
+Every commit (merge commits included) must use `type(scope): subject` —
+enforced by the commit-msg/pre-push hooks and the CI `Commit messages` job.
+The format, type whitelist, scope guidance and the merge/revert/fixup
+workflows live in
+[`docs/standards/commit-messages.md`](docs/standards/commit-messages.md).
+
+Quick pre-flight before committing:
+
+```bash
+node scripts/check-commit-messages.mjs --title "feat(api): planned subject"
+```
+
 ## Pull Request Process
 
 1. Create a branch from `master` with a descriptive name.
