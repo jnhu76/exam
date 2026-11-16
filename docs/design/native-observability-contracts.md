@@ -63,7 +63,7 @@
 | 变更 | owner（不变） | 新增内容（PROPOSED，待 Owner 批准后由对应 Issue 实施） | 依赖方向 |
 | --- | --- | --- | --- |
 | P1 | 邮件模块（`apps/api/src/email/*`） | 单一隐私策略 owner（封闭分类 + 受控 code 集合，替换 `sanitizeError.ts` 的自由文本语义）；两个宿主保留各自 transport adapter（Pino / stdout JSON）；读侧历史投影在 `routes/system.ts`。实施细节以 #1012 PR 为准（§6） | email 模块内闭环；宿主 → email 模块（既有方向） |
-| P2 | `packages/db`（executeInTransaction） | 可选 `correlation` 显式参数（closed 对象：`requestId?/attemptId?/operationId?`），由已有 ctx 的调用方显式传入；模块级 logger 机制不变（E05） | 调用方 → db（既有方向）；无全局变量 |
+| P2 | `packages/db`（executeInTransaction） | 可选 `correlation` 显式参数（closed 对象：`requestId?/attemptId?/operationId?`），由已有 ctx 的调用方显式传入；进入形态为第四可选参数或参数对象整合（现行第三位置参数 isolationLevel 已存在，`types.ts:186-189`，不得占用）；模块级 logger 机制不变（E05） | 调用方 → db（既有方向）；无全局变量 |
 | P3 | submit/grade orchestrator | commit 后单行 outcome 日志（E06）：发射点只在 `submitAndGradeAttempt.ts` 事务提交后（as-built 返回点 `:251-262`） | orchestrator 内部；无新依赖 |
 | P4 | admin 路由 + orchestrator | commit 后 outcome 行；拒绝侧只记 closed category，不记被拒目标业务细节（E07） | 同上 |
 | P5 | heartbeat/deadline scanner plugins | tick 完成行仅非空结果发射 + tickId（one-cycle）（E08）；E03 只加 diagnostics 投影字段 | plugin 内部 |
@@ -91,13 +91,13 @@
 
 | 项 / Issue | 诊断问题 | owner（调用点） | 新事件？ | 候选固定事件名 | closed outcome | disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| E01 / #1002 | pingDb 失败时 health/diagnostics 为 500，与 ready 的有界探针不可对照 | `routes/system.ts:297` 及 diagnostics 内 pingDb 调用 | 是（仅失败时） | `db.probe.failed` | `failed`（+sqlstate 封闭集合） | 响应形状不变；200+degraded/nullable 不预批 |
+| E01 / #1002 | 全库宕机时 health/diagnostics 在 preHandler 就失败，无 closed DB-不可用分类；handler 级 pingDb 失败与 ready 的有界探针不可对照 | preHandler 失败实际可观测点 `plugins/auth.ts:102-110`；handler 级 `routes/system.ts:297` 及 diagnostics 内 pingDb | 是（两段，仅失败时） | `db.auth_lookup.failed`（主故障场景）+ `db.probe.failed`（残余窗口） | `failed`（+sqlstate 封闭集合） | 响应形状不变；200+degraded/nullable 不预批；readiness 面归 `operability.readiness` 唯一权威，不重复发射 |
 | E02 / #1003 | oldestPendingAge 只算 due-pending 且单位为秒，含义易误读 | `routes/system.ts:126-132` + `packages/contracts/src/system.ts:111` | 否（字段语义问题） | — | — | contracts 迁移单独决策 |
 | E03 / #1004 | 已有 incident 计数未进诊断投影 | `heartbeat.ts:67-68` → `system.ts` 投影 | 否（只读 projection） | — | — | 投影字段 + 进程级属性标注 |
 | E04 / #1005 | pre-auth 401 无理由区分且可被洪泛 | `plugins/auth.ts:61-116`、`:123-127`、`:158-165` | 是（转移式） | `auth.denied` | reason 封闭枚举 | 计数器优先；组织字段禁止 |
 | E05 / #1006 | DB retry warn 无法关联请求/业务 attempt | `packages/db/src/types.ts:217-225`、`plugins/db.ts:35` | 否（扩展现有行字段） | 沿用 `transaction retry` | retry outcome（隐含） | 显式 correlation 参数；禁止全局身份 |
-| E06 / #1007 | 最终提交 outcome 无 commit 后单行 | `orchestrators/submitAndGradeAttempt.ts:251-262` | 是 | `attempt.submit.completed` | graded / pending_manual / replay_no_change / recovered | 仅 commit 后发射 |
-| E07 / #1008 | admin 命令 outcome/拒绝无技术日志关联 | `routes/attempts.admin.ts:175-206,:251-309` | 是 | `admin.command.completed` / `admin.command.denied` | applied / replay_no_change；denied: forbidden / not_found / conflict | 拒绝行不带目标业务细节 |
+| E06 / #1007 | 最终提交 outcome 无 commit 后单行；五条路径需无歧义分类 | `orchestrators/submitAndGradeAttempt.ts:251-262` | 是 | `attempt.submit.completed` | graded / pending_manual / replay_no_change / deadline_frozen / recovered | 仅 commit 后发射 |
+| E07 / #1008 | admin 命令 outcome/拒绝无技术日志关联 | `routes/attempts.admin.ts:175-206,:251-309` | 是 | `admin.command.completed` / `admin.command.denied` | applied / replay_no_change；denied: forbidden / not_found / conflict（400 归全局校验边界 `errors.ts:93-105`，见 §2.3） | 拒绝行不带目标业务细节 |
 | E08 / #1009 | scanner tick 空/行动/部分失败/throw 不可区分 | `plugins/deadlineScanner.ts:442-455`、`plugins/heartbeat.ts` tick | 是（仅非空结果） | `scanner.tick.completed` | empty / acted / partial_failure | throw 沿用现有 error 行；未知数量≠0 |
 | E09 / #1010 | email 循环活性在空轮询时无 stdout 信号 | `emailOutboxLoop.ts:134-142`、`emailDeliveryWorker.ts:264-272` | HOLD | （候选 `email.worker.transition`，HOLD） | idle / active / error_enter / error_clear | 复用 heartbeat 持久化；不默认 5s 一行 |
 | E10 / #1011 | reserved email audit 是否激活 | `auditPolicy.ts:755-772,:1068-1073` | 否 | — | — | 策略决策归 #1011，不是补 callback |
@@ -106,10 +106,17 @@
 
 ### 2.3 逐项说明
 
-**E01 / #1002 — pingDb 失败边界**
-owner：`routes/system.ts`（health `:283-302`、diagnostics）。诊断问题：pingDb 抛错时 health/diagnostics 直接进全局 500（`errors.ts` 兜底），而 /api/ready 有 2s 预算探针（`operabilityMonitor.ts:117-153`）——三个面口径不可对照。
-提案：在 owner 内加有界技术信号（失败时一行 `db.probe.failed`，字段：`probe ∈ {health, diagnostics, ready}` 封闭枚举、`sqlstate`（仅封闭集合，缺失则省略）、`elapsedMs`（单调时钟，可选））；响应形状**不变**（500 照旧）。不预先批准 200+degraded 或 nullable response（contracts 变更留给 #1002 的 Owner 决策）。
-sink：Pino；频率上界：仅失败转移时发射（目标，见 §5.2）；敏感字段：无；高基数字段：无；Gate：#1002。
+**E01 / #1002 — pingDb 失败边界（含 preHandler 先失败刻画）**
+owner：`routes/system.ts`（health `:283-302`、diagnostics）与 `plugins/auth.ts`（两者共享的 preHandler 链 `[authenticate, requireCapability]`，`system.ts:283-284`/`:357-358`）。
+诊断问题（按故障时序刻画，两层）：
+1. **全库宕机（主故障场景）——handler 不可达。** health/diagnostics 的 preHandler 先执行 authenticate，其用户查找先失败：`auth.ts:102-110` catch 后 `fastify.log.error({ err, actorId }, "Database error during authentication")` + 500。该行经 #998 err 序列化通道（隐私安全，`logRedaction.ts:232-257`），但只有通用 message——没有 closed 的"DB 不可用"分类，也无法与 ready 面对照。
+2. **部分降级（残余窗口）——handler 可达。** preHandler 查询成功而 handler 内 pingDb 失败（连接池耗尽、语句超时等）：pingDb 抛错直接进全局兜底 500（`errors.ts:135-138`）。
+提案（两段信号边界）：
+- 主故障场景的信号边界放在实际可观测点 `auth.ts:102-110`：为该现有日志行增加 closed 分类（候选：`db.auth_lookup.failed` 事件，或现有行加 closed 字段 `dbUnavailable: true`；具体形态归 #1002）。字段：closed reason + `actorId`（JWT 已验证 actor，允许）；err 通道保持 #998 序列化，不新增自由文本。
+- 残余窗口保留 handler 级 `db.probe.failed`：`probe ∈ {health, diagnostics}` 封闭枚举、`sqlstate`（仅封闭集合，缺失则省略）、`elapsedMs`（单调时钟，可选）。**显式声明**：该发射点不覆盖全库宕机（那时 handler 不可达），只是部分降级信号。
+- **probe 枚举不含 `ready`**：readiness 面的 DB 宕机信号已有唯一权威——/api/ready 的有界探针（`operabilityMonitor.ts:117-153`，2s 预算）与 `operability.readiness` 转移告警（15s cadence，`operabilityMonitor.ts:285-292`）。再发射同义事件即重复真相源（§0 原则）；liveness `/api/health` 不触达 DB（`apiSurface.ts:50-60` 固定返回 ok），无 DB 语义。
+- 响应形状**不变**（500 照旧）。不预先批准 200+degraded 或 nullable response（contracts 变更留给 #1002 的 Owner 决策）。
+sink：Pino；频率上界：仅失败/转移时发射（目标，见 §5.2）；敏感字段：无；高基数字段：无；Gate：#1002。
 
 **E02 / #1003 — oldestPendingAge 语义**
 owner：`routes/system.ts:126-132` + `packages/contracts/src/system.ts:111`。as-built：秒整数、仅 due-pending 最老行（`findDuePending`，repo 层带 organizationId 过滤）。
@@ -129,17 +136,29 @@ sink：Pino；频率上界：转移式发射（目标：每 reason 每 state 一
 **E05 / #1006 — DB retry 关联**
 owner：`packages/db`（`types.ts:106/217-225`）+ 调用方（save `attempts.candidate.ts`、submit `submitAndGradeAttempt.ts:62`）。
 诊断问题：retry warn 行只有 `{attempt, sqlstate}`，进程级单 logger 无法区分并发请求；`attempt` 字段语义是 retry 序号（1..3），与业务 attemptId 无关。
-提案：保留现有字段名与行（避免字段迁移），新增**可选显式参数**：`executeInTransaction(db, fn, { correlation })`，`correlation` 为封闭对象 `{ requestId?: string; attemptId?: string; operationId?: string }`，只由调用方从自己已持有的 ctx 显式传入；模块级 logger 机制不变。禁止用全局变量/模块状态保存请求身份（§0；两路线比较见 §4.4）。retryOrdinal（现有 `attempt` 字段）与业务 attemptId 的区分写进字段文档。
+提案：保留现有字段名与行（避免字段迁移），新增**可选显式参数**承载 correlation。as-built 签名约束：`executeInTransaction` 已有第三个位置参数 `isolationLevel`（`types.ts:186-189`，默认 `"repeatable read"`），correlation 不能照写为第三参——以**第四个可选参数**（或参数对象整合，含 isolationLevel 迁移）进入，具体形态留给 #1006 裁决；`correlation` 为封闭对象 `{ requestId?: string; attemptId?: string; operationId?: string }`，只由调用方从自己已持有的 ctx 显式传入；模块级 logger 机制不变。禁止用全局变量/模块状态保存请求身份（§0；两路线比较见 §4.4）。retryOrdinal（现有 `attempt` 字段）与业务 attemptId 的区分写进字段文档。
 sink：Pino（root logger）；频率：现状不变（仅 retry 时）；敏感：无；高基数：requestId/attemptId 为行内关联字段（允许，非 metric label）；Gate：#1006。
 
 **E06 / #1007 — 提交后 outcome（commit-authoritative）**
 owner：`orchestrators/submitAndGradeAttempt.ts`。关键结构事实：整个 body 在 executeInTransaction 内（可重试、可回滚），**事务内发射的日志会在 40001 重试/回滚时重复或虚报**；唯一安全发射位置是事务提交后——as-built 返回点 `:251-262`。
-提案：在返回点发射单行 `attempt.submit.completed`，outcome ∈ {`graded`, `pending_manual`, `replay_no_change`（对应 alreadyGraded 幂等重放）, `recovered`（crash-recovery 分支）}；字段：`attemptId`、`requestId`（有 HTTP 请求时）、outcome。rollback/retry 的中间结果不得作为已提交事实发射。
+提案：在返回点发射单行 `attempt.submit.completed`，outcome 为**五值封闭枚举**，对 #1007 要求的五条路径逐一无歧义映射：
+
+| 分支（as-built 位置） | outcome |
+| --- | --- |
+| 锁定时已 `graded`（幂等重放早退 `:93-95`） | `replay_no_change` |
+| deadline reconciliation 冻结早退（`:156-175`，reconciledStatus 为 graded/submitted 时 `:171-173` 返回） | `deadline_frozen` |
+| 锁定时 `submitted` 的 crash-recovery 路径（`:100-104`，跳过 reconciliation 直接评分） | `recovered` |
+| fresh submit（`:177` 起）后提交后 gradingStatus 为已评分 | `graded` |
+| fresh submit 后提交后 gradingStatus 为 `pending_manual` | `pending_manual` |
+
+结构约束：freeze 早退与 graded-replay 在 as-built 中同样 `return true`（alreadyGraded 布尔把两条路径合并，`:94` 与 `:172`），**仅凭返回值无法区分**——实施时必须把分支判定从事务回调内显式传出（如区分后的 outcome 通道），这是 #1007 的实现要求，不是可选优化。字段：`attemptId`、`requestId`（有 HTTP 请求时）、outcome。rollback/retry 的中间结果不得作为已提交事实发射。
 sink：Pino；频率：每次 submit 一行（业务动作频率，非 always-on）；大小：≤ 256B（目标）；敏感：无答案/分数内容（分数属业务事实，见 receipt）；高基数：attemptId/requestId 行内关联；Gate：#1007。
 
 **E07 / #1008 — admin 命令 outcome 与拒绝关联**
 owner：`routes/attempts.admin.ts` + orchestrator（receipt/outcome 权威在 orchestrator，事务内审计）。as-built：handler 不记 outcome 日志；403/404 早退（`scopedCapability.ts:344-350` anti-enumeration 404）无专用日志；409 经 `errors.ts:118-122` 亦无分类日志。
 提案：与 E06 同构——commit 后单行 `admin.command.completed`（outcome ∈ {`applied`, `replay_no_change`}，字段：command ∈ {force_submit, time_grant}、operationId、attemptId、requestId）。拒绝侧**至多**一行 `admin.command.denied`（outcome ∈ {`forbidden`, `not_found`, `conflict`}，字段：command、requestId；**不带被拒目标的 attemptId/业务细节**——Admin 身份不授予记录越权目标细节的许可，§3）。技术行 best-effort，receipt/审计仍是业务权威，禁止从技术日志反构业务事实。
+
+**400 校验早退的 documented ownership（#1008 验收要求四类 400/403/404/409 各有归属）**：400 不在 `admin.command.denied` 枚举内，其 owner 是**全局校验边界**——route-schema Zod 校验失败与 handler 抛出的 ZodError 由 `errors.ts:93-105` 统一转为 400 + closed validation envelope（含 `requestId` 关联），该边界先于/独立于 admin 路由裁决，admin handler 对 400 不可见、也不应假装可见。排除理由：400 是客户端构造错误（请求体不合 schema），不是服务端命令裁决；现有表示已 closed（ErrorCode registry + validation envelope）且带 requestId 关联，缺的只是 stdout 日志行——为全站所有路由的 400 增加逐请求日志行是全局洪泛决策（与 E04 同一预算问题），不属于 per-route 拒绝信号。若 #1008 评审仍要求 400 关联日志，正确 seam 是全局错误处理器（全路由共享、须先解决洪泛预算），这是 #1008 的显式决策点，本提案不默认实施。
 sink：Pino；频率：每命令 ≤1 行；Gate：#1008。
 
 **E08 / #1009 — scanner tick 因果与四态**
@@ -336,7 +355,7 @@ Scanner tick（E08，部分失败时未知数量显式 unknown）：
 | 4 | E04 洪泛预算具体形态（纯计数器 vs 计数器+转移行） | 倾向计数器+转移行，值待定 |
 | 5 | E05 correlation 字段词汇与传入边界（requestId/attemptId/operationId 三选几） | 倾向全可选、调用方显式传 |
 | 6 | E05 若签名扩散不可接受，是否重议 ALS | 默认否（§4.4） |
-| 7 | E06/E07/E08 outcome 枚举词汇冻结 | 候选值见 §2.3，待冻结 |
+| 7 | E06/E07/E08 outcome 枚举词汇冻结（E06 五值含 `deadline_frozen`；E07 确认 400 归全局校验边界而非 `admin.command.denied`） | 候选值与归属见 §2.3，待冻结 |
 | 8 | E09 转移行是否启用（当前 HOLD） | 默认不启用，复用 heartbeat |
 | 9 | E10 reserved email audit 激活策略 | 归 #1011，本提案无立场 |
 | 10 | E11 实施确认：隐私策略 owner + 读侧投影（与 #1012 PR 对齐） | 方向已授权，细节以 #1012 为准 |
