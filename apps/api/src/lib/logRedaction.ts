@@ -59,13 +59,21 @@ export const REDACTED_ERROR_MESSAGE = "[redacted error message]";
  * constructor name (or `name`) of a class we recognize; the value is the
  * label we emit. Name-based recognition is spoofable, but spoofing only
  * SELECTS one of these fixed labels — no input text ever flows to the log.
+ *
+ * INVARIANT: kept as a Map — plain-object indexing answers prototype-chain
+ * keys ("__proto__", "constructor", "toString") with non-undefined values,
+ * which would smuggle a non-string "label" into the output. Map lookups
+ * miss cleanly.
  */
-const ERROR_CLASS_LABELS: Readonly<Record<string, string>> = {
-  DrizzleQueryError: "drizzle_query_error",
-  DrizzleError: "drizzle_error",
-  ResponseSerializationError: "response_serialization_error",
-  ZodError: "zod_error",
-};
+const RESPONSE_SERIALIZATION_LABEL = "response_serialization_error";
+const ERROR_CLASS_LABELS: ReadonlyMap<string, string> = new Map<string, string>(
+  [
+    ["DrizzleQueryError", "drizzle_query_error"],
+    ["DrizzleError", "drizzle_error"],
+    ["ResponseSerializationError", RESPONSE_SERIALIZATION_LABEL],
+    ["ZodError", "zod_error"],
+  ],
+);
 
 /** Label for every Error not matched by {@link ERROR_CLASS_LABELS}. */
 const GENERIC_ERROR_LABEL = "error";
@@ -110,13 +118,22 @@ export interface SerializedErrorForLog {
   [key: string]: unknown;
 }
 
-/** Reduces any value to a type marker without copying its contents. */
+/**
+ * Reduces any non-Error value to a fixed type marker without copying its
+ * contents. Labels derive ONLY from `typeof` / `null` / array checks: the
+ * input's `constructor.name` is spoofable input that can carry arbitrary
+ * text, or an object with a custom `toJSON` that JSON serialization would
+ * then invoke (#998 review round 2) — it is never read.
+ */
 function typeMarker(value: unknown): SerializedErrorForLog {
-  const typeName =
-    typeof value === "object" && value !== null
-      ? ((value as { constructor?: { name?: string } }).constructor?.name ??
-        "Object")
-      : typeof value;
+  let typeName: string;
+  if (value === null) {
+    typeName = "null";
+  } else if (Array.isArray(value)) {
+    typeName = "array";
+  } else {
+    typeName = typeof value;
+  }
   return { type: typeName, name: typeName, message: "", stack: "" };
 }
 
@@ -129,16 +146,18 @@ function typeMarker(value: unknown): SerializedErrorForLog {
  */
 function classifyError(source: Error & Record<string, unknown>): string {
   const constructorName = source.constructor?.name;
-  if (constructorName !== undefined) {
-    const byConstructor = ERROR_CLASS_LABELS[constructorName];
+  if (typeof constructorName === "string") {
+    const byConstructor = ERROR_CLASS_LABELS.get(constructorName);
     if (byConstructor !== undefined) return byConstructor;
   }
   const code = source.code;
   if (typeof code === "string" && RECOGNIZED_FRAMEWORK_CODES.has(code)) {
-    return ERROR_CLASS_LABELS["ResponseSerializationError"]!;
+    return RESPONSE_SERIALIZATION_LABEL;
   }
-  const byName = ERROR_CLASS_LABELS[source.name];
-  if (byName !== undefined) return byName;
+  if (typeof source.name === "string") {
+    const byName = ERROR_CLASS_LABELS.get(source.name);
+    if (byName !== undefined) return byName;
+  }
   return GENERIC_ERROR_LABEL;
 }
 

@@ -306,7 +306,9 @@ describe("err channel whitelist serializer (EXSEM-017 observability boundary)", 
   it("reduces non-Error err values to a type marker without copying contents", () => {
     const plain = { code: "X", info: "SECRET-marker-not-copied" };
     const out = serializeErrorForLog(plain) as Record<string, unknown>;
-    expect(out.type).toBe("Object");
+    // #998 review round 2: the marker derives from typeof checks only, never
+    // from the input's constructor.name.
+    expect(out.type).toBe("object");
     expect(JSON.stringify(out)).not.toContain("SECRET-marker-not-copied");
   });
 
@@ -581,6 +583,100 @@ describe("#998 data-derived error payloads must not reach the err channel", () =
     expect(boom.cause).toBe(cause);
     expect(cause.message).toBe("cause text");
     expect(cause.code).toBe("23505");
+  });
+
+  // ── review round 2: non-Error values must not leak via constructor.name ──
+
+  it("non-Error values never leak a spoofed constructor.name, at top level, as cause, or through the real request chain", async () => {
+    // Unit: crafted top-level value whose constructor.name carries the marker.
+    const crafted = { constructor: { name: NAME_MARKER } };
+    const out = serializeErrorForLog(crafted);
+    expect(JSON.stringify(out)).not.toContain(NAME_MARKER);
+    expect(out.type).toBe("object");
+
+    // Unit: same crafted value as a cause.
+    const wrapped = new Error("top", {
+      cause: { constructor: { name: NAME_MARKER } },
+    });
+    expect(JSON.stringify(serializeErrorForLog(wrapped))).not.toContain(
+      NAME_MARKER,
+    );
+
+    // Unit: a constructor.name that is an object with toJSON, plus a toJSON
+    // on the value itself — neither may be copied or invoked.
+    const boobyTrapped = {
+      constructor: { name: { toJSON: () => NAME_MARKER } },
+      toJSON: () => NAME_MARKER,
+    };
+    expect(JSON.stringify(serializeErrorForLog(boobyTrapped))).not.toContain(
+      NAME_MARKER,
+    );
+
+    // Unit: array cause reduces to a fixed label without copying entries.
+    const withArrayCause = new Error("top", { cause: [NAME_MARKER] });
+    expect(JSON.stringify(serializeErrorForLog(withArrayCause))).not.toContain(
+      NAME_MARKER,
+    );
+
+    // Real Fastify/Pino chain: non-Error cause on an unhandled 500.
+    const run = await captureRequestError((app) => {
+      app.get("/non-error-cause", async () => {
+        throw new Error("top", {
+          cause: { constructor: { name: NAME_MARKER } },
+        });
+      });
+    }, "/non-error-cause");
+    expect(run.res.statusCode).toBe(500);
+    expect(
+      run.parsed.some((entry) => entry.msg === "Unhandled request error"),
+      "unhandled-error log line captured",
+    ).toBe(true);
+    expect(run.joined).not.toContain(NAME_MARKER);
+
+    // Real chain: a crafted plain object thrown directly (top-level err).
+    const run2 = await captureRequestError((app) => {
+      app.get("/thrown-object", async () => {
+        throw { constructor: { name: NAME_MARKER }, code: CODE_MARKER };
+      });
+    }, "/thrown-object");
+    expect(run2.res.statusCode).toBe(500);
+    expect(
+      run2.parsed.some((entry) => entry.msg === "Unhandled request error"),
+      "unhandled-error log line captured",
+    ).toBe(true);
+    expect(run2.joined).not.toContain(NAME_MARKER);
+    expect(run2.joined).not.toContain(CODE_MARKER);
+  });
+
+  // ── review round 2: classification lookup must not hit the prototype chain ──
+
+  it("prototype-chain keys (constructor/name) cannot break the fixed-label classification", () => {
+    for (const poisoned of [
+      "__proto__",
+      "constructor",
+      "toString",
+      "valueOf",
+      "hasOwnProperty",
+    ]) {
+      const byName = Object.assign(new Error("plain"), { name: poisoned });
+      const outByName = serializeErrorForLog(byName) as Record<string, unknown>;
+      expect(outByName.type, `name=${poisoned}`).toBe("error");
+      expect(outByName.name, `name=${poisoned}`).toBe("error");
+
+      const byConstructorName = Object.assign(new Error("plain"), {
+        constructor: { name: poisoned },
+      });
+      const outByCtor = serializeErrorForLog(byConstructorName) as Record<
+        string,
+        unknown
+      >;
+      expect(outByCtor.type, `constructor.name=${poisoned}`).toBe("error");
+      expect(outByCtor.name, `constructor.name=${poisoned}`).toBe("error");
+
+      // The identity fields survive JSON serialization as strings.
+      expect(JSON.stringify(outByName)).toContain('"type":"error"');
+      expect(JSON.stringify(outByCtor)).toContain('"name":"error"');
+    }
   });
 });
 
