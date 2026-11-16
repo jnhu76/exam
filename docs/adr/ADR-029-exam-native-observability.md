@@ -2,12 +2,12 @@
 
 ## Status
 
-- Status: **PROPOSED**（2026-11-16 起草，提交 Owner 评审；**未接受前不构成施工授权，也不改变任何现行契约**。本文档只确定研究方向与硬约束边界。）
-- Date: 2026-11-16（proposed）
+- Status: **PROPOSED**（2026-11-16 起草，提交 Owner 评审；**未接受前不构成施工授权，也不改变任何现行契约**。本文档只确定研究方向与硬约束边界。2026-11-17 增量修订：澄清 standalone worker 独立日志出口、标注 #998 已修复 D1、链接 #1001 设计提案；均为事实澄清与链接，不改变任何决定方向，状态保持 PROPOSED。）
+- Date: 2026-11-16（proposed；2026-11-16 之后的最小修订见文内标注）
 - 基线：v0.0.15 产品基线（`cb1e614fe087e7ac158deef4a4de7f29268de292`）+ ADR-028 REJECTED（2026-11-16）
 - Decision owners: project Owner（方向接受与任何后续实施授权分别裁决）
 - Supersedes: none
-- Related: ADR-018（operational observability window，ACCEPTED，继续完全有效）、ADR-023（ACCEPTED）、ADR-025（requestId 权威，ACCEPTED）、ADR-026（client-event 时间边界，ACCEPTED）、ADR-027（ACCEPTED）、ADR-028（OpenTelemetry 技术遥测，REJECTED 2026-11-16；其研究产出是本文 §7 的输入）、`docs/contracts/observability.md`（现行观测契约）、#964（umbrella；其旧正文仍保留历史 OTel 实施方向，需在后续阶段单独协调更新）、#800/#961（各自独立职责，不在本文范围）
+- Related: ADR-018（operational observability window，ACCEPTED，继续完全有效）、ADR-023（ACCEPTED）、ADR-025（requestId 权威，ACCEPTED）、ADR-026（client-event 时间边界，ACCEPTED）、ADR-027（ACCEPTED）、ADR-028（OpenTelemetry 技术遥测，REJECTED 2026-11-16；其研究产出是本文 §7 的输入）、`docs/contracts/observability.md`（现行观测契约）、#964（umbrella；其旧正文仍保留历史 OTel 实施方向，需在后续阶段单独协调更新）、#800/#961（各自独立职责，不在本文范围）、#1000（umbrella：12 项最小扩展与模块边界）、#1001（DESIGN_ONLY 设计提案，产出 [`docs/design/native-observability-contracts.md`](../design/native-observability-contracts.md)；PROPOSED，未接受前不是实施授权）
 
 ---
 
@@ -30,7 +30,7 @@ ADR-028（REJECTED）的研究与实施表明：在当前实验条件与部署�
 
 | 设施 | 权威 | 本方向的角色 |
 | --- | --- | --- |
-| Pino → stdout JSON 日志（REDACT_CONFIG 脱敏） | `docs/contracts/observability.md` | 唯一服务端技术日志出口；任何增量必须经同一出口与脱敏边界 |
+| Pino → stdout JSON 日志（REDACT_CONFIG 脱敏） | `docs/contracts/observability.md` | API 进程的唯一技术日志出口；任何增量必须经同一出口与脱敏边界。（2026-11-17 澄清）standalone email worker（`apps/api/src/workers/emailDeliveryWorker.ts`）直接向 stdout/stderr 写 JSON，是现存的第二出口：不经 Pino 的 redact/serializer。该出口不是本 ADR 要合并的对象——两宿主各自保留 transport——但任何观测增量与隐私要求必须对两个出口等效成立，不得只按 Pino 通道设计。 |
 | requestId / `x-request-id`（server UUIDv4） | ADR-025 | 唯一请求身份权威；任何未来关联信号只能作为其**伴随字段**，不取得身份权威 |
 | `audit_logs` / Receipt / attempt version | observability 契约、EXSEM | 业务事实权威，不可被观测信号替代或修改语义 |
 | `/system/health`、`/system/diagnostics`、`operability.*` | ADR-018/024、active-alerting 契约 | readiness 与运维告警权威；观测增量不得改变其判定源 |
@@ -71,7 +71,7 @@ ADR-028（REJECTED）的研究与实施表明：在当前实验条件与部署�
 1. **侵入性蔓延**：阶段计时与因果标识的穿线可能扩散到大量函数签名。缓解：优先选择进程内 context 载体与既有缝扩展；每个增量单独评审其接触面。
 2. **开销重蹈覆辙**：即使不引入 OTel，无界缓冲/同步序列化同样可能造成可观开销。缓解：§7 硬约束中的预算与上界在实现前即为验收条件。
 3. **观测故障影响业务**：缓冲满、序列化异常、sink 阻塞都可能反压业务。缓解：观测路径必须 fail-open（观测失败丢弃信号并计数，不阻塞、不抛出到业务路径）。
-4. **隐私回退**：新字段可能把参数值、原始 URL 或业务 payload 带入日志。缓解：一律经既有 REDACT_CONFIG/白名单序列化边界，新增字段逐项过隐私评审。ADR-028 战役发现的 **D1 缺陷（500 路径 err.message 携带全列 SQL + 绑定参数值）是现有日志通道的未决隐私缺陷，须独立修复**，不因本 ADR 而延迟。
+4. **隐私回退**：新字段可能把参数值、原始 URL 或业务 payload 带入日志。缓解：一律经既有 REDACT_CONFIG/白名单序列化边界，新增字段逐项过隐私评审。ADR-028 战役发现的 D1 缺陷（500 路径 err.message 携带全列 SQL + 绑定参数值）**已由 #998 修复并随 PR #1014 合入 master（2026-11-17 核对：`apps/api/src/lib/logRedaction.ts` 的 `serializeErrorForLog` 将 message 固定化、stack 清空、code 限封闭集合）**。注意该修复只覆盖 Pino 的 `err` 序列化通道；邮件路径自定义 `error:` 字符串字段与 standalone worker 直接 JSON 出口的隐私缺口由 #1012 修复，不在本 ADR 内重开。
 5. **重复真相源**：同一耗时/计数若同时出现在日志字段、diagnostics 与未来包中，可能漂移。缓解：单一权威写入口，派生视图由权威源投影。
 
 ## 7. Research Questions（Stage B 研究输入；结论不改现状）
@@ -81,7 +81,7 @@ ADR-028（REJECTED）的研究与实施表明：在当前实验条件与部署�
 1. 跨层耗时归因的最小充分粒度是什么？（覆盖矩阵中的 W01/W03/W07/W09 是具备三证的代表性工作流，其中 W07 为**低频管理员操作**；`FULL_RUNTIME_VERIFIED` 仅代表特定运行级三证成立，不意味着生产验收通过。）
 2. 事务/语句因果是否可以完全在既有 `executeInTransaction` + capacityResearch 缝上表达，还是需要驱动层缝？（战役的 `@exam/otel-drizzle-postgresjs` 实现保留了可审查的缝设计，但其成本数据（CPU +3.9%–10.1%，WSL2 探索级）表明任何缝扩展必须重新计价。）
 3. 有界指标聚合的最小槽位词汇是什么？（战役冻结的背景/业务/DB 指标词汇可作为候选起点，但需按本方向重新收敛。）
-4. D1 日志隐私缺陷的修复契约归属与最小修复形态。
+4. D1 日志隐私缺陷的修复契约归属与最小修复形态。（2026-11-17 更新：已由 #998 修复并经 PR #1014 合入 master；邮件路径自定义错误字段的残余缺口归 #1012。）
 5. 进程内缓冲的内存上界取值与淘汰策略（何种上界在 LAN 单实例部署下可证明无风险）。
 
 ## 8. Acceptance Gates（未来验收目标，非已取得结论）
