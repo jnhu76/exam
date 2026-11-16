@@ -260,31 +260,6 @@ export interface LaunchpadConfig {
   setupToken: string;
 }
 
-/**
- * Technical telemetry runtime config (ADR-028, default Off). Resolved from
- * the `telemetry` settings group; consumed by `src/telemetry/runtime.ts`.
- *
- * - `enabled: false` is the deployment default: the telemetry module returns
- *   before any SDK construction — no instrumentations, no export task, no
- *   telemetry network.
- * - `exporter: "none"` is the On-but-no-export acceptance state; `"memory"`
- *   keeps finished spans in a bounded in-process buffer for local
- *   observation. `"otlp"` (W6 opt-in) exports traces+metrics via OTLP/HTTP
- *   to the deployment's collector — the sole remote exporter path.
- * - `sampleRatio` feeds the root sampler (server-created trace roots only —
- *   inbound trace headers never parent a server span).
- */
-export interface TelemetryConfig {
-  enabled: boolean;
-  serviceName: string;
-  sampleRatio: number;
-  exporter: "none" | "memory" | "otlp";
-  /** Memory-exporter witness dump path; empty string = disabled. */
-  memoryDumpFile: string;
-  /** OTLP/HTTP base endpoint; empty unless exporter is `otlp`. */
-  otlpEndpoint: string;
-}
-
 export interface AppRuntimeConfig {
   app: {
     mode: AppMode;
@@ -311,7 +286,6 @@ export interface AppRuntimeConfig {
   emailWorker: EmailWorkerConfig;
   publicWebOrigin: PublicWebOriginConfig;
   launchpad: LaunchpadConfig;
-  telemetry: TelemetryConfig;
 }
 
 /**
@@ -757,76 +731,6 @@ export function loadRuntimeConfig(
       // up` without launchpad configured must start normally.
       setupToken: s.app.LAUNCHPAD_SETUP_TOKEN,
     },
-    telemetry: resolveTelemetryPolicy(s),
-  };
-}
-
-/**
- * Telemetry cross-leaf policy (W6): the `otlp` exporter and its endpoint
- * must be set as a PAIR, and the endpoint must be an absolute credential-
- * free http(s) URL. A missing half, a non-URL, a non-HTTP(S) scheme, or an
- * embedded user:password is operator misconfiguration — without the URL
- * shape guard, a bare hostname degraded to telemetry.init_failed at SDK
- * construction while a parseable non-HTTP URL even reported telemetry
- * active, both silently exporting nowhere; credentials would hand a secret
- * to any diagnostic that echoes the endpoint. Exported as a pure function
- * so the fail-fast oracle can assert it without owning the process's
- * single init decision (see telemetryConfigFailFast.test.ts).
- */
-export function resolveTelemetryPolicy(s: ResolvedSettings): TelemetryConfig {
-  const exporter = s.telemetry.TELEMETRY_EXPORTER;
-  const otlpEndpoint = s.telemetry.TELEMETRY_OTLP_ENDPOINT;
-  if (exporter === "otlp" && !otlpEndpoint) {
-    throw new RuntimeConfigError(
-      "TELEMETRY_EXPORTER=otlp requires TELEMETRY_OTLP_ENDPOINT " +
-        "(the OTLP/HTTP collector base URL, e.g. http://otelcol:4318)",
-    );
-  }
-  if (exporter !== "otlp" && otlpEndpoint) {
-    throw new RuntimeConfigError(
-      `TELEMETRY_OTLP_ENDPOINT is set but TELEMETRY_EXPORTER is "${exporter}" ` +
-        "— clear the endpoint or switch the exporter to otlp",
-    );
-  }
-  if (exporter === "otlp") {
-    let parsed: URL;
-    try {
-      parsed = new URL(otlpEndpoint);
-    } catch {
-      throw new RuntimeConfigError(
-        "TELEMETRY_OTLP_ENDPOINT must be an absolute http(s) URL " +
-          "(e.g. http://otelcol:4318) — the configured value is not parseable",
-      );
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new RuntimeConfigError(
-        "TELEMETRY_OTLP_ENDPOINT must be an absolute http(s) URL — " +
-          `"${parsed.protocol}//" is not an OTLP/HTTP transport`,
-      );
-    }
-    if (parsed.username || parsed.password) {
-      throw new RuntimeConfigError(
-        "TELEMETRY_OTLP_ENDPOINT must not embed credentials — collector " +
-          "authentication is out of scope for this deployment",
-      );
-    }
-    // URL.search and URL.hash are empty even for a bare `?` or `#`.
-    if (parsed.href.includes("?") || parsed.href.includes("#")) {
-      throw new RuntimeConfigError(
-        "TELEMETRY_OTLP_ENDPOINT must not carry a query or fragment — the " +
-          "OTLP signal paths (/v1/traces, /v1/metrics) are appended to the " +
-          "base URL, and a query or fragment would corrupt both request " +
-          "paths while startup still reports telemetry active",
-      );
-    }
-  }
-  return {
-    enabled: s.telemetry.TELEMETRY_ENABLED,
-    serviceName: s.telemetry.TELEMETRY_SERVICE_NAME,
-    sampleRatio: s.telemetry.TELEMETRY_SAMPLE_RATIO,
-    exporter,
-    memoryDumpFile: s.telemetry.TELEMETRY_MEMORY_DUMP_FILE,
-    otlpEndpoint,
   };
 }
 

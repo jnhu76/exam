@@ -19,7 +19,7 @@ import {
 const DEV = false; // non-production context
 
 describe("settings model shape", () => {
-  it("exposes exactly the seven semantic groups", () => {
+  it("exposes exactly the six semantic groups", () => {
     expect(Object.keys(SETTINGS)).toEqual([
       "auth",
       "app",
@@ -27,7 +27,6 @@ describe("settings model shape", () => {
       "redis",
       "email",
       "emailWorker",
-      "telemetry",
     ]);
   });
 
@@ -79,10 +78,6 @@ describe("settings model shape", () => {
     expect(raw("HEARTBEAT_TIMEOUT_MS")).toBe("60000");
     expect(raw("SMTP_REQUIRE_TLS")).toBe("true");
     expect(raw("REDIS_STARTUP_TIMEOUT_MS")).toBe("8000");
-    expect(raw("TELEMETRY_ENABLED")).toBe("false");
-    expect(raw("TELEMETRY_SAMPLE_RATIO")).toBe("1");
-    expect(raw("TELEMETRY_EXPORTER")).toBe("none");
-    expect(raw("TELEMETRY_SERVICE_NAME")).toBe("exam-api");
     // Dependent / delegated leaves have no static default.
     expect(raw("DEADLINE_SCAN_INTERVAL_MS")).toBeNull();
     expect(raw("PUBLIC_WEB_ORIGIN")).toBeNull();
@@ -123,13 +118,6 @@ describe("resolveSettings primitives", () => {
     expect(s.emailWorker.EMAIL_WORKER_LOCK_TIMEOUT_MS).toBe(300000);
     expect(s.emailWorker.EMAIL_WORKER_HEARTBEAT_STALE_MS).toBe(60000);
     expect(s.emailWorker.EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS).toBe(8000);
-    // Technical telemetry defaults to the full Off posture (ADR-028 D1).
-    expect(s.telemetry.TELEMETRY_ENABLED).toBe(false);
-    expect(s.telemetry.TELEMETRY_SERVICE_NAME).toBe("exam-api");
-    expect(s.telemetry.TELEMETRY_SAMPLE_RATIO).toBe(1);
-    expect(s.telemetry.TELEMETRY_EXPORTER).toBe("none");
-    expect(s.telemetry.TELEMETRY_MEMORY_DUMP_FILE).toBe("");
-    expect(s.telemetry.TELEMETRY_OTLP_ENDPOINT).toBe("");
   });
 
   it("treats set-but-empty values as unset (Compose ${KEY:-} forwards)", () => {
@@ -180,49 +168,6 @@ describe("resolveSettings primitives", () => {
     expect(() => resolveSettings({ EMAIL_FAKE_DELAY_MS: "-1" }, DEV)).toThrow(
       SettingsError,
     );
-  });
-
-  it("telemetry sampler ratio is strict within the closed [0,1] interval", () => {
-    expect(
-      resolveSettings({ TELEMETRY_SAMPLE_RATIO: "0" }, DEV).telemetry
-        .TELEMETRY_SAMPLE_RATIO,
-    ).toBe(0);
-    expect(
-      resolveSettings({ TELEMETRY_SAMPLE_RATIO: "0.25" }, DEV).telemetry
-        .TELEMETRY_SAMPLE_RATIO,
-    ).toBe(0.25);
-    expect(() =>
-      resolveSettings({ TELEMETRY_SAMPLE_RATIO: "abc" }, DEV),
-    ).toThrow(/TELEMETRY_SAMPLE_RATIO must be a ratio between 0 and 1/);
-    expect(() =>
-      resolveSettings({ TELEMETRY_SAMPLE_RATIO: "1.5" }, DEV),
-    ).toThrow(SettingsError);
-    expect(() =>
-      resolveSettings({ TELEMETRY_SAMPLE_RATIO: "-0.5" }, DEV),
-    ).toThrow(SettingsError);
-  });
-
-  it("telemetry enum accepts only the defined export targets", () => {
-    expect(
-      resolveSettings({ TELEMETRY_EXPORTER: "memory" }, DEV).telemetry
-        .TELEMETRY_EXPORTER,
-    ).toBe("memory");
-    expect(
-      resolveSettings({ TELEMETRY_EXPORTER: "otlp" }, DEV).telemetry
-        .TELEMETRY_EXPORTER,
-    ).toBe("otlp");
-    expect(() => resolveSettings({ TELEMETRY_EXPORTER: "grpc" }, DEV)).toThrow(
-      /TELEMETRY_EXPORTER must be "none", "memory" or "otlp"/,
-    );
-    // Truthy boolean switch never throws; a typo means Off, not startup death.
-    expect(
-      resolveSettings({ TELEMETRY_ENABLED: "YES" }, DEV).telemetry
-        .TELEMETRY_ENABLED,
-    ).toBe(false);
-    expect(
-      resolveSettings({ TELEMETRY_ENABLED: "1" }, DEV).telemetry
-        .TELEMETRY_ENABLED,
-    ).toBe(true);
   });
 
   it("strict booleans reject anything but true/false", () => {
