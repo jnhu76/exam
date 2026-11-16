@@ -7,22 +7,22 @@
 - 基线：v0.0.15 产品基线（`cb1e614fe087e7ac158deef4a4de7f29268de292`）+ ADR-028 REJECTED（2026-11-16）
 - Decision owners: project Owner（方向接受与任何后续实施授权分别裁决）
 - Supersedes: none
-- Related: ADR-018（operational observability window，ACCEPTED，继续完全有效）、ADR-023（ACCEPTED）、ADR-025（requestId 权威，ACCEPTED）、ADR-026（client-event 时间边界，ACCEPTED）、ADR-027（ACCEPTED）、ADR-028（OpenTelemetry 技术遥测，REJECTED 2026-11-16；其研究产出是本文 §7 的输入）、`docs/contracts/observability.md`（现行观测契约）、#964（umbrella，方向已改为 Native Observability Audit & Simplification）、#800/#961（各自独立职责，不在本文范围）
+- Related: ADR-018（operational observability window，ACCEPTED，继续完全有效）、ADR-023（ACCEPTED）、ADR-025（requestId 权威，ACCEPTED）、ADR-026（client-event 时间边界，ACCEPTED）、ADR-027（ACCEPTED）、ADR-028（OpenTelemetry 技术遥测，REJECTED 2026-11-16；其研究产出是本文 §7 的输入）、`docs/contracts/observability.md`（现行观测契约）、#964（umbrella；其旧正文仍保留历史 OTel 实施方向，需在后续阶段单独协调更新）、#800/#961（各自独立职责，不在本文范围）
 
 ---
 
 ## 1. Motivation
 
-ADR-028（REJECTED）证明了在当前证据与成本形态下引入完整 OpenTelemetry 平台不满足生产启用 Gate：同 SHA 配对实测 CPU 增量在 On/无导出态已达 +3.91%（CI 上界超 5% 预算）、On/全 OTLP 态 +10.14%，且带来整组 experimental 依赖与 opt-in 观测容器栈的部署复杂度。
+ADR-028（REJECTED）的研究与实施表明：在当前实验条件与部署成本形态下，原 OTel 方案没有通过生产启用门槛。同 SHA 配对结果中，H2 On/无导出 CPU 中位增量 ≈ +3.91%（95% CI 跨过 +5% 预算，不能判 PASS），H4 On/全 OTLP ≈ +10.14%（IQR 门槛导致形式化 UNKNOWN，95% CI 下界仍超过 +5%）。这支持重新评估依赖和可选观测容器栈，但不证明任何自研替代实现一定更快。
 
-同时，技术诊断的真实需求仍然存在，且现有设施已覆盖大部分场景：
+同时，技术诊断需求仍然存在。现有设施提供了以下可核实的基础能力，但其**对真实故障场景的覆盖率和诊断充分性尚未系统审计**：
 
 - 请求级问题可以由 requestId 贯穿（error envelope、`x-request-id`、Pino、audit metadata）定位；
 - 业务状态迁移有 audit_logs append-only 权威；
 - 后台循环有 scannerMetrics / `/system/diagnostics` / `operability.*` stdout 告警契约；
 - DB 事务重试有 `transactionRetryLogger`。
 
-尚未被现有设施结构化覆盖的缺口集中在**因果与归因**层：跨层耗时归因（一个慢请求的时间花在哪个边界）、事务/语句因果关系（一次 `sql.begin` 内每条语句的时长与失败归属）、后台执行因果关系（一次 scanner tick 触发的每个下游动作）与有界的指标聚合。这些缺口正是 ADR-028 战役试图用 OTel 解决、但其平台成本不可接受的部分。
+优先审计的**候选缺口**包括因果与归因问题：跨层耗时归因（慢请求耗时分解）、事务/语句因果关系（`sql.begin` 内语句及失败归属）、后台执行因果关系（scanner tick 与下游动作）及有界指标聚合。哪些能力已有替代机制、哪些确实需要增量实现，必须通过源码、诊断案例和成本证据确认；不能预先认定这些均为已证实缺口。
 
 本 ADR 提出的方向：**不引入新平台**，基于 Exam 原有设施做最小增量设计，先审计、先研究、后裁决、最后才实施。
 
@@ -42,10 +42,10 @@ ADR-028（REJECTED）证明了在当前证据与成本形态下引入完整 Open
 
 研究方向（每项单独评审、单独授权，本文不预设任何一项必做）：
 
-1. **Cross-layer latency attribution**：在现有 Pino 请求日志上，以**有界的、进程内的**阶段计时（如 handler/repo/DB/事务边界）补充结构化耗时字段，使一个 requestId 内的耗时分布可读。候选载体是既有日志行（新增字段）而非新信号平台。
+1. **Cross-layer latency attribution**：研究能否复用 Pino 请求日志和既有计时缝，以有界的阶段计时（如 handler/repo/DB/事务边界）补充安全的结构化耗时归因。是否需要上下文传播、独立缓冲或新字段，以及它们的成本，均待审计；不预先决定具体实现。
 2. **Transaction / statement causality**：扩展 `executeInTransaction` / `transactionRetryLogger` 与（若评估通过）`CAPACITY_RESEARCH` 缝，使事务内语句时长、SQLSTATE 分类与重试事件可携带同一个请求或后台工作标识。约束：单一边界计量，不改变 Query 惰性、重试、隔离或锁序语义。
 3. **Background execution causality**：为后台循环 tick 内触发的下游动作补充 tick 级因果标识（workerInstanceId/operationId 既有词汇的延伸），禁止伪造 HTTP requestId（observability 契约既有规则）。
-4. **Bounded metrics aggregation**：研究进程内、固定槽位、有上界的聚合计数器（如 route × outcome × SQLSTATE），经由 `/system/diagnostics` 或结构化 stdout 周期性暴露。默认替代方案是"不加"——只有当 grep stdout 被证明不可维护时才引入。
+4. **Bounded metrics aggregation**：优先复用 scannerMetrics、Diagnostics 与现有日志。只有在真实故障定位、错误率/耗时趋势或窗口级诊断确实存在缺口，且有界聚合的收益超过内存、CPU、隐私及维护成本时，才研究增加固定低基数、可证明容量上界的计数或分布统计；不以能否 `grep stdout` 为唯一门槛。
 
 未来若多个增量共享稳定的观测接口，可将其抽象为独立 workspace 包（**拟名** `@exam/observability`）。该名称与任何具体接口**均未获得最终裁决**；在 Stage D 架构评审（#964）给出结论并获 Owner GO 之前，不创建该包。
 
@@ -63,7 +63,7 @@ ADR-028（REJECTED）证明了在当前证据与成本形态下引入完整 Open
 - 新 OTLP / OpenTelemetry 依赖、外部遥测网络（默认远程观测网络 = 0）。
 - C++ Addon / Sidecar 等原生运行时组件。
 - 大规模代码迁移或对现有日志/审计代码的重写。
-- 任何生产环境的遥测启用（无生产 OTel）。
+- 任何新的生产技术遥测启用（现有 Pino/Audit/Diagnostics 继续按当前契约运行；无生产 OTel）。
 - 修改 ADR-018/023/025/026/027 的既有权威。
 
 ## 6. Risks
@@ -76,9 +76,9 @@ ADR-028（REJECTED）证明了在当前证据与成本形态下引入完整 Open
 
 ## 7. Research Questions（Stage B 研究输入；结论不改现状）
 
-来自 ADR-028 战役的可复用问题（证据归档：tag `archive/pr996-otel-research`，PR #996，closed NOT_MERGED）：
+来自 ADR-028 战役的可复用问题（证据归档：tag `archive/pr996-otel-research`；PR #996 在 2026-11-16 本提案形成时仍为 OPEN，计划后续关闭且不合并，实时状态以 GitHub 为准）：
 
-1. 跨层耗时归因的最小充分粒度是什么？（战役覆盖矩阵显示 W01/W03/W07/W09 等 4 条高频链路 FULL 可验证，可作为归因设计的锚点工作负载。）
+1. 跨层耗时归因的最小充分粒度是什么？（覆盖矩阵中的 W01/W03/W07/W09 是具备三证的代表性工作流，其中 W07 为**低频管理员操作**；`FULL_RUNTIME_VERIFIED` 仅代表特定运行级三证成立，不意味着生产验收通过。）
 2. 事务/语句因果是否可以完全在既有 `executeInTransaction` + capacityResearch 缝上表达，还是需要驱动层缝？（战役的 `@exam/otel-drizzle-postgresjs` 实现保留了可审查的缝设计，但其成本数据（CPU +3.9%–10.1%，WSL2 探索级）表明任何缝扩展必须重新计价。）
 3. 有界指标聚合的最小槽位词汇是什么？（战役冻结的背景/业务/DB 指标词汇可作为候选起点，但需按本方向重新收敛。）
 4. D1 日志隐私缺陷的修复契约归属与最小修复形态。

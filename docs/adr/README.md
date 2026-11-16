@@ -163,7 +163,7 @@ exam-domain truth.
 | [ADR-004](ADR-004-desktop-electron.md) | Optional Desktop/Electron runtime adoption | DEFERRED |
 | [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful infrastructure test isolation/lifecycle | ACCEPTED core; later work partly deferred |
 | [ADR-025](ADR-025-http-request-correlation-identity.md) | HTTP request correlation identity (server-generated UUIDv4 request id) | ACCEPTED, amended (2026-11-08: x-request-id response header, #865) |
-| [ADR-028](ADR-028-opentelemetry-technical-telemetry.md) | OpenTelemetry technical telemetry standard (default Off, bounded opt-in) | REJECTED (2026-11-16: W1–W7 implementation measured over the ≤5% overhead budget, deployment complexity disproportionate; native facilities remain authoritative; research evidence archived at tag `archive/pr996-otel-research`) |
+| [ADR-028](ADR-028-opentelemetry-technical-telemetry.md) | OpenTelemetry technical telemetry standard (default Off, bounded opt-in) | REJECTED (2026-11-16: H4 CPU showed strong over-budget evidence but the formal verdict was UNKNOWN, no configuration passed enablement gates, and deployment complexity was considered disproportionate; native facilities remain authoritative; research evidence archived at tag `archive/pr996-otel-research`) |
 | [ADR-029](ADR-029-exam-native-observability.md) | Exam Native Observability — incremental enhancement of existing facilities (Pino/requestId/audit/diagnostics/retry-logger; research questions for cross-layer latency, transaction/statement and background causality, bounded metrics) | PROPOSED |
 
 ### B. Exam execution & correctness core

@@ -27,11 +27,14 @@ dependency is introduced.
 > describe the binding contract and remain in force. The proposed V1
 > OpenTelemetry technical telemetry standard
 > ([ADR-028](../adr/ADR-028-opentelemetry-technical-telemetry.md)) was
-> **REJECTED** by Owner decision after the #964 W1–W7 implementation measured
-> CPU overhead above the ≤5% enablement budget (H2 On/no-export ≈ +3.91%, H4
-> On/full-OTLP ≈ +10.14% CPU median; WSL2 exploratory evidence) and the full
-> implementation was retired from the product tree (v0.0.15 baseline
-> restored). The implementation and research evidence remain reachable as
+> **REJECTED** by Owner decision after the #964 W1–W7 implementation failed
+> to satisfy the production enablement gate. In WSL2 exploratory measurements,
+> H2 On/no-export CPU median overhead was ≈ +3.91% (inconclusive against the
+> +5% budget), while H4 On/full-OTLP was ≈ +10.14% (formal UNKNOWN due to
+> dispersion; its 95% CI lower bound exceeded +5%). PR #997 restores the
+> v0.0.15 product tree on its candidate branch; this becomes the effective
+> master baseline only upon merge. The implementation and research evidence
+> remain reachable as
 > archive references (tags `archive/otel-master-964` and
 > `archive/pr996-otel-research`). The successor direction — incremental
 > enhancement of the native facilities this contract already owns — is
