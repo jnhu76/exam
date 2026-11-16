@@ -2,15 +2,33 @@
 
 ## Status
 
-- Status: **PROPOSED**（按 #964 W0.3 起草，提交 Owner 评审；**未接受前不构成施工授权，也不改变任何现行契约**。#964 范围内的探针与实现工作按 #964/#800 已有授权进行，本 ADR 接受与否不追认已施工内容。）
-- Date: 2026-11-13（proposed）
+- Status: **REJECTED**（2026-11-16，Owner 裁决；详见下方 Decision Record。原提案正文（§1–§6）作为历史背景原样保留，不再构成任何现行规范或施工授权。）
+- Date: 2026-11-13（proposed）；2026-11-16（rejected）
 - 基线：[W0.1 冻结的 origin/master](https://github.com/jnhu76/exam/commit/2d38f69881d622661e0bbfbaab7874aacda8b01b)（`2d38f69881d622661e0bbfbaab7874aacda8b01b`）
 - Decision owners: project Owner（接受、生产启用分别裁决）
-- Supersedes: none（本 ADR 不整体取代任何 ADR）
-- 对既有权威的**限缩（prospective，仅在本 ADR 被 ACCEPTED 时生效）**：
-  - **ADR-018** 的 Explicit anti-goals 段（"OpenTelemetry collectors, log shipping … Each would require its own ADR"）：本 ADR 即该段要求的"own ADR"。被限缩的部分仅为「当时里程碑与产品调查窗口内不引入 Collector / log shipping」这一时间范围性反目标；ADR-018 的 D2（六不变量）、D3（语义分类）、D4（关联方向与业务细节边界）、D6（基础设施执行在窗口外、归 Host 运维）、D7（逐数据源 ADR）继续完全有效，且是本 ADR 的约束来源。本 ADR 不触碰 ADR-018 已被 ADR-023 supersede 的 backup/restore-readiness/ops-policy 部分。
-  - **#921**（CLOSED，2026-11-12 scope 注记，历史裁决 NO_GO_NOW）：限缩为「#964 授权范围内的应用侧 OTel 插桩、可选 OTLP 导出、独立 Drizzle/Postgres.js 插桩包」不再受 NO_GO 约束；原历史决策文本与裁决记录留档不删改。#921 其余范围（外网 SaaS 遥测、产品内日志库等）维持 NO_GO。
-- Related: ADR-018（窗口契约，D2–D4/D6–D7 继续约束本决策）、ADR-025（server-owned UUIDv4 requestId 权威）、ADR-026（client-event 时间证据边界）、ADR-006/#961（时间权威）、#964（范围授权）、#921（历史 NO_GO 裁决）、#312（OTLP 外部日志导出，superseded by plan 并入 #964 W1/W6/W7）
+- Supersedes: none（本 ADR 不整体取代任何 ADR；本 ADR 被拒绝时，其原拟限缩的既有权威**全部恢复完全效力**）
+- Successor direction: [ADR-029](ADR-029-exam-native-observability.md)（PROPOSED — Exam Native Observability: Incremental Enhancement of Existing Facilities）
+- 原拟对既有权威的限缩（prospective，**仅在本 ADR 被 ACCEPTED 时生效**；本 ADR 已 REJECTED，以下限缩**从未生效**）：
+  - **ADR-018** 的 Explicit anti-goals 段（"OpenTelemetry collectors, log shipping … Each would require its own ADR"）：本 ADR 曾拟作为该段要求的"own ADR"。ADR-018 的 D2（六不变量）、D3（语义分类）、D4（关联方向与业务细节边界）、D6（基础设施执行在窗口外、归 Host 运维）、D7（逐数据源 ADR）**继续完全有效**。本 ADR 不触碰 ADR-018 已被 ADR-023 supersede 的 backup/restore-readiness/ops-policy 部分。
+  - **#921**（CLOSED，2026-11-12 scope 注记，历史裁决 NO_GO_NOW）：曾拟限缩为「#964 授权范围内的应用侧 OTel 插桩、可选 OTLP 导出、独立 Drizzle/Postgres.js 插桩包」不受 NO_GO 约束；原历史决策文本与裁决记录留档不删改。该限缩未生效。
+- Related: ADR-018（窗口契约，D2–D4/D6–D7 继续约束本决策域）、ADR-025（server-owned UUIDv4 requestId 权威）、ADR-026（client-event 时间证据边界）、ADR-006/#961（时间权威）、ADR-029（后续原生观测方向）、#964（范围授权）、#921（历史 NO_GO 裁决）、#312（OTLP 外部日志导出，superseded by plan 并入 #964 W1/W6/W7）
+
+## Decision Record（2026-11-16 REJECTED）
+
+Owner 裁决：**不采纳**本 ADR 所提议的「以完整 OpenTelemetry 作为 Exam V1 技术遥测标准」的整体技术选型，并已将产品实现回退到 v0.0.15 基线。
+
+裁决依据（as-built 事实）：
+
+1. **已研究完整方案并实施**：#964 W1–W7 完成了本提案的全部实施链（SDK 装配、Fastify/DB 插桩、独立 `@exam/otel-drizzle-postgresjs` 包、opt-in observability compose profile、部署 payload 检查），并以 16 工作流开销审计与覆盖战役完成 Benchmark（PR #996 研究证据，归档于 tag `archive/pr996-otel-research`；实现归档于 tag `archive/otel-master-964`）。
+2. **运行开销超预算**：同 SHA 配对实测（WSL2 探索级、C=1 闭环负载）CPU time/op 中位增量 H2 On/无导出 ≈ +3.91%、H3 On+dump ≈ +4.78%、H4 On/全 OTLP ≈ +10.14%（95% CI 下界 +8.37% 已超 ≤5% 预算）；方向与历史 PR #980 记录（+10.4%/+9.1%）一致。三项预算 Gate（CPU ≤5% / p99 ≤5% / 证据充分）无一可达 PASS，`PRODUCTION_ENABLEMENT = NO_GO`。
+3. **额外依赖与部署复杂度**：整组 experimental 0.301.x 代次依赖、独立插桩包、opt-in 观测容器栈（otelcol/prometheus/tempo/loki/grafana）与回滚面，相对其当前证据下的诊断收益不成比例。
+4. **未满足生产启用 Gate**：本 ADR 自身 D5/表三定义的三态验收未通过；研究局限（WSL2、C=1、闭环工作负载、有效样本量、IQR 不稳定、freeze.json 程序性缺口）如实记录，不外推为生产容量结论。
+5. **Owner 改为优先发展 Exam 原有机制**：Pino/stdout 日志、requestId/x-request-id（ADR-025）、Audit/Receipt、Diagnostics/operability、`transactionRetryLogger`、heartbeat/deadline scanner 诊断继续作为技术观测的现行权威；后续最小增量方向见 ADR-029（PROPOSED）。
+6. **研究成果继续作为后续架构输入**：本 ADR 的基线观察（§1）、权威归属表（表一）、隐私边界（D4）与 PR #996 的覆盖矩阵/成本观察继续作为 ADR-029 及后续设计研究的证据输入。
+
+**裁决边界**：本 REJECTED 拒绝的是「在当前证据与成本形态下引入完整 OTel 平台」这一整体技术选型；**不是**对 OTel 概念模型或其任何技术机制的否定，也不构成「OTel 全部不具备技术价值」的判定。trace/span 因果模型、有界指标聚合等机制的价值评估留待 ADR-029 的研究问题处置。
+
+原提案正文（按 #964 W0.3 起草，提交 Owner 评审时的状态）保留如下，作为历史背景；其「未接受前不构成施工授权」条款在 REJECTED 后转为永久。
 
 ---
 

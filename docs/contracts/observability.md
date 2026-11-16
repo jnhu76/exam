@@ -23,29 +23,21 @@ dependency is introduced.
   captures it). Operators retain logs per their deployment policy.
 - No PII or answer content in logs (see Redaction policy).
 
-> **V1 boundary note (PROPOSED ADR-028, 2026-11-13).** The non-goals above
-> describe the binding Phase 2 contract. The W0 baseline has no production
-> OpenTelemetry SDK, Collector, or log shipping.
-> [ADR-028](../adr/ADR-028-opentelemetry-technical-telemetry.md) proposes
-> bounded technical telemetry for #964. ADR acceptance sets the architecture
-> scope. Production opt-in requires W1–W7 acceptance evidence and separate
-> Owner approval.
-
-## V1 transition (PROPOSED — not in force)
-
-The V1 column describes proposed behavior. ADR-028 §3–§4 lists the
-acceptance criteria and outstanding runtime validation.
-
-| Aspect | Phase 2 (current, binding) | V1 (planned, gated by ADR-028 acceptance + Owner enablement) |
-| --- | --- | --- |
-| Traces / metrics | None (stdout logs + `/system/*` projections only) | OTel SDK behind a default-Off switch; On requires per-deployment opt-in |
-| HTTP correlation id | Server UUIDv4 `request.id` + `x-request-id` (ADR-025) — authoritative, unchanged | Same id remains authoritative. Trace and span IDs provide technical correlation. Untrusted inbound trace headers do not supply the server parent context. |
-| Logs | Pino → stdout, single path | Pino remains the only server logging API; when remote ingestion is enabled, exactly ONE remote path per deployment mode (stdout collection or OTLP Logs); default stdout contract stays available |
-| Remote log ingestion | None | Not yet supported; selection and single-path proof are W1/W6 acceptance items |
-| Readiness / alerts | `probeApplicationReadiness` + `operability.*` stdout events | Unchanged; telemetry (collector/exporter) failure must never alter readiness, transactions, retries, or shutdown semantics |
-| DB observability | `transactionRetryLogger` + `CAPACITY_RESEARCH` research wrapper | Independent workspace plugin (W2) behind the same Off default; retry semantics unchanged |
-| Enablement | — | ADR-028 acceptance and #964 W1–W7 review, including W7.2 three-state acceptance (Off / On-no-export / On-full-export, CPU and p99 overhead budgets ≤5% each, unknown until measured), precede the separate Owner production-enable decision. |
-| Rollback | — | Configuration-level return to Off; no business-schema change; audit/receipt/client-event behavior untouched |
+> **V1 boundary note (ADR-028 REJECTED 2026-11-16).** The non-goals above
+> describe the binding contract and remain in force. The proposed V1
+> OpenTelemetry technical telemetry standard
+> ([ADR-028](../adr/ADR-028-opentelemetry-technical-telemetry.md)) was
+> **REJECTED** by Owner decision after the #964 W1–W7 implementation measured
+> CPU overhead above the ≤5% enablement budget (H2 On/no-export ≈ +3.91%, H4
+> On/full-OTLP ≈ +10.14% CPU median; WSL2 exploratory evidence) and the full
+> implementation was retired from the product tree (v0.0.15 baseline
+> restored). The implementation and research evidence remain reachable as
+> archive references (tags `archive/otel-master-964` and
+> `archive/pr996-otel-research`). The successor direction — incremental
+> enhancement of the native facilities this contract already owns — is
+> [ADR-029](../adr/ADR-029-exam-native-observability.md) (PROPOSED; not
+> implementation authority until accepted). The facilities below are the
+> current, binding observability contract.
 
 ## Request trace fields
 
@@ -333,5 +325,5 @@ Diagnostics snapshot (background + redis):
 | Redis diagnostics | Done (`redisStatus` in diagnostics, Phase C) | — | — |
 | Pino redaction (creds/tokens/cookies/auth/standardAnswer) | Done | — | — |
 | No answer-content / full-body logging | Policy (manual discipline) | Add a lint/test guard if abuse appears | DEFER |
-| Distributed tracing (OTel) | Not present | Out of Phase 2 scope (PROPOSED ADR-028 would gate V1 adoption behind default-Off + Owner enablement) | PHASE 3+ |
+| Distributed tracing (OTel) | Not present | Out of scope: ADR-028 REJECTED (2026-11-16); future direction is native-facility enhancement per PROPOSED ADR-029 | Revisit only via an accepted ADR |
 | Centralized metrics (Prometheus) | Not present | Out of Phase 2 scope | PHASE 3+ |
