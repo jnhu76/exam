@@ -163,7 +163,7 @@ required merely to identify an HTTP request.
   retryable SQLSTATEs (40001/40P01) — there is no always-on per-request line.
   Worst-case raw line is 333 bytes (pino envelope 125 B + correlation 208 B),
   pinned at <= 512 bytes by the cross-tenant interleaving test.
-- **Candidate submit outcome (#1007 / E06, commit-authoritative).** The
+- **Candidate submit outcome (#1007, commit-authoritative).** The
   candidate submit + grade orchestrator emits ONE `attempt.submit.completed`
   info line per successfully committed submit execution, with a closed
   five-value `outcome` classifying the path THIS transaction took (not the
@@ -432,7 +432,7 @@ Diagnostics snapshot (background + redis):
 | Area | Current status | Gap | Priority |
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
-| Candidate submit outcome (#1007 / E06) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (known blindspot; acceptance pending owner review) | — |
+| Candidate submit outcome (#1007) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (known blindspot; acceptance pending owner review) | — |
 | DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |

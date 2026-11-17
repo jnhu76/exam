@@ -26,8 +26,8 @@ import {
 import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 
 /**
- * Closed five-value classification of a COMMITTED submit execution (#1007 /
- * E06, commit-authoritative). Carried as the transaction callback's return
+ * Closed five-value classification of a COMMITTED submit execution (#1007,
+ * commit-authoritative). Carried as the transaction callback's return
  * value so every failed/retried attempt's classification is discarded with
  * its transaction — never stashed in an outer mutable variable.
  *
@@ -56,7 +56,7 @@ export interface SubmitAndGradeResult {
 
 /**
  * Owner-local typed emission boundary for `attempt.submit.completed`
- * (#1007 / E06; #1001 方案 A — no central observability module). This is the
+ * (#1007; #1001 方案 A — no central observability module). This is the
  * ONLY place allowed to assemble the line: closed event/outcome vocabulary,
  * field whitelist, identity source (the request-scoped Pino logger, whose
  * `reqId` IS `request.id` — ADR-025 — so no duplicate requestId field) and
@@ -344,7 +344,7 @@ export async function submitAndGradeAttempt(
   const alreadyGraded =
     outcome === "replay_no_change" || outcome === "deadline_frozen";
 
-  // #1007 / E06: the single emit point, BEFORE the out-of-tx response
+  // #1007: the single emit point, BEFORE the out-of-tx response
   // re-read below, so a later re-read/parse/serialization failure cannot
   // lose or rewrite the committed outcome. The HTTP handle doubles as the
   // identity source: the route passes it, non-HTTP callers (demo seed

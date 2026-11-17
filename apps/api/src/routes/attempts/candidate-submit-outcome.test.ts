@@ -49,13 +49,13 @@ import {
 } from "./__tests__/attempts.testHelpers.js";
 
 /**
- * #1007 / E06 — commit-authoritative submit outcome
+ * #1007 — commit-authoritative submit outcome
  * (`attempt.submit.completed`, five-value classification).
  *
  * Every semantic test runs against REAL PostgreSQL through the REAL
  * `/attempts/:attemptId/submit` route, and every log assertion reads the real
- * Pino serialization output captured at the Fastify logger's stream (the #1020
- * W03 pattern): `logger:false` app builds can prove business behavior but not
+ * Pino serialization output captured at the Fastify logger's stream (the
+ * #1020 pattern): `logger:false` app builds can prove business behavior but not
  * log semantics, so they are not used here.
  *
  * Commit-authoritative means the line may exist only after the winning
@@ -81,7 +81,7 @@ type LogLine = Record<string, unknown>;
 const COMPLETED_EVENT = "attempt.submit.completed";
 const RETRY_MSG = "transaction retry";
 
-describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", () => {
+describe("candidate submit outcome — attempt.submit.completed (#1007)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let candidateProfileId: string;
   let courseId: string;
@@ -613,7 +613,7 @@ describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", 
     );
     expect(trace).toBeDefined();
 
-    // Repo-wide raw line budget (crossTenant 512B precedent; the E06 256B
+    // Repo-wide raw line budget (crossTenant 512B precedent; the #1007 256B
     // target is measured and reported in the perf evidence, not asserted
     // here — envelope keys like hostname legitimately vary).
     for (const raw of rawCompletedLines()) {
@@ -855,7 +855,7 @@ describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", 
     restoreFailedTransactions();
 
     // Non-retryable unique violation: same 409 boundary, zero warns (the
-    // W03 join table already owns this shape; here it pins zero completed).
+    // #1020 join table already owns this shape; here it pins zero completed).
     logChunks.length = 0;
     failTransactions(1, "23505");
     const unique = await submit(attemptId);
@@ -1006,7 +1006,7 @@ describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", 
     // reached, no transaction opened) — nothing may be reported as
     // committed.
     const outsider = await createIsolatedAttemptOrg(ctx, {
-      slugPrefix: "w05-outcome-out-",
+      slugPrefix: "submit-outcome-out-",
       label: "OutcomeOutsider",
     });
     const res = await ctx.app.inject({
@@ -1021,11 +1021,11 @@ describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", 
 
   it("two organizations: each concurrent submit's completed line joins its own request and attempt — no cross-pollution", async () => {
     const orgA = await createIsolatedAttemptOrg(ctx, {
-      slugPrefix: "w05-outcome-a-",
+      slugPrefix: "submit-outcome-a-",
       label: "OutcomeA",
     });
     const orgB = await createIsolatedAttemptOrg(ctx, {
-      slugPrefix: "w05-outcome-b-",
+      slugPrefix: "submit-outcome-b-",
       label: "OutcomeB",
     });
 
@@ -1135,7 +1135,7 @@ function throwingSink(): { info: (obj: object, msg?: string) => void } {
   };
 }
 
-describe("submit outcome emitter — synchronous failure isolation (#1007 / E06)", () => {
+describe("submit outcome emitter — synchronous failure isolation (#1007)", () => {
   it("a synchronous sink throw is swallowed: no propagation, no recursion", async () => {
     const { emitSubmitCompleted } =
       await import("../../orchestrators/submitAndGradeAttempt.js");
