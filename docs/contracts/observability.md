@@ -200,6 +200,85 @@ required merely to identify an HTTP request.
   deployment and lifecycle concerns require a separate architecture decision.
 
 
+## Admin command outcome events (#1008 / E07 / W07)
+
+The two admin attempt commands `force_submit` and `time_grant` emit
+commit-authoritative technical outcome lines through the route-local typed
+emission boundary `apps/api/src/routes/adminCommandTelemetry.ts` (owner-local
+per the #1001 A decision; no central event bus, no new package). Receipts and
+audit rows remain the business authority; these lines never reconstruct a
+business fact.
+
+**`admin.command.completed`** — one INFO line per request whose FULL
+race-recovery wrapper (`forceSubmitWithOperationRaceRecovery` /
+`grantWithOperationRaceRecovery`) resolved successfully, emitted in the route
+AFTER that await and BEFORE the response schema parse. That placement covers
+all four success sources with one code path — primary committed, auto-retry
+committed, exact-23505 recovery, and the force-submit pre-read replay of an
+already-committed receipt (which opens no transaction) — and guarantees a
+response serialization/schema failure cannot rewrite or drop the committed
+outcome. The classification is taken from the wrapper's own verified return
+value (wire `disposition` / engine outcome), never from the HTTP status, the
+receipt history's stored outcome, or a transaction-internal candidate. Fields:
+`command`, `outcome`, `disposition`, `attemptId`, `operationId`, plus the Pino
+`reqId` binding (= `request.id`, ADR-025 — no duplicate requestId field) and
+the request child-logger's inherited caller bindings
+(`actorId`/`actorRole`/`organizationId`, the authenticated caller's own
+server-verified identity; never the denied target's data).
+
+| command / authoritative return | outcome (top level) | disposition |
+| --- | --- | --- |
+| force_submit / disposition `applied` | `applied` | `applied` |
+| force_submit / disposition `no_change` (first execution on a terminal row; may still create the durable receipt per the existing contract) | `replay_no_change` | `no_change` |
+| force_submit / disposition `idempotent_replay` (pre-read replay or 23505 recovery) | `replay_no_change` | `idempotent_replay` |
+| time_grant / outcome `granted` | `applied` | `granted` |
+| time_grant / outcome `terminal` (reconciliation terminalization; no ledger write) | `replay_no_change` | `terminal` |
+| time_grant / outcome `idempotent_replay` | `replay_no_change` | `idempotent_replay` |
+
+The mapping is an exhaustive switch over the real unions — a new enum value
+fails compilation instead of defaulting to `applied`. As-built note: the
+design table's `time_grant / no_change` row is unreachable; the engine union
+is `granted | terminal | idempotent_replay` and `terminal` is the actual third
+value. Replays write no receipt/audit/mutation; a first `no_change` keeps its
+existing right to create a durable receipt.
+
+**`admin.command.denied`** — at most one INFO line per request, emitted by a
+route-scoped `onResponse` hook (the command is a registration-time constant,
+never inferred from the URL). Only 403/404/409 are mapped — the exits that
+prove this request did NOT commit a business fact:
+
+| status | outcome | exit form covered |
+| --- | --- | --- |
+| 403 | `forbidden` | scoped-capability preset / scope denials (preHandler `reply.send`, handler unreachable) |
+| 404 | `not_found` | scoped-capability resource_not_found (anti-enumeration: one uniform value; a cross-org target is logged identically to a nonexistent one) |
+| 409 | `conflict` | command adjudication throws (invalid state, idempotency conflict) and final error mapping (constraint/serialization conflicts) after the full recovery refused |
+
+400 (global validation boundary — documented ownership), 401 (auth owner),
+500/503 (safe error channels) emit NO admin.command line here. The hook cannot
+misrecord a committed outcome: after the wrapper resolves, the remaining
+failure modes are response-schema parse (400) and serialization (500), both
+outside the mapped set, and `completed` is only emitted on the success path —
+the two events are mutually exclusive. Denial fields: `command`, `outcome`,
+plus `reqId` and the inherited caller bindings only. NO target attemptId,
+operationId, organizationId, reason, permission relation, or error details.
+
+Measured raw line sizes (real Pino JSON, including envelope + inherited
+bindings): completed 412 B (event payload 183 B), denied 283 B (payload 51 B);
+both pinned at <= 512 B by test. Frequency: one completed line per successful
+command request and at most one denied line per covered denial — bounded by
+admin command traffic, not an always-on per-request line. Failure isolation:
+the emitter swallows a synchronous logger failure (same fail-open contract as
+the transaction retry logger); an emit failure never changes a committed
+result or the HTTP response. Accepted blindspot: a process crash between
+COMMIT and emit loses that line permanently — no persistence, no outbox, no
+end-to-end exactly-once claim.
+
+> Contract delta note (#1008): the `disposition` dimension and the
+> time_grant `terminal` mapping are the minimal contract addition proposed by
+> this work; the #1015 owner decision adopted the owner-local typed emission
+> boundary (A=ADOPTED) but did NOT pre-approve these new field values. They
+> ride with #1008 review.
+
 ## State transition log fields
 
 State transitions (exam/attempt/enrollment) already emit **audit** rows. The
@@ -360,6 +439,7 @@ Diagnostics snapshot (background + redis):
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
 | DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
+| Admin command outcome events (#1008) | Done for force_submit / time_grant (completed + denied, route-local boundary) | `disposition` dimension + time_grant `terminal` mapping are this PR's contract proposal (not pre-approved by #1015); other admin routes stay out of scope | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
 | State transition audit rows | Done (action/target/metadata/createdAt) | Standardize `metadata.stateBefore/stateAfter/source` | SHOULD FIX (incremental) |
