@@ -190,6 +190,19 @@ owner：`plugins/deadlineScanner.ts` / `plugins/heartbeat.ts`。as-built：汇�
 字段：`scanner ∈ {heartbeat, deadline}`、`tickId`（per-tick UUID，one-cycle，不持久化、不跨 tick 复用）、计数（非负整数；unknown 显式）。tickId 与 operationId、workerInstanceId 不互相冒充（tickId 只标识一个扫描周期）。
 sink：Pino；频率：tick 间隔由 runtime config 决定（默认 30000ms，`config/settings.ts:702`；deadline 默认继承 heartbeat，`:704-705`），仅非空结果发射（空 tick = 0 行；目标：远低于每 tick 一行）；大小：≤ 512B；Gate：#1009。
 
+> Implementation status（#1009，2026-11-18）：deadline scanner 侧已实现于
+> `apps/api/src/plugins/deadlineScanner.ts`——`scanner.tick.completed`，outcome ∈
+> {no_op, acted, partial_failure}，非空 tick 恰一行，throw 路径无 settlement 行；
+> 计数字段 as-built 为每行统一携带 {submittedCount, failedCount, discoveredCount,
+> noOpCount}（本节上方示例的字段集是提案期形态，as-built 用 `noOpCount` 且四计数
+> 全带，无 `actedCount`）；逐候选 error 行携带同 tick 的 `tickId`。实测行大小：
+> no_op/acted 254B、partial_failure 264B（≤512B 目标满足；高于 220–258B 预实施
+> 估算约 +15%，原因是统一四计数字段集）。`unknown` 计数形态本范围不可达，未发射。
+> heartbeat 同形汇总门未实现（as-built 不变，独立范围）。本注记仅记录实现状态，
+> 不改变本文件 PROPOSED 头部；正文中的 as-built 行号引用（`deadlineScanner.ts:442-455`）
+> 描述的是提案时的实现状态。现行契约见 `docs/contracts/observability.md`
+> "Deadline scanner tick settlement (#1009)" 小节。
+
 **E09 / #1010 — email 循环活性**
 owner：两宿主循环。as-built：空轮询无 stdout 行，但 **heartbeat 每 poll 均写**（`emailDeliveryWorker.ts:276-283`；in-process 同构）——`lastSuccessAt`/`lastPollAt` 已是持久化活性信号，诊断投影（S16）已消费。
 提案：**HOLD，不新增 always-on 行**。默认答案是复用 heartbeat 持久化 + diagnostics 投影；poll 默认 5000ms（`config/settings.ts:783`）下无条件每轮一行 ≈ 17,280 行/天/实例，不默认启用（#1010 已明确）。候选（HOLD 待 #1010 决策）：进程内状态转移行 `email.worker.transition`（idle↔active、error 进入/清除，有界去重状态，重启重置——与 `operabilityMonitor.ts:234-252` 的转移去重同型）。
@@ -389,7 +402,7 @@ Scanner tick（E08，`no_op`：发现候选但零业务动作。空 tick 不出�
 | --- | --- | --- | --- |
 | 1 | 模块方案 | 已冻结立场 | **A = 采用**（owner-local typed adapter；每个 bounded owner 恰好一个 local typed emission boundary，负责 event vocabulary、closed fields、safe correlation、emission policy、size/rate policy；A ≠ 业务代码散落 `log.*`）；**B = HOLD**（重评触发：≥2 independent owners need the same behavior (not merely the same names) AND 该行为已出现在 ≥3 implementation sites 且带重复 correctness/test burden，§4.3）；**C = NO_EXTRACT**（当前无共享稳定 workspace API 证据） |
 | 2 | E01 响应形状与发射预算 | 已冻结立场 | `/api/ready` = sole deployment readiness authority；health 200+degraded、nullable contracts **不预批**（contracts 变更归 #1002）；`db.auth_lookup.failed` / `db.probe.failed` 若未来启用也须过 volume gate；DB down 时不得制造 uncontrolled per-request log storm（§2.3 E01） |
-| 3 | E02 字段语义方向 | 已冻结立场（推荐） | 推荐 `oldestDuePendingAgeSeconds`（显式 due-only + seconds）取代模糊的 `oldestPendingAge`；仍属 #1003 Owner contract decision，#1015 只记录推荐、不实施 |
+| 3 | E02 字段语义方向 | 已决（#1003 已实施 OPT-A） | additive 新增 `oldestDuePendingAgeSeconds` 为权威字段（显式 due-only 口径 + 秒 floor + null ≠ 空积压）；旧名 `oldestPendingAge` deprecated，兼容期内由同一次 `findDuePending` 投影输出恒等值；退役条件 = 部署文档迁移完成 + 一个 minor 周期双字段并存 + 普查无旧名消费者后一次性删除。原"推荐"立场随之关闭 |
 | 4 | E04 洪泛预算形态 | 已冻结立场 | **counter-only = current default**（固定枚举 missing_cookie / invalid_token / epoch_mismatch / inactive_user / authority_denied，进程内固定 size counter，默认不逐请求发射 `auth.denied`）；**transition row = HOLD until E-2 + explicit rate-bound design**（bounded state cardinality ≠ bounded log emission rate，未来任何 transition row 必须满足可证明的 max emitted rows / time interval，见 §2.3 E04） |
 | 5 | E05 correlation API 形态 | 已冻结立场（推荐） | 默认 explicit propagation，不采用 AsyncLocalStorage；不推荐第四个裸 positional parameter 作为首选 API；建议 #1006 优先评估 `executeInTransaction(db, callback, { isolationLevel, correlation?: { requestId?; organizationId?; attemptId?; operationId? } })` 形态；organizationId 只能来自 trusted server-side context；requestId 仅限 HTTP，后台工作不得伪造 requestId；是否加入 organizationId 由 #1006 最终设计决定；不得引入全局 mutable identity |
 | 6 | E05 若签名扩散不可接受，是否重议 ALS | 已冻结立场 | 默认否（§4.4） |

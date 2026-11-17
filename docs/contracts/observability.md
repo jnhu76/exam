@@ -454,11 +454,39 @@ Phase 2 (in-process `setInterval`). Their diagnostics contract:
 | organizationId | ctx of the scanned attempt | tenant scoping |
 | attemptId | the scanned row | for incident correlation |
 
+### Deadline scanner tick settlement (#1009)
+
+A settled NON-EMPTY deadline scanner tick emits exactly one structured
+settlement line (`deadlineScanner.ts` tick body). It replaces the former
+count-gated summary — which fired only on `submittedCount > 0 ||
+failedCount > 0` — so acted/partial ticks are a 1:1 line-for-line replacement
+and the net-new line type is the `no_op` settlement (non-empty ticks whose
+candidates all resolve no-op under lock; previously these ticks were
+indistinguishable from empty ticks):
+
+| Field | Value | Notes |
+|---|---|---|
+| event | `scanner.tick.completed` | |
+| scanner | `deadline` | the heartbeat scanner's same-shape summary gate is unchanged — it does not emit this event |
+| tickId | one `randomUUID()` per fired tick | the identity of one scan cycle (one interval firing); also carried by the tick's per-candidate error lines (`deadlineScanner.ts:422-432`) as the join key to the settlement line. A background identity, never an HTTP requestId; not persisted, not reused across ticks; skipped (overlapped) ticks mint none |
+| outcome | `no_op` / `acted` / `partial_failure` | `no_op`: candidates discovered, every under-lock recheck resolved no-op; `acted`: at least one submission and no candidate failure; `partial_failure`: at least one candidate failure. A thrown tick keeps the existing tick-level error line + `consecutiveThrowTicks` and never emits a fabricated settlement line |
+| submittedCount, failedCount, discoveredCount, noOpCount | non-negative integers | `discoveredCount` is the discovery-set size (`listDeadlineCandidates` rows iterated); `noOpCount` counts candidates the under-lock canonical recheck rejected. All counts are known in this implementation — the explicit-`unknown` count form is not reachable and is not emitted |
+
+Emission condition: non-empty ticks only (`submittedCount + failedCount +
+discoveredCount > 0`). An empty tick (zero discovered candidates) emits zero
+lines — the accepted empty-tick blindspot is intentionally unchanged; there is
+no `empty` outcome. Serialized size: ≤ 512B budget; measured 254B (`no_op`),
+254B (`acted`), 264B (`partial_failure`) per complete pino line (utf8,
+production logger shape, trailing newline excluded), against 157B for the
+former summary line — the per-tick byte delta on previously-emitted ticks is
++97B (acted) / +107B (partial_failure).
+
 > Implementation status: scanIntervalMs, lastScanAt, disruptedCount,
 > failedCount, incidentReconciliationFailedCount and consecutiveFailedTicks are
 > surfaced via `/system/diagnostics` from the `heartbeatMetrics` /
 > `deadlineScannerMetrics` objects. Failed auto-submits are additionally logged
-> via `logger.error` (deadlineScanner.ts:192). The heartbeat incident
+> via `logger.error` (deadlineScanner.ts:422-432), carrying the same `tickId`
+> as their tick's settlement line (#1009). The heartbeat incident
 > reconciliation counters (`incidentCreatedCount` / `incidentConflictCount`)
 > are surfaced the same read-only way through the existing diagnostics
 > response (#1004) — they are host-level, process-local counters, never a

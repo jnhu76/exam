@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
+import { randomUUID } from "node:crypto";
 import type { Exam, ExamAttempt, RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createExamRepo } from "@exam/db/repository/examRepo";
@@ -53,6 +54,19 @@ export interface DeadlineCandidate {
 export interface ScanResult {
   submittedCount: number;
   failedCount: number;
+  /**
+   * #1009 tick-local settlement inputs, NOT new persistent counters —
+   * `deadlineScannerMetrics` stays the only counter authority.
+   *
+   * `discoveredCount` is the size of the DERIVED discovery set
+   * (`listDeadlineCandidates` rows this scan iterated). `noOpCount` counts
+   * candidates whose `autoSubmitAndGrade` resolved `false` under lock (the
+   * canonical recheck rejected them — extended/reconciled between discovery
+   * and lock). Every iterated candidate lands in exactly one of the three
+   * buckets, so submitted + failed + noOp <= discoveredCount.
+   */
+  discoveredCount: number;
+  noOpCount: number;
 }
 
 /**
@@ -110,7 +124,7 @@ export const deadlineScannerMetrics = {
  * the canonical `isAttemptDeadlineExpired` seam under `Attempt FOR UPDATE` +
  * `Exam FOR UPDATE`. A `false` return from `onCandidate` (candidate was not
  * actually expired under lock — e.g. extended between discovery and lock) is
- * NOT counted as a submission.
+ * NOT counted as a submission; it is recorded as `noOpCount` (#1009).
  *
  * `now` is the discovery tick sample that selected the candidates; the
  * per-attempt processing instant is owned by the `onCandidate` callback
@@ -132,12 +146,15 @@ export async function scanDeadlineCandidates(
 ): Promise<ScanResult> {
   let submittedCount = 0;
   let failedCount = 0;
+  let noOpCount = 0;
 
   for (const candidate of candidates) {
     try {
       const result = await onCandidate(candidate.id);
       if (result !== false) {
         submittedCount++;
+      } else {
+        noOpCount++;
       }
     } catch (err) {
       failedCount++;
@@ -145,7 +162,12 @@ export async function scanDeadlineCandidates(
     }
   }
 
-  return { submittedCount, failedCount };
+  return {
+    submittedCount,
+    failedCount,
+    discoveredCount: candidates.length,
+    noOpCount,
+  };
 }
 
 // System actor context from the shared @exam/authz factory (role=System,
@@ -346,9 +368,18 @@ export async function autoSubmitAndGrade(
   return true;
 }
 
+/**
+ * @param tickId #1009: the firing tick's own identity (one `randomUUID()` per
+ * tick, owned by the plugin tick body — never an HTTP requestId). Propagated
+ * into the per-candidate error lines below as the join key to the tick's
+ * `scanner.tick.completed` settlement line. Optional so direct callers
+ * (regression suites) can invoke the scan without minting a tick identity;
+ * the serialized field is simply absent then.
+ */
 export async function scanDatabaseForExpiredAttempts(
   fastify: FastifyInstance,
   nowFn: () => Date = () => fastify.now(),
+  tickId?: string,
 ): Promise<ScanResult> {
   // Whole-cycle discovery tick: one sample up front selects the candidate
   // set (listDeadlineCandidates). Per-candidate processing re-samples
@@ -364,6 +395,8 @@ export async function scanDatabaseForExpiredAttempts(
 
   let submittedCount = 0;
   let failedCount = 0;
+  let discoveredCount = 0;
+  let noOpCount = 0;
 
   for (const organization of organizations) {
     const ctx = createSystemContext(organization.id);
@@ -392,6 +425,7 @@ export async function scanDatabaseForExpiredAttempts(
               err,
               attemptId,
               organizationId: organization.id,
+              ...(tickId === undefined ? {} : { tickId }),
             },
             "Failed to auto-submit expired attempt",
           );
@@ -401,9 +435,11 @@ export async function scanDatabaseForExpiredAttempts(
 
     submittedCount += result.submittedCount;
     failedCount += result.failedCount;
+    discoveredCount += result.discoveredCount;
+    noOpCount += result.noOpCount;
   }
 
-  return { submittedCount, failedCount };
+  return { submittedCount, failedCount, discoveredCount, noOpCount };
 }
 
 const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
@@ -422,6 +458,11 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
     // existing .finally() below — the one point every tick passes through —
     // maintains the run-length counter without a second write point.
     let threw = false;
+    // PROTOCOL (#1009): one randomUUID per FIRED tick — the join key between
+    // this tick's per-candidate error lines and its settlement line. A
+    // background identity, never an HTTP requestId; skipped ticks (the
+    // early return above) mint none.
+    const tickId = randomUUID();
     activeScan = (async () => {
       // #547 stall facts: in-flight window; settle clears activeSince and
       // stamps lastSettledAt in .finally (success or error alike).
@@ -429,7 +470,11 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
       deadlineScannerMetrics.lastStartedAt = startedAt;
       deadlineScannerMetrics.activeSince = startedAt;
       try {
-        const result = await scanDatabaseForExpiredAttempts(fastify);
+        const result = await scanDatabaseForExpiredAttempts(
+          fastify,
+          undefined,
+          tickId,
+        );
         deadlineScannerMetrics.lastScanAt = fastify.now();
         deadlineScannerMetrics.autoSubmitCount += result.submittedCount;
         deadlineScannerMetrics.failedCount += result.failedCount;
@@ -439,14 +484,32 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
           result.failedCount > 0
             ? deadlineScannerMetrics.consecutiveFailedTicks + 1
             : 0;
-        if (result.submittedCount > 0 || result.failedCount > 0) {
-          fastify.log.info(
-            {
-              submittedCount: result.submittedCount,
-              failedCount: result.failedCount,
-            },
-            "Deadline scanner auto-submitted expired attempts",
-          );
+        // INVARIANT (#1009): exactly ONE settlement line per NON-EMPTY tick
+        // (any discovered/submitted/failed candidate); empty ticks stay
+        // silent — the accepted blindspot, there is no `empty` outcome. The
+        // three buckets are exhaustive over the discovery set, so the mapping
+        // covers every settled non-empty tick. A thrown tick never reaches
+        // this point (the catch path keeps the error line, no settlement).
+        if (
+          result.submittedCount + result.failedCount + result.discoveredCount >
+          0
+        ) {
+          const outcome =
+            result.failedCount > 0
+              ? "partial_failure"
+              : result.submittedCount > 0
+                ? "acted"
+                : "no_op";
+          fastify.log.info({
+            event: "scanner.tick.completed",
+            scanner: "deadline",
+            tickId,
+            outcome,
+            submittedCount: result.submittedCount,
+            failedCount: result.failedCount,
+            discoveredCount: result.discoveredCount,
+            noOpCount: result.noOpCount,
+          });
         }
       } catch (err) {
         threw = true;
