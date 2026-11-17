@@ -73,9 +73,10 @@ export interface SubmitAndGradeResult {
  * `await executeInTransaction(...)` resolves (COMMIT confirmed) and before
  * the out-of-tx response re-read, so rollback, failed retries and
  * post-commit response failures can neither emit nor rewrite the line.
- * Accepted blindspot: a process crash between COMMIT and this synchronous
- * emit loses the line — the durable business fact lives in the database,
- * not the log; no outbox/retry exists by design.
+ * Known blindspot (acceptance pending owner review): a process crash
+ * between COMMIT and this synchronous emit loses the line — the durable
+ * business fact lives in the database, not the log; no outbox/retry
+ * exists by design.
  *
  * INVARIANT (failure isolation): a synchronous sink throw is swallowed at
  * this single point — the committed result, the HTTP response and the

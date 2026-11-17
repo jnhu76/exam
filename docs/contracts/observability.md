@@ -190,14 +190,24 @@ required merely to identify an HTTP request.
   and BEFORE the out-of-tx response re-read. Therefore: ownership/authz
   rejection (preHandler `reply.send`, handler never reached), transaction
   rollback, retry exhaustion, and commit-phase faults emit ZERO completed
-  lines; a post-commit response-build failure (exam re-read 404 / parse 400 /
-  serialization 500) keeps the line un-lost and un-rewritten. Intermediate
-  retry attempts never emit — a WARN `transaction retry` line without a
-  matching completed line means that attempt did not commit (the join rules
-  above still apply). One line per HTTP request: concurrent submits of the
-  same attempt each produce their own line; business side effects remain
-  governed by the idempotent domain protocol, and there is no per-operation
-  log dedup.
+  lines; a post-commit response-build failure (internal re-read fault /
+  exam re-read 404 / parse 400 / serialization 500) keeps the line un-lost
+  and un-rewritten. Intermediate retry attempts never emit. What a WARN
+  `transaction retry` line means — and does NOT mean: it records that ONE
+  transaction attempt failed with a retryable SQLSTATE and is about to be
+  retried, nothing more. The candidate submit transaction is opened via the
+  two-argument `executeInTransaction` (no correlation option), so its retry
+  WARNs carry no request identity and cannot be reliably attributed to a
+  specific request. Even where a join is possible, a completed line may be
+  missing for a request that DID commit: a process crash between COMMIT and
+  the synchronous emit, a sink failure, or log filtering (level / collection
+  policy) each drops the line. The absence of a completed line therefore
+  does NOT establish that the request was not finally submitted — final
+  facts about submission live in the database (EXSEM-013): query the
+  attempt row / persisted receipts, never the log. One line per HTTP
+  request: concurrent submits of the same attempt each produce their own
+  line; business side effects remain governed by the idempotent domain
+  protocol, and there is no per-operation log dedup.
 
   Identity & privacy: emitted through the request-scoped Pino logger, so the
   line carries the SAME server-minted `reqId` as the `x-request-id` header
@@ -211,9 +221,10 @@ required merely to identify an HTTP request.
   single emit point: committed result, HTTP response and retry behavior are
   unchanged.
 
-  Limits (owner-accepted): sink failure drops the line (no delivery retry);
-  a process crash between COMMIT and the synchronous emit loses the line —
-  the durable business fact is the database row, never this log (EXSEM-013).
+  Limits (proposed, pending owner review): sink failure drops the line (no
+  delivery retry); a process crash between COMMIT and the synchronous emit
+  loses the line — the durable business fact is the database row, never
+  this log (EXSEM-013).
   Measured raw line (production shape, UUID identities): 347–357 B —
   envelope (level/time/pid/hostname) ≈ 50 B, inherited identity
   (reqId/actorId/actorRole/organizationId) ≈ 180 B, event payload
@@ -421,7 +432,7 @@ Diagnostics snapshot (background + redis):
 | Area | Current status | Gap | Priority |
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
-| Candidate submit outcome (#1007 / E06) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (accepted blindspot) | — |
+| Candidate submit outcome (#1007 / E06) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (known blindspot; acceptance pending owner review) | — |
 | DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
