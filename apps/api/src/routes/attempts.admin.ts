@@ -34,6 +34,11 @@ import { recordSensitiveReadAudit } from "../audit/auditWriter.js";
 import { grantWithOperationRaceRecovery } from "../orchestrators/operatorGrantExecution.js";
 import { forceSubmitWithOperationRaceRecovery } from "../orchestrators/forceSubmitExecution.js";
 import { misconductMarkWithOperationRaceRecovery } from "../orchestrators/misconductMarkExecution.js";
+import {
+  adminCommandDeniedOnResponse,
+  emitForceSubmitCommandCompleted,
+  emitTimeGrantCommandCompleted,
+} from "./adminCommandTelemetry.js";
 
 /**
  * Registers all admin-facing attempt routes: misconduct flag, force-submit,
@@ -158,6 +163,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           "attemptId",
         ),
       ],
+      // #1008: 403/404/409 denial correlation. Route-scoped, so the
+      // command is a registration-time constant and the other admin routes
+      // stay out of scope.
+      onResponse: adminCommandDeniedOnResponse("force_submit"),
       schema: {
         params: AttemptIdParamsSchema,
         body: ForceSubmitWithOperationRequestSchema,
@@ -202,6 +211,17 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         { audit: { request } },
       );
 
+      // #1008: the wrapper resolved successfully — the receipt
+      // disposition below is the verified committed fact (primary, auto-retry,
+      // exact-23505 recovery, or the no-transaction pre-read replay). Emitted
+      // BEFORE the response schema parse so a wire failure cannot rewrite the
+      // committed outcome.
+      emitForceSubmitCommandCompleted(request, {
+        attemptId,
+        operationId: result.operationId,
+        disposition: result.disposition,
+      });
+
       return reply.send(AttemptCommandReceiptResponseSchema.parse(result));
     },
   );
@@ -234,6 +254,8 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           "attemptId",
         ),
       ],
+      // #1008: 403/404/409 denial correlation (route-scoped).
+      onResponse: adminCommandDeniedOnResponse("time_grant"),
       schema: {
         params: AttemptIdParamsSchema,
         body: TimeGrantRequestSchema,
@@ -291,6 +313,16 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         },
         { audit: { request } },
       );
+
+      // #1008: commit-authoritative final outcome, emitted only
+      // after the full race-recovery wrapper resolved successfully and before
+      // the response is built — the engine outcome below is the verified
+      // committed fact (primary, or the post-23505 recovery rerun).
+      emitTimeGrantCommandCompleted(request, {
+        attemptId,
+        operationId,
+        outcome: result.outcome,
+      });
 
       return reply.send(
         TimeGrantResponseSchema.parse({
