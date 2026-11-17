@@ -129,9 +129,12 @@ export function emitForceSubmitCommandCompleted(
  * Maps the engine time-grant outcome to the log vocabulary. The real union is
  * `granted | terminal | idempotent_replay` — there is no `no_change` value
  * (#1008 field-mapping note: the design table's `no_change` row is
- * unreachable as-built; `terminal` — reconciliation terminalization with no
- * ledger write — is the actual third value and must NOT be flattened into
- * `applied`). Exhaustive switch: a new engine value fails compilation.
+ * unreachable as-built; `terminal` is the actual third value and must NOT be
+ * flattened into `applied`). `terminal` classifies this run's grant result —
+ * no time granted, no adjustment-ledger row — it does NOT claim the
+ * transaction was zero-mutation: deadline reconciliation may already have
+ * terminalized the attempt inside the same transaction. Exhaustive switch: a
+ * new engine value fails compilation.
  */
 function timeGrantOutcome(outcome: GrantOutcome): AdminCommandCompletedOutcome {
   switch (outcome) {

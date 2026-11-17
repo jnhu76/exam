@@ -235,7 +235,7 @@ own server-verified identity; never the denied target's data).
 | force_submit / disposition `no_change` (first execution on a terminal row; may still create the durable receipt per the existing contract) | `replay_no_change` | `no_change` |
 | force_submit / disposition `idempotent_replay` (pre-read replay or 23505 recovery) | `replay_no_change` | `idempotent_replay` |
 | time_grant / outcome `granted` | `applied` | `granted` |
-| time_grant / outcome `terminal` (reconciliation terminalization; no ledger write) | `replay_no_change` | `terminal` |
+| time_grant / outcome `terminal` (no time granted this run; see scope note) | `replay_no_change` | `terminal` |
 | time_grant / outcome `idempotent_replay` | `replay_no_change` | `idempotent_replay` |
 
 The mapping is an exhaustive switch over the real unions — a new enum value
@@ -244,6 +244,13 @@ design table's `time_grant / no_change` row is unreachable; the engine union
 is `granted | terminal | idempotent_replay` and `terminal` is the actual third
 value. Replays write no receipt/audit/mutation; a first `no_change` keeps its
 existing right to create a durable receipt.
+
+Scope note for `terminal`: it classifies THIS RUN's command result — no time
+was granted, no adjustment-ledger row was written (`adjustment` = null,
+`addedSeconds` = 0). It does NOT mean the transaction was zero-mutation:
+deadline reconciliation may already have terminalized the attempt (and
+committed that state change) inside the same transaction. The log outcome is
+the command's grant result, never a claim about the transaction's write set.
 
 **`admin.command.denied`** — at most one INFO line per request, emitted by a
 route-scoped `onResponse` hook (the command is a registration-time constant,

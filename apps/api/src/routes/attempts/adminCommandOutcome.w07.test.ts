@@ -522,6 +522,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
 
     it("terminal on an expired attempt: replay_no_change/terminal (NOT flattened to applied)", async () => {
+      // `terminal` classifies THIS RUN's grant result (no time granted, no
+      // ledger row). It is not a zero-mutation claim: deadline reconciliation
+      // may have terminalized the attempt inside the same transaction.
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
         label: "W07",
