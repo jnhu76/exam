@@ -113,14 +113,14 @@ export interface TransactionRetryLogger {
 /**
  * Closed set of business operations allowed to attach retry correlation.
  * An operation is added only together with an approved observability
- * contract; the union is the whole vocabulary (currently W03 answer save,
+ * contract; the union is the whole vocabulary (currently answer save,
  * #1006). Deliberately not a free-form string: correlation must not become a
  * general-purpose operation registry.
  */
 export type TransactionCorrelationOperation = "attempt.answer.save";
 
 /**
- * Caller-supplied correlation for the `transaction retry` WARN (#1006 / E05).
+ * Caller-supplied correlation for the `transaction retry` WARN (#1006).
  *
  * Closed shape — exactly these optional keys; unknown keys do not exist by
  * construction. Identity ownership stays with the CALLER: `packages/db`

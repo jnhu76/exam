@@ -1,5 +1,5 @@
 /**
- * #1006 — W03 answer-save transaction retry correlation (D6.1), real HTTP seam.
+ * #1006 — answer-save transaction retry correlation (D6.1), real HTTP seam.
  *
  * Owner-frozen contract (issue #1006 comment 6943590527): the existing
  * `transaction retry` WARN must carry a CLOSED `correlation` object whose

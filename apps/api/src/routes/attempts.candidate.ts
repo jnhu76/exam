@@ -1108,7 +1108,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           // #1006 D6.1: retry WARNs carry the SAME server-minted request.id as
           // the response x-request-id header and the framework request trace.
           // The identity is passed explicitly per call (no ambient/ALS state),
-          // and only for the W03 answer-save transaction.
+          // and only for the answer-save transaction.
           correlation: {
             requestId: request.id,
             attemptId,
