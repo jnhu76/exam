@@ -30,7 +30,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.12-bookworm
     ports:
       # REDIS_HOST_PORT owns the dev host port (default 6379). Loopback-only:
       # the container is a zero-configuration convenience for opt-in

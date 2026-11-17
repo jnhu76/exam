@@ -834,7 +834,7 @@ log "启动 dev compose (db + redis)..."
 docker compose -f "$DEV_COMPOSE" up -d --wait >/dev/null
 
 # 1b. 清理 test-results/playwright-report（可能含 Docker run 残留的 root 拥有文件）。
-docker run --rm -v "$ROOT_DIR/apps/e2e:/data" alpine \
+docker run --rm -v "$ROOT_DIR/apps/e2e:/data" debian:bookworm-slim \
   sh -c "rm -rf /data/test-results /data/playwright-report" 2>/dev/null || true
 
 build_assets

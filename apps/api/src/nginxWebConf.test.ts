@@ -119,7 +119,7 @@ describe("nginx access-log privacy pin (#925)", () => {
     // server-level `return 301` — (a) left port 80 serving the SPA and
     // /api proxy in plaintext after "HTTPS activation", silently
     // defeating the transport-confidentiality intent, and (b) breaks the
-    // compose healthcheck: wget follows the redirect to the self-signed
+    // compose healthcheck: curl follows the redirect to the self-signed
     // certificate it cannot verify, so the web container reads unhealthy
     // forever. A server-level `return` also runs BEFORE location
     // matching, so the exemption MUST be a sibling exact-match location
@@ -145,7 +145,7 @@ describe("nginx access-log privacy pin (#925)", () => {
       join(process.cwd(), "..", "..", "docker-compose.yml"),
       "utf8",
     );
-    expect(compose).toMatch(/wget.*"http:\/\/127\.0\.0\.1:80\/healthz"/);
+    expect(compose).toMatch(/curl[\s\S]*"http:\/\/127\.0\.0\.1:80\/healthz"/);
     expect(compose).not.toMatch(/http:\/\/127\.0\.0\.1:80\/"/);
   });
 });
