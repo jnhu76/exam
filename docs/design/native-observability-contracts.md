@@ -1,11 +1,11 @@
 # 原生可观测信号契约提案（#1001：模块边界、事件/字段目录与多组织上下文）
 
-> Status: **PROPOSED**（2026-11-17 起草，提交 Owner 架构评审；未接受前不构成施工授权，不改变任何现行契约，不修改 `docs/contracts/observability.md` 等已生效文档的效力。）
+> Status: **PROPOSED**（2026-11-17 起草，提交 Owner 架构评审；未接受前不构成施工授权，不改变任何现行契约，不修改 `docs/contracts/observability.md` 等已生效文档的效力。2026-11-17 Owner review 退修：冻结 E08 outcome 契约为 {no_op, acted, partial_failure}（空 tick 诚实 blindspot）、E04 默认改为 counter-only、email multi-org 测试拆分为 service isolation 与 host fail-closed 两层、§4/§7 冻结模块方案 A/B/C 与各项设计立场——均为契约修复与立场冻结，不改变 PROPOSED 状态，不构成实施授权。）
 > Baseline: master@`4e0f02d6835df68fa3ce96032b01169e7f6737a5`（含 PR #1014 合入的 #998 修复）
 > 来源：#1001（DESIGN_ONLY / OWNER_GATE）、umbrella #1000、研究基线 #999、策略提案 [ADR-029](../adr/ADR-029-exam-native-observability.md)（PROPOSED）
 > 消费对象：#1002–#1013 共 12 个后续 Issue 的设计输入；它们仍需各自授权后才可施工。
 
-本文是 #1001 的完整设计提案：所有权图（§1）、E01–E12 字段目录（§2）、组织上下文威胁矩阵（§3）、模块方案 A/B/C 与 EXTRACT/NO_EXTRACT 证据（§4）、closed-field 示例与失败/容量/测试策略（§5）、与 #1012 的并行边界（§6）、留给 Owner 的决定清单（§7）。文中所有 as-built 断言均附 `file:line` 证据（按 Baseline SHA 现场核对）；所有量化预算均标注为**提案/目标**，没有任何一项已测 PASS。
+本文是 #1001 的完整设计提案：所有权图（§1）、E01–E12 字段目录（§2）、组织上下文威胁矩阵（§3）、模块方案 A/B/C 与 EXTRACT/NO_EXTRACT 证据（§4）、closed-field 示例与失败/容量/测试策略（§5）、与 #1012 的并行边界（§6）、Owner 决定清单（§7，含已冻结立场与开放决策）。文中所有 as-built 断言均附 `file:line` 证据（按 Baseline SHA 现场核对）；所有量化预算均标注为**提案/目标**，没有任何一项已测 PASS。
 
 ## 0. 冻结边界（本提案自身遵守，并约束它推荐的任何后续实施）
 
@@ -63,11 +63,11 @@
 | 变更 | owner（不变） | 新增内容（PROPOSED，待 Owner 批准后由对应 Issue 实施） | 依赖方向 |
 | --- | --- | --- | --- |
 | P1 | 邮件模块（`apps/api/src/email/*`） | 单一隐私策略 owner（封闭分类 + 受控 code 集合，替换 `sanitizeError.ts` 的自由文本语义）；两个宿主保留各自 transport adapter（Pino / stdout JSON）；读侧历史投影在 `routes/system.ts`。实施细节以 #1012 PR 为准（§6） | email 模块内闭环；宿主 → email 模块（既有方向） |
-| P2 | `packages/db`（executeInTransaction） | 可选 `correlation` 显式参数（closed 对象：`requestId?/attemptId?/operationId?`），由已有 ctx 的调用方显式传入；进入形态为第四可选参数或参数对象整合（现行第三位置参数 isolationLevel 已存在，`types.ts:186-189`，不得占用）；模块级 logger 机制不变（E05） | 调用方 → db（既有方向）；无全局变量 |
+| P2 | `packages/db`（executeInTransaction） | 可选 `correlation` 显式参数（closed 对象：`requestId?/organizationId?/attemptId?/operationId?`，是否纳入 organizationId 由 #1006 最终设计决定），由已有 ctx 的调用方显式传入；推荐进入形态为 options 对象整合 `executeInTransaction(db, callback, { isolationLevel, correlation? })`，不推荐第四个裸 positional parameter 作为首选 API（现行第三位置参数 isolationLevel 已存在，`types.ts:186-189`，不得占用）；模块级 logger 机制不变（E05） | 调用方 → db（既有方向）；无全局变量 |
 | P3 | submit/grade orchestrator | commit 后单行 outcome 日志（E06）：发射点只在 `submitAndGradeAttempt.ts` 事务提交后（as-built 返回点 `:251-262`） | orchestrator 内部；无新依赖 |
 | P4 | admin 路由 + orchestrator | commit 后 outcome 行；拒绝侧只记 closed category，不记被拒目标业务细节（E07） | 同上 |
-| P5 | heartbeat/deadline scanner plugins | tick 完成行仅非空结果发射 + tickId（one-cycle）（E08）；E03 只加 diagnostics 投影字段 | plugin 内部 |
-| P6 | auth plugin | 401 closed reason 枚举 + 洪泛预算（计数器优先，转移才发射）（E04） | plugin 内部 |
+| P5 | heartbeat/deadline scanner plugins | tick 完成行仅非空结果发射 + tickId（one-cycle），outcome ∈ {no_op, acted, partial_failure}；空 tick 不发射（诚实 blindspot，见 §2.3 E08）（E08）；E03 只加 diagnostics 投影字段 | plugin 内部 |
+| P6 | auth plugin | 401 closed reason 枚举 + 进程内固定 size counter（counter-only 默认：不逐请求发射日志行；`auth.denied` 转移行 HOLD 待显式 rate-bound 设计，见 §2.3 E04） | plugin 内部 |
 | P7 | system 路由 / contracts | E01 失败边界的技术日志（响应形状不变）；E02 语义澄清为 contracts 决策；E03 投影字段 | contracts 变更走对应 Issue |
 | P8 | email 循环两宿主 | E09 默认不新增 always-on 行（复用 heartbeat 持久化活性）；转移行为 HOLD 待 #1010；E12 无新事件，测量先行（#1013） | 无 |
 
@@ -94,11 +94,11 @@
 | E01 / #1002 | 全库宕机时 health/diagnostics 在 preHandler 就失败，无 closed DB-不可用分类；handler 级 pingDb 失败与 ready 的有界探针不可对照 | preHandler 失败实际可观测点 `plugins/auth.ts:102-110`；handler 级 `routes/system.ts:297` 及 diagnostics 内 pingDb | 是（两段，仅失败时） | `db.auth_lookup.failed`（主故障场景）+ `db.probe.failed`（残余窗口） | `failed`（+sqlstate 封闭集合） | 响应形状不变；200+degraded/nullable 不预批；readiness 面归 `operability.readiness` 唯一权威，不重复发射 |
 | E02 / #1003 | oldestPendingAge 只算 due-pending 且单位为秒，含义易误读 | `routes/system.ts:126-132` + `packages/contracts/src/system.ts:111` | 否（字段语义问题） | — | — | contracts 迁移单独决策 |
 | E03 / #1004 | 已有 incident 计数未进诊断投影 | `heartbeat.ts:67-68` → `system.ts` 投影 | 否（只读 projection） | — | — | 投影字段 + 进程级属性标注 |
-| E04 / #1005 | pre-auth 401 无理由区分且可被洪泛 | `plugins/auth.ts:61-116`、`:123-127`、`:158-165` | 是（转移式） | `auth.denied` | reason 封闭枚举 | 计数器优先；组织字段禁止 |
+| E04 / #1005 | pre-auth 401 无理由区分且可被洪泛 | `plugins/auth.ts:61-116`、`:123-127`、`:158-165` | 否（默认 counter-only，零新增日志行） | （候选 `auth.denied`，HOLD：须先有可证明速率上界设计） | reason 封闭枚举（counter 维度） | counter-only = 当前默认；transition row = HOLD until E-2 + explicit rate-bound design；组织字段禁止 |
 | E05 / #1006 | DB retry warn 无法关联请求/业务 attempt | `packages/db/src/types.ts:217-225`、`plugins/db.ts:35` | 否（扩展现有行字段） | 沿用 `transaction retry` | retry outcome（隐含） | 显式 correlation 参数；禁止全局身份 |
 | E06 / #1007 | 最终提交 outcome 无 commit 后单行；五条路径需无歧义分类 | `orchestrators/submitAndGradeAttempt.ts:251-262` | 是 | `attempt.submit.completed` | graded / pending_manual / replay_no_change / deadline_frozen / recovered | 仅 commit 后发射 |
 | E07 / #1008 | admin 命令 outcome/拒绝无技术日志关联 | `routes/attempts.admin.ts:175-206,:251-309` | 是 | `admin.command.completed` / `admin.command.denied` | applied / replay_no_change；denied: forbidden / not_found / conflict（400 归全局校验边界 `errors.ts:93-105`，见 §2.3） | 拒绝行不带目标业务细节 |
-| E08 / #1009 | scanner tick 空/行动/部分失败/throw 不可区分 | `plugins/deadlineScanner.ts:442-455`、`plugins/heartbeat.ts` tick | 是（仅非空结果） | `scanner.tick.completed` | empty / acted / partial_failure | throw 沿用现有 error 行；未知数量≠0 |
+| E08 / #1009 | scanner tick 空/行动/部分失败/throw 需可区分（空 tick 的 per-tick 可见性默认保持 blindspot） | `plugins/deadlineScanner.ts:442-455`、`plugins/heartbeat.ts` tick | 是（仅非空结果发射；空 tick 0 行） | `scanner.tick.completed` | no_op / acted / partial_failure | 空 tick=无 settlement log（诚实 blindspot，待 E-2+Owner Gate 才可能扩展 `empty`）；throw 沿用现有 error 行，不发伪造 completed；未知数量≠0 |
 | E09 / #1010 | email 循环活性在空轮询时无 stdout 信号 | `emailOutboxLoop.ts:134-142`、`emailDeliveryWorker.ts:264-272` | HOLD | （候选 `email.worker.transition`，HOLD） | idle / active / error_enter / error_clear | 复用 heartbeat 持久化；不默认 5s 一行 |
 | E10 / #1011 | reserved email audit 是否激活 | `auditPolicy.ts:755-772,:1068-1073` | 否 | — | — | 策略决策归 #1011，不是补 callback |
 | E11 / #1012 | 邮件错误原始文本可达日志/DB/诊断 | `email/sanitizeError.ts:22-62`、两宿主出口、`system.ts:112` | 否（隐私策略，非新事件） | — | 封闭分类枚举（#1012 冻结） | 实施以 #1012 PR 为准（§6） |
@@ -114,13 +114,13 @@ owner：`routes/system.ts`（health `:283-302`、diagnostics）与 `plugins/auth
 提案（两段信号边界）：
 - 主故障场景的信号边界放在实际可观测点 `auth.ts:102-110`：为该现有日志行增加 closed 分类（候选：`db.auth_lookup.failed` 事件，或现有行加 closed 字段 `dbUnavailable: true`；具体形态归 #1002）。字段：closed reason + `actorId`（JWT 已验证 actor，允许）；err 通道保持 #998 序列化，不新增自由文本。
 - 残余窗口保留 handler 级 `db.probe.failed`：`probe ∈ {health, diagnostics}` 封闭枚举、`sqlstate`（仅封闭集合，缺失则省略）、`elapsedMs`（单调时钟，可选）。**显式声明**：该发射点不覆盖全库宕机（那时 handler 不可达），只是部分降级信号。
-- **probe 枚举不含 `ready`**：readiness 面的 DB 宕机信号已有唯一权威——/api/ready 的有界探针（`operabilityMonitor.ts:117-153`，2s 预算）与 `operability.readiness` 转移告警（15s cadence，`operabilityMonitor.ts:285-292`）。再发射同义事件即重复真相源（§0 原则）；liveness `/api/health` 不触达 DB（`apiSurface.ts:50-60` 固定返回 ok），无 DB 语义。
-- 响应形状**不变**（500 照旧）。不预先批准 200+degraded 或 nullable response（contracts 变更留给 #1002 的 Owner 决策）。
-sink：Pino；频率上界：仅失败/转移时发射（目标，见 §5.2）；敏感字段：无；高基数字段：无；Gate：#1002。
+- **probe 枚举不含 `ready`**：`/api/ready` 是 sole deployment readiness authority（#547）——readiness 面的 DB 宕机信号已有唯一权威，即 /api/ready 的有界探针（`operabilityMonitor.ts:117-153`，2s 预算）与 `operability.readiness` 转移告警（15s cadence，`operabilityMonitor.ts:285-292`）。再发射同义事件即重复真相源（§0 原则）；liveness `/api/health` 不触达 DB（`apiSurface.ts:50-60` 固定返回 ok），无 DB 语义。
+- **响应形状**不变（500 照旧）。不预先批准 200+degraded 或 nullable response（contracts 变更留给 #1002 的 Owner 决策）。
+sink：Pino；频率上界：`db.auth_lookup.failed` / `db.probe.failed` 即使未来启用，也必须先通过 E-2 式 volume gate——DB down 窗口内不得制造 uncontrolled per-request log storm（主故障场景下 `auth.ts:102-110` 既有 error 行已是 per-request，新信号不得叠加第二类 per-request 风暴；具体发射形态归 #1002）；敏感字段：无；高基数字段：无；Gate：#1002。
 
 **E02 / #1003 — oldestPendingAge 语义**
 owner：`routes/system.ts:126-132` + `packages/contracts/src/system.ts:111`。as-built：秒整数、仅 due-pending 最老行（`findDuePending`，repo 层带 organizationId 过滤）。
-提案：这是对外字段语义问题，不是日志问题。建议 #1003 将其作为 contracts 兼容决策处理（候选：保留现名并文档化 due-pending+秒语义，或迁移为 `oldestDuePendingAgeSeconds`/新增全 pending 口径字段——后者是对外契约变更，需单独 Owner 批准）。本目录不预设结论。无新事件、无新日志。
+提案（推荐方向，已记为冻结立场，见 §7 决定 3；仍属 #1003 Owner contract decision，#1015 只记录推荐、不实施）：这是对外字段语义问题，不是日志问题。推荐以显式语义字段 `oldestDuePendingAgeSeconds` 取代模糊的 `oldestPendingAge`——字段名显式表达 **due-only 口径 + seconds 单位**，不再靠文档隐藏这两层语义；"保留现名并文档化"是次选。具体 contracts 兼容决策（迁移/别名/新增口径字段，涉及对外契约变更）归 #1003 单独裁决。无新事件、无新日志。
 Gate：#1003（contracts 决策）。
 
 **E03 / #1004 — 已有计数只读投影**
@@ -128,15 +128,30 @@ owner：`plugins/heartbeat.ts:67-68`（`systemIncidentsCreated`/`systemIncidentC
 提案：只读 projection，无新事件。投影必须携带进程级属性（计数随进程重启清零，`heartbeat.ts:53-88` 注释即此语义），避免读者把进程内计数当持久事实。区分规则：计数字段为非负整数，"自进程启动以来"语义写进字段文档。
 sink：diagnostics JSON 响应；频率：每请求读时计算，零新增日志；敏感/高基数：无；Gate：#1004（contracts 变更）。
 
-**E04 / #1005 — pre-auth 401 理由**
+**E04 / #1005 — pre-auth 401 理由（默认 counter-only）**
 owner：`plugins/auth.ts`（missing cookie `:68-77`、invalid JWT `:82-86`、inactive user `:112-116`、authEpoch `:123-127`、authority 401 `:158-165`——后者已带 closed reason 枚举 `AUTHORITY_401_REASONS` 与 `log.warn`）。
-提案：为全部 401 出口定义封闭 reason 枚举（missing_cookie / invalid_token / epoch_mismatch / inactive_user / authority_denied），但**洪泛预算优先于逐请求日志**：进程内 per-reason 计数器（有界：枚举大小固定）+ 仅状态转移（首次出现/恢复）时发射一行 `auth.denied`。organizationId **禁止**出现在 pre-auth 401 信号中（无可信租户，§3）；不记录 IP 推断的租户。
-sink：Pino；频率上界：转移式发射（目标：每 reason 每 state 一行）；敏感字段：无（不带 token/cookie 内容）；高基数：无；负例测试：注入合成 marker 确认无 org 字段、无凭据内容；Gate：#1005。
+提案（默认 counter-only）：为全部 401 出口定义封闭 reason 枚举（missing_cookie / invalid_token / epoch_mismatch / inactive_user / authority_denied），配进程内**固定 size 的 per-reason counter**（枚举大小固定、重启重置、无无界 map）。默认**不逐请求发射 `auth.denied`**，默认也不存在任何 per-request 401 日志行。关键区分：**bounded state cardinality ≠ bounded log emission rate**——攻击流可以构造 failure/success 交替（failure→success→failure→success→…），若每次 boolean 状态翻转都发射一行，日志速率仍可逼近请求速率；因此"首次出现/恢复才发射"的 boolean 状态转移本身**不能充当 flood bound**，不得作为默认方案。organizationId **禁止**出现在 pre-auth 401 信号中（无可信租户，§3）；不记录 IP 推断的租户。
+Optional future transition signal（HOLD）：若未来确实需要 `auth.denied` transition row，必须另行定义**可证明的速率限制**——cooldown window、fixed-window emission、token bucket 或 periodic aggregate flush（或等价机制）之一，满足显式 `max emitted rows / time interval` 上界，并可静态或测试证明；boolean 状态转移本身不得充当 flood bound。该扩展 **HOLD 直至 E-2 volume measurement + Owner Gate 批准显式 rate-bound 设计**（§7 决定 4）。#1015 只冻结本契约方向，不实现任何生产 counter。
+sink：Pino（仅当未来 rate-bound 设计获批后才有发射；默认零新增日志行）；敏感字段：无（不带 token/cookie 内容）；高基数：无；负例测试：注入合成 marker 确认无 org 字段、无凭据内容；Gate：#1005。
 
 **E05 / #1006 — DB retry 关联**
 owner：`packages/db`（`types.ts:106/217-225`）+ 调用方（save `attempts.candidate.ts`、submit `submitAndGradeAttempt.ts:62`）。
 诊断问题：retry warn 行只有 `{attempt, sqlstate}`，进程级单 logger 无法区分并发请求；`attempt` 字段语义是 retry 序号（1..3），与业务 attemptId 无关。
-提案：保留现有字段名与行（避免字段迁移），新增**可选显式参数**承载 correlation。as-built 签名约束：`executeInTransaction` 已有第三个位置参数 `isolationLevel`（`types.ts:186-189`，默认 `"repeatable read"`），correlation 不能照写为第三参——以**第四个可选参数**（或参数对象整合，含 isolationLevel 迁移）进入，具体形态留给 #1006 裁决；`correlation` 为封闭对象 `{ requestId?: string; attemptId?: string; operationId?: string }`，只由调用方从自己已持有的 ctx 显式传入；模块级 logger 机制不变。禁止用全局变量/模块状态保存请求身份（§0；两路线比较见 §4.4）。retryOrdinal（现有 `attempt` 字段）与业务 attemptId 的区分写进字段文档。
+提案（推荐形态，已记为冻结立场，见 §7 决定 5；最终形态仍属 #1006 设计裁决）：保留现有字段名与行（避免字段迁移），新增**可选显式参数**承载 correlation；默认 explicit propagation、不采用 AsyncLocalStorage（§4.4）。as-built 签名约束：`executeInTransaction` 已有第三个位置参数 `isolationLevel`（`types.ts:186-189`，默认 `"repeatable read"`），correlation 不能照写为第三参；**不推荐"第四个裸 positional parameter"作为首选 API**，建议 #1006 优先评估 options 对象整合形态：
+
+```ts
+executeInTransaction(db, callback, {
+  isolationLevel,
+  correlation?: {
+    requestId?: string;
+    organizationId?: string;
+    attemptId?: string;
+    operationId?: string;
+  },
+})
+```
+
+边界约束：`correlation` 为封闭对象，只由调用方从自己已持有的 ctx 显式传入；organizationId 只能来自 trusted server-side context（已授权 request ctx 或显式 DB/worker scope，§3），**是否真的把 organizationId 加入 correlation 词汇由 #1006 最终设计决定**；requestId 仅限真实 HTTP 请求（ADR-025），后台工作不得伪造 requestId；禁止用全局变量/模块状态保存请求身份，不得引入全局 mutable identity（§0；两路线比较见 §4.4）。模块级 logger 机制不变。retryOrdinal（现有 `attempt` 字段）与业务 attemptId 的区分写进字段文档。
 sink：Pino（root logger）；频率：现状不变（仅 retry 时）；敏感：无；高基数：requestId/attemptId 为行内关联字段（允许，非 metric label）；Gate：#1006。
 
 **E06 / #1007 — 提交后 outcome（commit-authoritative）**
@@ -161,10 +176,19 @@ owner：`routes/attempts.admin.ts` + orchestrator（receipt/outcome 权威在 or
 **400 校验早退的 documented ownership（#1008 验收要求四类 400/403/404/409 各有归属）**：400 不在 `admin.command.denied` 枚举内，其 owner 是**全局校验边界**——route-schema Zod 校验失败与 handler 抛出的 ZodError 由 `errors.ts:93-105` 统一转为 400 + closed validation envelope（含 `requestId` 关联），该边界先于/独立于 admin 路由裁决，admin handler 对 400 不可见、也不应假装可见。排除理由：400 是客户端构造错误（请求体不合 schema），不是服务端命令裁决；现有表示已 closed（ErrorCode registry + validation envelope）且带 requestId 关联，缺的只是 stdout 日志行——为全站所有路由的 400 增加逐请求日志行是全局洪泛决策（与 E04 同一预算问题），不属于 per-route 拒绝信号。若 #1008 评审仍要求 400 关联日志，正确 seam 是全局错误处理器（全路由共享、须先解决洪泛预算），这是 #1008 的显式决策点，本提案不默认实施。
 sink：Pino；频率：每命令 ≤1 行；Gate：#1008。
 
-**E08 / #1009 — scanner tick 因果与四态**
+**E08 / #1009 — scanner tick 因果与 settlement 契约（默认冻结五条）**
 owner：`plugins/deadlineScanner.ts` / `plugins/heartbeat.ts`。as-built：汇总行仅 `submitted>0‖failed>0`（`deadlineScanner.ts:442-450`）；tick throw 有 error 行（`:451-454`）+ `consecutiveThrowTicks` 计数；空 discovery 与全 no-op 在 stdout 不可区分。
-提案：tick 完成行 `scanner.tick.completed` 仅在**非空结果**（有候选发现、有动作、或部分失败）时发射；outcome ∈ {`acted`, `partial_failure`}；字段：`scanner ∈ {heartbeat, deadline}`、`tickId`（per-tick UUID，one-cycle，不持久化、不跨 tick 复用）、计数（非负整数）。四态映射：空成功=不发射（diagnostics 计数已表达）；acted=发射；partial_failure=发射且**未知数量必须显式 unknown**（某组织腿失败时其余组织的聚合数不再可信，禁止用部分和冒充总数，禁止用 0 填充）；throw=沿用现有 error 行 + `consecutiveThrowTicks`。tickId 与 operationId、workerInstanceId 不互相冒充（tickId 只标识一个扫描周期）。
-sink：Pino；频率：tick 间隔由 runtime config 决定（默认 30000ms，`config/settings.ts:702`；deadline 默认继承 heartbeat，`:704-705`），仅非空结果发射（目标：远低于每 tick 一行）；大小：≤ 512B；Gate：#1009。
+提案（默认契约，冻结为下列五条；不默认启用 unconditional per-tick logging）：
+
+1. **empty success**（tick 无候选发现）→ **不发射 settlement log**。空 tick 的 per-tick 可见性是**诚实记录的 accepted blindspot**（diagnostics 进程内计数仍存在但重启清零），不是已解决的问题；改变它的唯一路径是 E-2 volume measurement + Owner Gate 批准 per-tick emission。
+2. **non-empty 但零业务动作**（发现候选但全部 under-lock / disqualified / no-op）→ 发射 `scanner.tick.completed` + `outcome=no_op`。
+3. **至少一个成功动作且无 partial failure** → 发射 `scanner.tick.completed` + `outcome=acted`。
+4. **tick 因一条或多条腿失败而带 partial/unknown 完成** → 发射 `scanner.tick.completed` + `outcome=partial_failure`，且**未知数量必须显式 unknown**（某组织腿失败时其余组织的聚合数不再可信，禁止用部分和冒充总数，禁止用 0 填充）。
+5. **tick 在有效 settlement 前 throw** → 沿用既有 error path + `consecutiveThrowTicks`，**不发射伪造的 completed 事件**。
+
+默认 active outcome vocabulary 冻结为 **{`no_op`, `acted`, `partial_failure`}**；`empty` **不在当前 emitted outcome 枚举中**（它对应的 tick 按 1 不发射任何行）。未来若 E-2 volume measurement + Owner Gate 批准"一 tick 一 settlement row"，才允许扩展为 {empty, no_op, acted, partial_failure}——那属于后续 contract delta，不是当前默认契约。
+字段：`scanner ∈ {heartbeat, deadline}`、`tickId`（per-tick UUID，one-cycle，不持久化、不跨 tick 复用）、计数（非负整数；unknown 显式）。tickId 与 operationId、workerInstanceId 不互相冒充（tickId 只标识一个扫描周期）。
+sink：Pino；频率：tick 间隔由 runtime config 决定（默认 30000ms，`config/settings.ts:702`；deadline 默认继承 heartbeat，`:704-705`），仅非空结果发射（空 tick = 0 行；目标：远低于每 tick 一行）；大小：≤ 512B；Gate：#1009。
 
 **E09 / #1010 — email 循环活性**
 owner：两宿主循环。as-built：空轮询无 stdout 行，但 **heartbeat 每 poll 均写**（`emailDeliveryWorker.ts:276-283`；in-process 同构）——`lastSuccessAt`/`lastPollAt` 已是持久化活性信号，诊断投影（S16）已消费。
@@ -200,13 +224,13 @@ Gate：#1013。
 | 场景 | 身份权威 | 允许 organizationId？ | 允许字段 | 读取者 | 省略时机 | 负例测试 | 不可推导结论 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 已认证 HTTP | JWT→user→assignment authority（`plugins/auth.ts:79-153`）；ctx 由 authenticate 填充 | **是**——仅 `request.ctx.organizationId` | actorId/actorRole + 业务关联字段（先例 S17 字段集） | Host 日志；诊断面 Admin/Maintainer | pre-auth、序列化失败路径 | 合成 marker 注入答案/凭据字段，断言不出现在日志 | requestId≠授权证明（ADR-025） |
-| 未认证 HTTP（pre-auth 401） | 无（无 cookie/JWT） | **否**——无可信租户 | request.id + route 模板 + closed reason（E04） | Host 日志 | 401 早退时 ctx 未建 | 断言 401 信号无 org 字段、无 IP 推断租户 | 不能从 IP/UA/路径推断 org |
+| 未认证 HTTP（pre-auth 401） | 无（无 cookie/JWT） | **否**——无可信租户 | request.id + route 模板 + closed reason（E04 reason 枚举为 counter 维度；默认 counter-only 无日志行） | Host 日志 | 401 早退时 ctx 未建 | 断言 401 信号无 org 字段、无 IP 推断租户 | 不能从 IP/UA/路径推断 org |
 | Admin 跨组织访问/拒绝 | scoped capability resolver（`authz/scopedCapability.ts`）服务端解析目标 org | 是（resolver 结果），但**拒绝路径不得记录被拒目标的业务细节** | 拒绝信号只带 closed category + command + requestId（E07） | Host 日志 | 403/404/409 拒绝 | 越权请求注入 marker，断言目标 attemptId/org 不出现 | Admin 身份不授予记录他 org 细节的许可（ADR-018 D4 延续） |
 | scanner 逐组织循环 | `createSystemRequestContext(organizationId, SYSTEM_ACTOR_ID)`（`heartbeat.ts:144-146`；deadlineScanner 同构） | 是——每 org 一个显式 ctx | org + attemptId（per-candidate error 行） | Host 日志 | — | 双 org fixture 交错扫描，断言行不串 org | 进程级计数不可拆为某 org 独立运行状态 |
-| email in-process 宿主 | `waitForSingleOrganization` → orgScope `{organizationId}`（`emailOutboxLoop.ts:80-91`） | 是（单 org scope；repo 层 resolveOrgId 强制） | outboxId/attemptCount 等非 PII 字段 | Host 日志 | — | 双 org fixture 交错投递，断言 outbox 数据不串 org | email_outbox 是 org-scoped；heartbeat 不是（S15） |
-| email standalone 宿主 | 同上（`emailDeliveryWorker.ts` bootstrap 解析） | 是（同 orgScope） | 同上 | Host 面（stdout 不经 Exam RBAC） | — | 同上 + 真实 stdout 字节检查 | 同上 |
+| email in-process 宿主 | `waitForSingleOrganization` → orgScope `{organizationId}`（`emailOutboxLoop.ts:80-91`） | 是（单 org scope；repo 层 resolveOrgId 强制） | outboxId/attemptCount 等非 PII 字段 | Host 日志 | — | ① **service/repository isolation test**：构造 OrganizationScope A/B，交错调用共享 email service/repository（A send/fail、B send/fail、A retry、B retry），断言 outbox row 不跨 org、safe error persistence 不串 org、correlation/worker business data 不串 org；② **worker host/bootstrap test**：真实 in-process worker 维持 0 org → bootstrap_pending、1 org → normal、>1 org → fail closed，不为"双 org worker test"解除 `waitForSingleOrganization` | email_outbox 是 org-scoped；heartbeat 不是（S15） |
+| email standalone 宿主 | 同上（`emailDeliveryWorker.ts` bootstrap 解析） | 是（同 orgScope） | 同上 | Host 面（stdout 不经 Exam RBAC） | — | ① 同上 service/repository isolation test；② **worker host/bootstrap test** 对真实 standalone worker 维持 0 org → bootstrap_pending、1 org → normal、>1 org → fatal，不为测试解除 `waitForSingleOrganization`；③ 真实 stdout 字节检查 | 同上 |
 | bootstrap 未完成 | `resolveOptionalBrandingTenant` 无 org | **否** | 固定串 `bootstrap_pending`（`emailDeliveryWorker.ts:34-35`） | 诊断面 worker.lastError | — | 历史脏值投影测试（#1012 B3） | bootstrap_pending 是可识别固定状态，不是租户状态 |
-| 多组织误配置 | `waitForSingleOrganization` 契约：>1 org 抛 fatal | — | fatal 行 | Host | — | 维持既有失败行为，不为测试解除 | 不因测试便利改契约 |
+| 多组织误配置 / worker 宿主 bootstrap | `waitForSingleOrganization` 契约：0 org → bootstrap_pending、1 org → normal、>1 org → fail closed / fatal | — | fatal 行 / `bootstrap_pending` 固定串 | Host | — | worker host/bootstrap test（两宿主）维持 0/1/>1 org 矩阵，不为测试解除 | 不因测试便利改契约；multi-org fixture 不激活 multiTenant runtime（见下方声明 4） |
 | 进程重启 | — | 部署级信号（heartbeat 新行、计数清零） | workerInstanceId（每次新随机） | 诊断面/Host | — | 滚动升级新旧写者混存场景（findLatestByName 取 lastPollAt 最新，S15） | 新旧行并存不构成多租户状态 |
 | 交错并发 | requestId 每请求唯一（`server.ts:117`）；DB retry logger 无请求身份（S4） | retry 行当前无法携带身份（E05 缺口） | 仅 attempt/retry 序号/sqlstate | Host | — | 并发请求 + 注入 retry，断言现有行不串身份 | 不能从 retry warn 反推请求/org（E05 修复前的诚实边界） |
 | 异常包装 | Drizzle 包装 → #998 serializer 白名单化 Pino err 通道（`logRedaction.ts:232-257`） | — | — | — | — | 非 Error rejection、循环 cause、toString/toJSON 边界用例（#1012 B1） | "经 Pino 即安全"仅对 err 通道成立；自定义 `error:` 字符串字段是独立出口（S11/S12） |
@@ -216,7 +240,7 @@ Gate：#1013。
 1. **host-level heartbeat/counter 可以作为授权运维投影，但不得包装为某租户独立运行状态**：`worker_heartbeats` 是部署级记录（S15 证据），诊断投影中的 worker 状态是 host 信号；当前产品单租户（一部署一机构），不存在"某组织的 email worker 状态"这一事实，也不得创造字段暗示它。
 2. **不新增 tenant-facing log query API**：日志读取保持 Host 运维面（ADR-018 D6）。未来若需要 tenant-facing 查询能力，是独立的 RBAC/capability 架构决策，不在本提案范围。
 3. **不因 Admin 身份记录拒绝访问目标的业务细节**（矩阵第 3 行）：拒绝信号只有 closed category，anti-enumeration 语义（404 无日志现状）不被诊断需求推翻。
-4. 多组织 fixture（A/B org）只用于验证数据边界的负例测试，不代表新增多租户运行模式。
+4. 多组织 fixture（A/B org）只用于验证数据边界的负例测试，不代表新增多租户运行模式。原句冻结：**Multi-org fixtures validate data isolation below the deployment-host boundary; they do not activate multiTenant runtime.** 据此，multi-org 负面测试拆为两层概念（威胁矩阵与 §5.3 均按此使用）：**service/repository isolation test** 是 multi-org data-boundary fixture——构造 OrganizationScope A/B 交错调用共享 email service/repository，证明部署宿主边界**之下**的数据隔离；**worker host/bootstrap test** 面向真实 worker 宿主，维持 0 org → bootstrap_pending、1 org → normal、>1 org → fail closed/fatal 的 single-org host contract——不得为"双 org worker test"解除 `waitForSingleOrganization`。
 
 ---
 
@@ -260,7 +284,13 @@ Gate：#1013。
 3. 两个 entrypoint 使用同一邮件模块不是抽包的充分理由（brief §一.4；两 transport 序列化路径不等价，§1.1 结论 5）；
 4. ADR-029 §3 已冻结"Stage D 架构评审给出结论并获 Owner GO 前不创建该包"。
 
-**B 判 HOLD**（不否决、不现在建）：触发条件写死——当 ≥2 个 owner 需要相同的**行为**（不只是命名），例如 closed-field 校验/转移去重/预算控制在 ≥3 处出现重复实现且有测试缺口时，重新评估最小内部边界。在此之前建目录属于"用结构证明设计"，本提案不做。
+**B 判 HOLD**（不否决、不现在建）：重评触发条件写死——**≥2 个 independent owners 需要相同的*行为*（not merely the same names）AND 该相同行为已出现在 ≥3 个 implementation sites 且带有重复的 correctness/test burden**（两个条件须同时满足；closed-field 校验/转移去重/预算控制是候选行为类别，仅"同名不同宿主"的词汇一致不构成触发）。在此之前建目录属于"用结构证明设计"，本提案不做。
+
+**模块方案冻结立场（2026-11-17 Owner review 退修后记录；仍待 Owner architecture gate 最终裁决）**：
+
+- **A = 采用**（owner-local typed adapter / emitter）。A ≠ 在业务代码里散落 `log.*`：每个 bounded owner 恰好**一个** local typed emission boundary，统一负责该 owner 的 event vocabulary、closed fields、safe correlation、emission policy、size/rate policy；业务逻辑不自由拼装 observability payload。
+- **B（`apps/api/src/observability/*`）= HOLD**，重评触发条件如上（≥2 owners same behavior AND ≥3 sites duplicated correctness/test burden）。
+- **C（`@exam/observability`）= NO_EXTRACT**：当前无共享稳定 workspace API 证据（§4.3 上方四条证据；ADR-029 §3 Stage D 前不创建）。
 
 本提案自身不创建任何目录、types、runtime adapter 或包（DESIGN_ONLY）。
 
@@ -312,6 +342,12 @@ Scanner tick（E08，部分失败时未知数量显式 unknown）：
 {"level":"warn","time":1730000000000,"event":"scanner.tick.completed","scanner":"deadline","tickId":"synthetic-tick-uuid","outcome":"partial_failure","submittedCount":2,"failedCount":1,"discoveredCount":"unknown"}
 ```
 
+Scanner tick（E08，`no_op`：发现候选但零业务动作。空 tick 不出现在本节——它按契约不发射任何行，是诚实 blindspot）：
+
+```json
+{"level":"info","time":1730000000000,"event":"scanner.tick.completed","scanner":"deadline","tickId":"synthetic-tick-uuid","outcome":"no_op","discoveredCount":3,"actedCount":0}
+```
+
 反例（禁止形态）：`"error":"network down"`、`"error":"Recipient a***@example.com was rejected"`、`"stack":"..."`、`"response":"535 5.7.8 Error: authentication failed"`、`"sql":"SELECT ... WHERE id = $1"`、`"binds":[...]`、`"url":"/api/attempts/synthetic/answers?token=..."`。其中前六类在 as-built 邮件路径可达（S12/S13/S14 证据），修复属 #1012。
 
 ### 5.2 失败与容量策略（全部为提案/目标，**无任何一项已测**）
@@ -319,8 +355,8 @@ Scanner tick（E08，部分失败时未知数量显式 unknown）：
 | 项 | 提案目标 | 说明 |
 | --- | --- | --- |
 | 单行大小 | ≤ 1 KiB（E06/E07 行 ≤ 256B，E08 ≤ 512B） | 与 audit truncate 常规同量级；实现时以截断+固定 marker 兜底 |
-| 新增 always-on 日志行 | 0（E09 HOLD；E08 仅非空；E04 转移式） | 无条件 per-tick/per-poll 行不启用 |
-| 每事件频率上界 | 转移式或失败式发射，每源每状态 ≤1 行/转移 | E04/E09 候选共用此形态 |
+| 新增 always-on 日志行 | 0（E09 HOLD；E08 仅非空结果发射、空 tick 0 行=诚实 blindspot；E04 默认 counter-only 0 行） | 无条件 per-tick/per-poll/per-request 行不启用 |
+| 每事件频率上界 | E08：仅非空结果，≤1 行/tick（no_op/acted/partial_failure）；E06/E07：业务动作频率；E01：仅失败时且须过 volume gate；E04：默认 0 行/请求 | 转移式形态仅保留给已获批的显式 rate-bound 设计（E04 transition row、E09 候选同受此约束，见 §2.3） |
 | 丢弃计数器 | 每发射点 1 个整数，无队列无缓冲 | §4.5 |
 | 进程内存 | 不新增无界 map/queue/buffer；去重状态 = 固定枚举 × 状态 | operability 同型先例 `operabilityMonitor.ts:234-252` |
 | 性能预算 | 若未来任一实施引入常驻观测成本，先冻结测量方案再实施（ADR-029 §8：CPU ≤5%、p99 ≤5% 为目标门槛） | 本提案不声称任何成本数字 |
@@ -330,7 +366,7 @@ Scanner tick（E08，部分失败时未知数量显式 unknown）：
 1. **API 宿主**：用真实 Fastify/Pino 序列化路径在真实错误调用点采集日志字节断言 closed-field（`logger:false` 测试只能证明业务行为，不能证明日志隐私——`emailOutboxLoop.test.ts` 现状即此局限）。
 2. **Standalone 宿主**：覆盖真实 stdout/stderr JSON writer（含 fatal 入口与 sender close）；不得用 Pino 测试代替。
 3. **DB 语义**：真实 PostgreSQL 读取实际写入的 heartbeat / outbox 行；历史脏值 fixture 不经新安全 writer 预处理。
-4. **负例测试**（每行信号至少一条）：注入合成 marker（SQL、binds、SMTP response、recipient、答案内容、URL）断言不出现；401 信号无 org 字段；拒绝信号无目标细节；双 org fixture 不串 org。
+4. **负例测试**（每行信号至少一条）：注入合成 marker（SQL、binds、SMTP response、recipient、答案内容、URL）断言不出现；401 信号无 org 字段；拒绝信号无目标细节。multi-org 负面测试分两层（§3 声明 4）：**service/repository isolation test**——构造 OrganizationScope A/B，交错调用共享 email service/repository（A send/fail、B send/fail、A retry、B retry），断言 outbox row 不跨 org、safe error persistence 不串 org、correlation/worker business data 不串 org；**worker host/bootstrap test**——真实 in-process 与 standalone email worker 维持 0 org → bootstrap_pending、1 org → normal、>1 org → fail closed/fatal，不为"双 org worker test"解除 `waitForSingleOrganization`。Multi-org fixtures validate data isolation below the deployment-host boundary; they do not activate multiTenant runtime.
 5. **四值区分**：E08 未知数量、E02/E03 nullable 语义的显式断言（unknown ≠ 0 ≠ null ≠ failed）。
 6. **单调时钟**：elapsed 字段的测试用可控时钟注入，禁止 sleep。
 7. **TDD**：行为已知的实施先建失败测试再实现（repo §7）；本提案本身无测试（DESIGN_ONLY，未运行任何仓库门禁）。
@@ -345,20 +381,23 @@ Scanner tick（E08，部分失败时未知数量显式 unknown）：
 - **本提案不复制 #1012 的实施细节**：E11 行只锁定契约方向（单一隐私策略 owner、两 transport adapter、读侧历史投影、封闭分类），实施细节以 #1012 PR 为准；两份 PR 合并后以 #1012 的 as-built 修订 `docs/contracts/observability.md`（该文件不在本 PR 修改，写者归属由协调者指定）。
 - **共享不变量**（两 Job 共同遵守）：bootstrap_pending 可识别、lastError `string|null` 形状不变、无 migration、不接线 auditEmitter、不激活 reserved actions、诊断 workerStatus 判定不变健康。
 
-## 7. 留给 Owner 的决定清单
+## 7. Owner 决定清单（已冻结立场 + 开放决策）
 
-| # | 决定项 | 本提案立场（供裁决，非决定） |
-| --- | --- | --- |
-| 1 | 模块方案采纳：A（推荐）/ A+组合 / B（HOLD+触发条件）/ C（当前 NO_EXTRACT） | 推荐A；B 触发条件见 §4.3；C 需新证据 |
-| 2 | E01 是否允许 200+degraded / nullable response（contracts 变更） | 不预设；本提案只提日志信号 |
-| 3 | E02 oldestPendingAge 字段迁移方向（保留语义 vs 拆分新字段） | 不预设 |
-| 4 | E04 洪泛预算具体形态（纯计数器 vs 计数器+转移行） | 倾向计数器+转移行，值待定 |
-| 5 | E05 correlation 字段词汇与传入边界（requestId/attemptId/operationId 三选几） | 倾向全可选、调用方显式传 |
-| 6 | E05 若签名扩散不可接受，是否重议 ALS | 默认否（§4.4） |
-| 7 | E06/E07/E08 outcome 枚举词汇冻结（E06 五值含 `deadline_frozen`；E07 确认 400 归全局校验边界而非 `admin.command.denied`） | 候选值与归属见 §2.3，待冻结 |
-| 8 | E09 转移行是否启用（当前 HOLD） | 默认不启用，复用 heartbeat |
-| 9 | E10 reserved email audit 激活策略 | 归 #1011，本提案无立场 |
-| 10 | E11 实施确认：隐私策略 owner + 读侧投影（与 #1012 PR 对齐） | 方向已授权，细节以 #1012 为准 |
-| 11 | E12 retention 政策与测量字段 | 归 #1013（测量先行） |
-| 12 | §5.2 预算目标值的冻结与未来测量方案（ADR-029 §8 引用） | 值为提案目标，待冻结后才有验收力 |
-| 13 | 未来 tenant-facing log query API 是否立项 | 不在本提案范围；需独立 RBAC/capability 决策 |
+标注"已冻结立场"的条目是 2026-11-17 Owner review 退修后 proposal 内冻结的设计立场，**仍待 Owner architecture gate 最终裁决**，不是实施授权；"开放"条目仍无预设结论。
+
+| # | 决定项 | 状态 | 立场 |
+| --- | --- | --- | --- |
+| 1 | 模块方案 | 已冻结立场 | **A = 采用**（owner-local typed adapter；每个 bounded owner 恰好一个 local typed emission boundary，负责 event vocabulary、closed fields、safe correlation、emission policy、size/rate policy；A ≠ 业务代码散落 `log.*`）；**B = HOLD**（重评触发：≥2 independent owners need the same behavior (not merely the same names) AND 该行为已出现在 ≥3 implementation sites 且带重复 correctness/test burden，§4.3）；**C = NO_EXTRACT**（当前无共享稳定 workspace API 证据） |
+| 2 | E01 响应形状与发射预算 | 已冻结立场 | `/api/ready` = sole deployment readiness authority；health 200+degraded、nullable contracts **不预批**（contracts 变更归 #1002）；`db.auth_lookup.failed` / `db.probe.failed` 若未来启用也须过 volume gate；DB down 时不得制造 uncontrolled per-request log storm（§2.3 E01） |
+| 3 | E02 字段语义方向 | 已冻结立场（推荐） | 推荐 `oldestDuePendingAgeSeconds`（显式 due-only + seconds）取代模糊的 `oldestPendingAge`；仍属 #1003 Owner contract decision，#1015 只记录推荐、不实施 |
+| 4 | E04 洪泛预算形态 | 已冻结立场 | **counter-only = current default**（固定枚举 missing_cookie / invalid_token / epoch_mismatch / inactive_user / authority_denied，进程内固定 size counter，默认不逐请求发射 `auth.denied`）；**transition row = HOLD until E-2 + explicit rate-bound design**（bounded state cardinality ≠ bounded log emission rate，未来任何 transition row 必须满足可证明的 max emitted rows / time interval，见 §2.3 E04） |
+| 5 | E05 correlation API 形态 | 已冻结立场（推荐） | 默认 explicit propagation，不采用 AsyncLocalStorage；不推荐第四个裸 positional parameter 作为首选 API；建议 #1006 优先评估 `executeInTransaction(db, callback, { isolationLevel, correlation?: { requestId?; organizationId?; attemptId?; operationId? } })` 形态；organizationId 只能来自 trusted server-side context；requestId 仅限 HTTP，后台工作不得伪造 requestId；是否加入 organizationId 由 #1006 最终设计决定；不得引入全局 mutable identity |
+| 6 | E05 若签名扩散不可接受，是否重议 ALS | 已冻结立场 | 默认否（§4.4） |
+| 7 | E06/E07/E08 outcome 词汇与归属 | 已冻结立场 | E06 五值 graded / pending_manual / replay_no_change / deadline_frozen / recovered 保留，继续 commit-authoritative emission；E07：400 → global validation boundary，403/404/409 → admin command decision boundary where applicable，不为 admin command 复制全局 400 日志；E08 默认 active outcome vocabulary = **no_op / acted / partial_failure**，`empty` 不在当前 emitted enum（空 tick = 诚实 blindspot，未来扩展须 E-2 volume measurement + Owner Gate 批准 per-tick settlement row，属后续 contract delta） |
+| 8 | E09 转移行是否启用 | 已冻结立场 | 保持 HOLD；默认复用 persisted heartbeat，不新增每 poll log |
+| 9 | E10 reserved email audit 激活策略 | 已冻结立场 | reserved email audit action **不激活**；激活与否是 #1011 的策略决策 |
+| 10 | E11 实施确认 | 已冻结立场 | 隐私策略 owner + 读侧投影，与 #1012 PR 对齐（方向已授权，实施细节以 #1012 为准） |
+| 11 | E12 retention 顺序 | 已冻结立场 | measure → retention policy → implementation 顺序保持；不顺手新增 cleanup loop；归 #1013 |
+| 12 | §5.2 预算目标值的冻结与未来测量方案（ADR-029 §8 引用） | 开放 | 值为提案目标，待冻结后才有验收力 |
+| 13 | E08 未来 per-tick settlement row | 开放（带门槛） | 仅当 E-2 volume measurement + Owner Gate 批准"一 tick 一 settlement row"，才允许把 outcome enum 扩展为 {empty, no_op, acted, partial_failure}；在批准前是当前默认契约之外的后续 contract delta |
+| 14 | 未来 tenant-facing log query API 是否立项 | 开放 | 不在本提案范围；需独立 RBAC/capability 决策 |

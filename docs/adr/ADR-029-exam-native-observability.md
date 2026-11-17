@@ -2,7 +2,7 @@
 
 ## Status
 
-- Status: **PROPOSED**（2026-11-16 起草，提交 Owner 评审；**未接受前不构成施工授权，也不改变任何现行契约**。本文档只确定研究方向与硬约束边界。2026-11-17 增量修订：澄清 standalone worker 独立日志出口、标注 #998 已修复 D1、链接 #1001 设计提案；均为事实澄清与链接，不改变任何决定方向，状态保持 PROPOSED。）
+- Status: **PROPOSED**（2026-11-16 起草，提交 Owner 评审；**未接受前不构成施工授权，也不改变任何现行契约**。本文档只确定研究方向与硬约束边界。2026-11-17 增量修订：澄清 standalone worker 独立日志出口、标注 #998 已修复 D1、链接 #1001 设计提案；均为事实澄清与链接，不改变任何决定方向，状态保持 PROPOSED。2026-11-17 Owner review 退修：§6/§8 的隐私边界措辞由"一律经既有 REDACT_CONFIG/白名单序列化边界"修正为 host-specific approved privacy boundary——双宿主隐私保证等效要求成立，不要求相同 transport 实现，也不暗示 standalone 最终必须接入 Pino；不改变任何决定方向，状态保持 PROPOSED。）
 - Date: 2026-11-16（proposed；2026-11-16 之后的最小修订见文内标注）
 - 基线：v0.0.15 产品基线（`cb1e614fe087e7ac158deef4a4de7f29268de292`）+ ADR-028 REJECTED（2026-11-16）
 - Decision owners: project Owner（方向接受与任何后续实施授权分别裁决）
@@ -71,7 +71,7 @@ ADR-028（REJECTED）的研究与实施表明：在当前实验条件与部署�
 1. **侵入性蔓延**：阶段计时与因果标识的穿线可能扩散到大量函数签名。缓解：优先选择进程内 context 载体与既有缝扩展；每个增量单独评审其接触面。
 2. **开销重蹈覆辙**：即使不引入 OTel，无界缓冲/同步序列化同样可能造成可观开销。缓解：§7 硬约束中的预算与上界在实现前即为验收条件。
 3. **观测故障影响业务**：缓冲满、序列化异常、sink 阻塞都可能反压业务。缓解：观测路径必须 fail-open（观测失败丢弃信号并计数，不阻塞、不抛出到业务路径）。
-4. **隐私回退**：新字段可能把参数值、原始 URL 或业务 payload 带入日志。缓解：一律经既有 REDACT_CONFIG/白名单序列化边界，新增字段逐项过隐私评审。ADR-028 战役发现的 D1 缺陷（500 路径 err.message 携带全列 SQL + 绑定参数值）**已由 #998 修复并随 PR #1014 合入 master（2026-11-17 核对：`apps/api/src/lib/logRedaction.ts` 的 `serializeErrorForLog` 将 message 固定化、stack 清空、code 限封闭集合）**。注意该修复只覆盖 Pino 的 `err` 序列化通道；邮件路径自定义 `error:` 字符串字段与 standalone worker 直接 JSON 出口的隐私缺口由 #1012 修复，不在本 ADR 内重开。
+4. **隐私回退**：新字段可能把参数值、原始 URL 或业务 payload 带入日志。缓解：**host-specific approved privacy boundary**——API host：Pino + REDACT_CONFIG + approved serializer / closed-field policy；standalone email worker：email privacy policy + closed-field representation + standalone JSON transport adapter。总规则：**Every technical signal must cross the approved privacy boundary of its deployment host. Equivalent privacy guarantees are required; identical transport implementation is NOT required.**（等效隐私保证是硬要求；相同 transport 实现不是要求，也不暗示 standalone 出口最终必须接入 Pino。）新增字段逐项过隐私评审。ADR-028 战役发现的 D1 缺陷（500 路径 err.message 携带全列 SQL + 绑定参数值）**已由 #998 修复并随 PR #1014 合入 master（2026-11-17 核对：`apps/api/src/lib/logRedaction.ts` 的 `serializeErrorForLog` 将 message 固定化、stack 清空、code 限封闭集合）**。注意该修复只覆盖 Pino 的 `err` 序列化通道；邮件路径自定义 `error:` 字符串字段与 standalone worker 直接 JSON 出口的隐私缺口由 #1012 修复，不在本 ADR 内重开。
 5. **重复真相源**：同一耗时/计数若同时出现在日志字段、diagnostics 与未来包中，可能漂移。缓解：单一权威写入口，派生视图由权威源投影。
 
 ## 7. Research Questions（Stage B 研究输入；结论不改现状）
@@ -95,7 +95,7 @@ ADR-028（REJECTED）的研究与实施表明：在当前实验条件与部署�
 | 性能预算 | 稳态 CPU 额外开销 ≤5% 且 p99 额外开销 ≤5%（vs Off 基线，同 SHA 配对测量） |
 | 资源上界 | 缓冲与内存开销有明确、可验证的上界；超界行为为丢弃 + 计数，不阻塞 |
 | 故障隔离 | 观测故障不得阻塞业务请求、事务、重试、readiness 或关机语义（关机预算 30s 契约不变） |
-| 隐私 | 新增日志字段全部经既有脱敏边界；无 raw SQL、绑定参数值、原始 URL、凭据、答案内容 |
+| 隐私 | 新增技术信号全部经其部署宿主的 approved privacy boundary（API host：Pino + REDACT_CONFIG + approved serializer / closed-field policy；standalone email worker：email privacy policy + closed-field representation + standalone JSON transport adapter）；无 raw SQL、绑定参数值、原始 URL、凭据、答案内容 |
 | 依赖 | 不引入 §5 排除项；workspace 依赖边界检查通过 |
 
 测量方法学与样本量要求在具体实施授权时另行冻结（参照 #964 战役的预注册协议经验：先冻结判定规则，再执行测量）。
