@@ -7,7 +7,7 @@ as an image-size implementation detail.
 
 | Surface | Image | Runtime family |
 | --- | --- | --- |
-| API build + runtime | `node:24.22.1-bookworm-slim` | Debian 12 / glibc |
+| API build + runtime | `node:24.22.3-bookworm-slim` | Debian 12 / glibc |
 | Web edge | `nginx:1.30.5-trixie` | Debian 13 / glibc |
 | PostgreSQL | `postgres:18.4-bookworm` | Debian 12 / glibc |
 | Redis | `redis:7.4.12-bookworm` | Debian 12 / glibc |
@@ -15,8 +15,9 @@ as an image-size implementation detail.
 
 The production, development, and CI Redis services intentionally use the same
 Debian/glibc image family. Active Docker/Compose/CI/E2E runtime configuration
-must not introduce Alpine/musl images. `pnpm lint:container-runtime` enforces
-that boundary.
+must not introduce Alpine/musl images. Node is pinned to an exact patch version
+in `.nvmrc`; GitHub Actions consumes that file and the Dockerfile must match it
+exactly. `pnpm lint:container-runtime` enforces both boundaries.
 
 Historical material under `docs/archive/**` and frozen research evidence under
 `docs/research/**` may still name earlier Alpine baselines. Those records are
@@ -40,4 +41,4 @@ signals/graceful shutdown, migration failure semantics, CA/timezone behavior,
 and the production module-resolution oracle.
 
 Until that migration is independently implemented and proven, the pinned
-`node:24.22.1-bookworm-slim` runner is the production baseline.
+`node:24.22.3-bookworm-slim` runner is the production baseline.

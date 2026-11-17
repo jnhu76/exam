@@ -67,7 +67,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -112,7 +112,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -162,7 +162,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -240,7 +240,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -307,7 +307,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -396,7 +396,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -541,7 +541,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.22.x"
+          node-version-file: ".nvmrc"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 

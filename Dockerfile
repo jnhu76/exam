@@ -1,4 +1,4 @@
-FROM node:24.22.1-bookworm-slim AS base
+FROM node:24.22.3-bookworm-slim AS base
 
 # Official registries by default; override for restricted networks (see
 # docs/docker-troubleshooting.md), e.g.:
