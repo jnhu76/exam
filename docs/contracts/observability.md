@@ -244,17 +244,23 @@ Phase 2 (in-process `setInterval`). Their diagnostics contract:
 | scanIntervalMs | runtimeConfig / scannerMetrics | |
 | lastScanAt | scannerMetrics | surfaced in `/system/diagnostics` |
 | disruptedCount / autoSubmitCount | scannerMetrics | surfaced in diagnostics |
-| failedCount | scanner error log | pino `logger.error` on failed auto-submit |
+| failedCount | scannerMetrics | surfaced in diagnostics (#800); in-memory since process start, reset on restart. The heartbeat block splits the legs: disruption failures as `failedCount`, System-incident reconciliation failures as `incidentReconciliationFailedCount` |
 | consecutiveFailedTicks | scannerMetrics | surfaced in diagnostics (#886); #862 escalation run-length (reset on restart, clean settle zeroes, tick throw freezes) — not the cumulative failedCount |
+| incidentCreatedCount / incidentConflictCount | heartbeatMetrics | surfaced in diagnostics (#1004); #304 F4A System-incident reconciliation counters since process start — process-local, reset on restart, not persisted, never aggregated across API instances. `incidentCreatedCount` = distinct applied creates (max one per interruption episode; idempotent replays excluded); `incidentConflictCount` = per-cycle idempotency-conflict OBSERVATIONS (operationId already used for a different command/payload, or the committed event's incident row missing in the defensive recovery path; the same collision is re-counted each reconciliation cycle until resolved); every conflict observation is also a reconciliation-leg failure, so `incidentConflictCount` is a subset of `incidentReconciliationFailedCount` |
 | organizationId | ctx of the scanned attempt | tenant scoping |
 | attemptId | the scanned row | for incident correlation |
 
 > Implementation status: scanIntervalMs, lastScanAt, disruptedCount,
-> autoSubmitCount are surfaced via `/system/diagnostics` and the
-> `heartbeatMetrics`/`deadlineScannerMetrics` objects. Failed auto-submits are
-> logged via `logger.error` (deadlineScanner.ts:192). No structured-job-log
-> table exists; this is intentional for Phase 2 (no queue/worker). Redis
-> diagnostics are also surfaced in diagnostics (`redisStatus`).
+> failedCount, incidentReconciliationFailedCount and consecutiveFailedTicks are
+> surfaced via `/system/diagnostics` from the `heartbeatMetrics` /
+> `deadlineScannerMetrics` objects. Failed auto-submits are additionally logged
+> via `logger.error` (deadlineScanner.ts:192). The heartbeat incident
+> reconciliation counters (`incidentCreatedCount` / `incidentConflictCount`)
+> are surfaced the same read-only way through the existing diagnostics
+> response (#1004) — they are host-level, process-local counters, never a
+> tenant-scoped incident report. No structured-job-log table exists; this is
+> intentional for Phase 2 (no queue/worker). Redis diagnostics are also
+> surfaced in diagnostics (`redisStatus`).
 
 ## Test diagnostics fields
 

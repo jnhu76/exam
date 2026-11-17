@@ -38511,6 +38511,14 @@
                           "type": "integer",
                           "minimum": 0
                         },
+                        "incidentCreatedCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "incidentConflictCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
                         "consecutiveFailedTicks": {
                           "type": "integer",
                           "minimum": 0
@@ -38543,6 +38551,8 @@
                         "disruptedCount",
                         "failedCount",
                         "incidentReconciliationFailedCount",
+                        "incidentCreatedCount",
+                        "incidentConflictCount",
                         "consecutiveFailedTicks",
                         "startedAt",
                         "lastStartedAt",

@@ -576,6 +576,162 @@ describe("system routes", () => {
       }
       resetRuntimeConfigForTest();
     });
+    // ── #1004 / E03 / W10: heartbeat incident counter projection ──────
+    // The plugin-owned `heartbeatMetrics` object stays the SINGLE mutation
+    // authority; diagnostics only reads it. These tests pin exact-value
+    // projection, independence of the two counters, read purity and the
+    // absence of any second writer — not persistence (the counters are
+    // process-local by contract and reset on restart).
+    describe("heartbeat incident counter projection (#1004)", () => {
+      interface IncidentSnapshot {
+        created: number;
+        conflicts: number;
+      }
+
+      function readIncidentCounters(): IncidentSnapshot {
+        return {
+          created: heartbeatMetrics.systemIncidentsCreated,
+          conflicts: heartbeatMetrics.systemIncidentConflicts,
+        };
+      }
+
+      function restoreIncidentCounters(previous: IncidentSnapshot) {
+        heartbeatMetrics.systemIncidentsCreated = previous.created;
+        heartbeatMetrics.systemIncidentConflicts = previous.conflicts;
+      }
+
+      async function readDiagnostics() {
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        expect(res.statusCode).toBe(200);
+        return res.json();
+      }
+
+      it("exposes both incident counters as zero on a fresh process", async () => {
+        const body = await readDiagnostics();
+        expect(body.heartbeatStatus.incidentCreatedCount).toBe(0);
+        expect(body.heartbeatStatus.incidentConflictCount).toBe(0);
+      });
+
+      it("projects the exact owning-metric values without a second authority", async () => {
+        const previous = readIncidentCounters();
+        heartbeatMetrics.systemIncidentsCreated = 11;
+        heartbeatMetrics.systemIncidentConflicts = 13;
+        try {
+          const first = await readDiagnostics();
+          expect(first.heartbeatStatus.incidentCreatedCount).toBe(11);
+          expect(first.heartbeatStatus.incidentConflictCount).toBe(13);
+
+          // Mutating ONLY the metric must change the next projection. A
+          // route-side mirror/cache would keep serving stale values and would
+          // constitute a second authority.
+          heartbeatMetrics.systemIncidentsCreated = 12;
+          const second = await readDiagnostics();
+          expect(second.heartbeatStatus.incidentCreatedCount).toBe(12);
+          expect(second.heartbeatStatus.incidentConflictCount).toBe(13);
+        } finally {
+          restoreIncidentCounters(previous);
+        }
+      });
+
+      it("keeps created and conflict counters independently represented", async () => {
+        const previous = readIncidentCounters();
+        try {
+          heartbeatMetrics.systemIncidentsCreated = 5;
+          heartbeatMetrics.systemIncidentConflicts = 0;
+          const onlyCreated = await readDiagnostics();
+          expect(onlyCreated.heartbeatStatus.incidentCreatedCount).toBe(5);
+          expect(onlyCreated.heartbeatStatus.incidentConflictCount).toBe(0);
+
+          heartbeatMetrics.systemIncidentsCreated = 0;
+          heartbeatMetrics.systemIncidentConflicts = 9;
+          const onlyConflict = await readDiagnostics();
+          expect(onlyConflict.heartbeatStatus.incidentCreatedCount).toBe(0);
+          expect(onlyConflict.heartbeatStatus.incidentConflictCount).toBe(9);
+        } finally {
+          restoreIncidentCounters(previous);
+        }
+      });
+
+      it("does not mutate the owning metrics on read (read-only projection)", async () => {
+        const previous = readIncidentCounters();
+        heartbeatMetrics.systemIncidentsCreated = 3;
+        heartbeatMetrics.systemIncidentConflicts = 4;
+        try {
+          await readDiagnostics();
+          await readDiagnostics();
+          expect(readIncidentCounters()).toEqual({ created: 3, conflicts: 4 });
+        } finally {
+          restoreIncidentCounters(previous);
+        }
+      });
+
+      it("returns stable values across repeated reads", async () => {
+        const previous = readIncidentCounters();
+        heartbeatMetrics.systemIncidentsCreated = 21;
+        heartbeatMetrics.systemIncidentConflicts = 4;
+        try {
+          const first = await readDiagnostics();
+          const second = await readDiagnostics();
+          expect(second.heartbeatStatus.incidentCreatedCount).toBe(
+            first.heartbeatStatus.incidentCreatedCount,
+          );
+          expect(second.heartbeatStatus.incidentConflictCount).toBe(
+            first.heartbeatStatus.incidentConflictCount,
+          );
+        } finally {
+          restoreIncidentCounters(previous);
+        }
+      });
+
+      it("exposes no fields beyond the documented heartbeat block allowlist", async () => {
+        const body = await readDiagnostics();
+        // Explicit allowlist (not a snapshot): a new key here would need its
+        // own contract decision. The two #1004 counters carry plain integers —
+        // no incident id/payload/organization identity is projected.
+        expect(Object.keys(body.heartbeatStatus).sort()).toEqual([
+          "activeSince",
+          "consecutiveFailedTicks",
+          "disruptedCount",
+          "failedCount",
+          "incidentConflictCount",
+          "incidentCreatedCount",
+          "incidentReconciliationFailedCount",
+          "interval",
+          "lastScanAt",
+          "lastSettledAt",
+          "lastStartedAt",
+          "stallState",
+          "startedAt",
+          "timeout",
+        ]);
+        expect(typeof body.heartbeatStatus.incidentCreatedCount).toBe("number");
+        expect(typeof body.heartbeatStatus.incidentConflictCount).toBe(
+          "number",
+        );
+        // The counter values themselves must not smuggle serialized incident
+        // evidence (ids, org, actor, error text); they are integers.
+        expect(
+          Number.isInteger(body.heartbeatStatus.incidentCreatedCount),
+        ).toBe(true);
+        expect(
+          Number.isInteger(body.heartbeatStatus.incidentConflictCount),
+        ).toBe(true);
+      });
+
+      it("denies a Candidate — host-operational diagnostics stay operator-only", async () => {
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.candidateToken },
+        });
+        expect(res.statusCode).toBe(403);
+        expect(res.json().heartbeatStatus).toBeUndefined();
+      });
+    });
   });
 
   // Read-only attempt-integrity anomalies.
