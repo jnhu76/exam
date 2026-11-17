@@ -3,7 +3,7 @@ import type { AttemptCommandDisposition } from "@exam/contracts";
 import type { GrantOutcome } from "@exam/exam-engine";
 
 /**
- * W07 (#1008 / E07) — owner-local typed emission boundary for the two admin
+ * #1008 — owner-local typed emission boundary for the two admin
  * attempt commands (`force_submit`, `time_grant`). One bounded owner owns the
  * closed vocabularies, the field whitelist, the identity source, the emission
  * conditions, and the failure isolation (#1001 decision A: no central
@@ -17,7 +17,7 @@ import type { GrantOutcome } from "@exam/exam-engine";
  *    not a commit), never reconstructed from the HTTP status or the receipt
  *    history, and never derived from a test-only observer.
  *  - `admin.command.denied` is emitted at most once per request, from a
- *    route-scoped onResponse hook (#1008 W07), only for 403/404/409 — the
+ *    route-scoped onResponse hook (#1008), only for 403/404/409 — the
  *    exits that prove this request did NOT commit a business fact. 400/401/
  *    500/503 keep their existing owners and stay silent here.
  *
@@ -47,8 +47,8 @@ export type AdminCommandDeniedOutcome = "forbidden" | "not_found" | "conflict";
 
 /**
  * Event-catalog names. They are emitted as the payload `event` field — the
- * uniform selection basis for all technical event lines (W05's
- * `attempt.submit.completed` uses the same convention), so catalog queries
+ * uniform selection basis for all technical event lines (the candidate-submit
+ * completed event, #1007, uses the same convention), so catalog queries
  * never depend on `msg`. `msg` carries the same string as human-readable
  * content.
  */

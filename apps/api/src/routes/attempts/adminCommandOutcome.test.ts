@@ -1,7 +1,7 @@
 /**
- * #1008 / E07 / W07 — admin force-submit / time-grant final command outcome
+ * #1008 — admin force-submit / time-grant final command outcome
  * and denial correlation, asserted at the REAL Fastify + Pino serialization
- * boundary (a capturing stream, per the #1020 W03 precedent in
+ * boundary (a capturing stream, per the #1020 precedent in
  * `retryCorrelation.w03.test.ts`; `logger:false` can only prove business).
  *
  * Commit-authoritative contract under test:
@@ -52,12 +52,12 @@ type LogLine = Record<string, unknown>;
 /** Event-catalog names — the payload `event` field IS the selection basis. */
 const COMPLETED_EVENT = "admin.command.completed";
 const DENIED_EVENT = "admin.command.denied";
-const SLUG_PREFIX = "w07-admin-outcome-";
+const SLUG_PREFIX = "admin-command-outcome-";
 /** Raw pino line upper bound, pinned like the #1006 WARN budget (512 B). */
 const MAX_EVENT_LINE_BYTES = 512;
 
 /**
- * Sorted key sets a w07 line may carry: pino envelope + closed payload +
+ * Sorted key sets an admin command line may carry: pino envelope + closed payload +
  * the request child-logger's inherited bindings. The authenticate preHandler
  * binds the CALLER's own server-verified identity (plugins/auth.ts:203-207 —
  * actorId/actorRole/organizationId of the requester, per the business-line
@@ -97,7 +97,7 @@ const DENIED_LINE_KEYS = [
   ...INHERITED_CALLER_BINDING_KEYS,
 ].sort();
 
-describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)", () => {
+describe("admin force-submit / time-grant command outcome telemetry (#1008)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   const logChunks: string[] = [];
@@ -241,7 +241,7 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
   }
 
   /**
-   * Fault-injects the DB transaction boundary (W03 precedent): the first
+   * Fault-injects the DB transaction boundary (#1020 precedent): the first
    * `count` transaction attempts throw the given SQLSTATE (optionally with
    * constraint fields) before the callback runs. `"all"` exhausts the retry
    * ceiling.
@@ -336,7 +336,7 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
   }
 
   /**
-   * One-shot response-send fault for W07-9 (owner review round 1, item 4):
+   * One-shot response-send fault for the wire-exit failure case (owner review round 1, item 4):
    * when armed, the FIRST response send in this app throws inside the send
    * phase — a wire-exit failure injected on the REAL production routes (the
    * routes `attempts.admin.ts` registers, complete with the production
@@ -380,18 +380,18 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     await ctx.drainAuditWritesStrict();
   });
 
-  describe("W07-1 force_submit completed dispositions", () => {
+  describe("force_submit completed dispositions", () => {
     it("applied: one completed line, closed payload, reqId joins the x-request-id header", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Applied");
+      const { attemptId } = await createStartedAttempt(t, "Applied");
       const operationId = crypto.randomUUID();
 
       const res = await forceSubmit(t, attemptId, {
         operationId,
-        reason: "w07 applied",
+        reason: "applied probe",
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().disposition).toBe("applied");
@@ -416,9 +416,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("first no_change on a terminal attempt: replay_no_change/no_change, receipt created, no audit", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 NoChange");
+      const { attemptId } = await createStartedAttempt(t, "NoChange");
       // Terminalize via a first force-submit, then issue a NEW operationId.
       const firstOp = crypto.randomUUID();
       await forceSubmit(t, attemptId, { operationId: firstOp, reason: "one" });
@@ -450,9 +450,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("replay of an applied receipt and replay of a no_change receipt both record idempotent_replay", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Replays");
+      const { attemptId } = await createStartedAttempt(t, "Replays");
       const appliedOp = crypto.randomUUID();
       await forceSubmit(t, attemptId, {
         operationId: appliedOp,
@@ -490,20 +490,20 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-2 time_grant completed outcomes", () => {
+  describe("time_grant completed outcomes", () => {
     it("granted: applied/granted", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Granted");
+      const { attemptId } = await createStartedAttempt(t, "Granted");
       const operationId = crypto.randomUUID();
 
       const res = await timeGrant(t, attemptId, {
         operationId,
         addedSeconds: 300,
         reasonCode: "candidate_request",
-        reasonText: "w07 granted",
+        reasonText: "granted probe",
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().outcome).toBe("granted");
@@ -527,9 +527,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       // may have terminalized the attempt inside the same transaction.
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Terminal");
+      const { attemptId } = await createStartedAttempt(t, "Terminal");
       await ctx.db
         .update(schema.examAttempts)
         .set({ deadlineAt: new Date(Date.now() - 60_000) })
@@ -554,9 +554,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("idempotent replay of a committed grant: replay_no_change/idempotent_replay", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 GrantReplay");
+      const { attemptId } = await createStartedAttempt(t, "GrantReplay");
       const operationId = crypto.randomUUID();
       await timeGrant(t, attemptId, {
         operationId,
@@ -582,13 +582,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-3 same-operation concurrency (per-request signal, protocol-owned side effects)", () => {
+  describe("same-operation concurrency (per-request signal, protocol-owned side effects)", () => {
     it("two concurrent same-operationId force-submits: one applied + one replay, each request exactly one completed line", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Concurrent");
+      const { attemptId } = await createStartedAttempt(t, "Concurrent");
       const operationId = crypto.randomUUID();
       const body = { operationId, reason: "concurrent" };
 
@@ -614,13 +614,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-4 exact-23505 race recovery", () => {
+  describe("exact-23505 race recovery", () => {
     it("primary rollback on the real receipt unique violation → recovery replay: exactly one completed, zero denied", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 23505");
+      const { attemptId } = await createStartedAttempt(t, "Exact 23505");
       const operationId = crypto.randomUUID();
       const reason = "raced winner";
       const restore = slipConcurrentReceiptWinner(() =>
@@ -654,9 +654,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("recovery classifies a drifted payload as conflict: exactly one denied, zero completed", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 23505c");
+      const { attemptId } = await createStartedAttempt(t, "23505 Conflict");
       const operationId = crypto.randomUUID();
       const restore = slipConcurrentReceiptWinner(() =>
         insertWinnerReceipt(
@@ -688,13 +688,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-5/6 non-target 23505, retry exhaustion, audit rollback", () => {
+  describe("non-target 23505, retry exhaustion, audit rollback", () => {
     it("non-target 23505 is neither swallowed nor converted to success: 409, one denied, zero completed", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 23505x");
+      const { attemptId } = await createStartedAttempt(t, "23505 NonTarget");
       const restore = failTransactions(1, "23505");
 
       let res: Awaited<ReturnType<typeof forceSubmit>>;
@@ -718,9 +718,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("retry exhaustion: 409 with zero completed and exactly one denied", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Exhaust");
+      const { attemptId } = await createStartedAttempt(t, "Retry Exhaustion");
       const restore = failTransactions("all", "40001");
 
       let res: Awaited<ReturnType<typeof forceSubmit>>;
@@ -743,9 +743,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("in-transaction audit failure rolls back everything: 500, zero completed, zero denied", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 AuditFail");
+      const { attemptId } = await createStartedAttempt(t, "Audit Failure");
       const suffix = crypto.randomUUID().replaceAll("-", "");
       const fn = `fail_fs_audit_${suffix}`;
       const trigger = `fail_fs_audit_t_${suffix}`;
@@ -789,13 +789,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-7 denial ownership and envelopes", () => {
+  describe("denial ownership and envelopes", () => {
     it("400 stays out of the denied vocabulary (zero admin.command.* lines)", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 400");
+      const { attemptId } = await createStartedAttempt(t, "Bad Request");
       const res = await forceSubmit(t, attemptId, {
         operationId: "",
         reason: "",
@@ -807,9 +807,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("401 stays out of the denied vocabulary", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 401");
+      const { attemptId } = await createStartedAttempt(t, "Unauthorized");
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/admin/attempts/${attemptId}/force-submit`,
@@ -822,9 +822,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("403 role preset denial (preHandler, handler unreachable): one denied forbidden with closed payload", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 403");
+      const { attemptId } = await createStartedAttempt(t, "Forbidden");
       const res = await forceSubmit(
         t,
         attemptId,
@@ -851,7 +851,7 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("404 for a nonexistent attempt: one denied not_found", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
       const res = await forceSubmit(t, crypto.randomUUID(), {
         operationId: crypto.randomUUID(),
@@ -867,13 +867,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("404 anti-enumeration: a cross-organization target is logged with the SAME not_found value", async () => {
       const orgA = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07A",
+        label: "OrgA",
       });
       const orgB = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07B",
+        label: "OrgB",
       });
-      const { attemptId } = await createStartedAttempt(orgA, "W07 CrossOrg");
+      const { attemptId } = await createStartedAttempt(orgA, "CrossOrg");
 
       const res = await forceSubmit(orgB, attemptId, {
         operationId: crypto.randomUUID(),
@@ -898,9 +898,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("409 invalid state (voided attempt): one denied conflict, zero completed", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Voided");
+      const { attemptId } = await createStartedAttempt(t, "Voided");
       await ctx.db
         .update(schema.examAttempts)
         .set({ status: "voided" })
@@ -920,9 +920,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("409 payload drift on a committed operationId: one denied conflict (time-grant command)", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Drift");
+      const { attemptId } = await createStartedAttempt(t, "Drift");
       const operationId = crypto.randomUUID();
       await timeGrant(t, attemptId, {
         operationId,
@@ -948,9 +948,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("misconduct (out-of-scope admin command) emits NO admin.command.* lines, on success or denial", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Scope");
+      const { attemptId } = await createStartedAttempt(t, "Out Of Scope");
 
       const deniedRes = await ctx.app.inject({
         method: "POST",
@@ -979,13 +979,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-8 replay zero-write with signal", () => {
+  describe("replay zero-write with signal", () => {
     it("pre-read replay opens NO transaction, mutates nothing, and still emits completed", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 ZeroWrite");
+      const { attemptId } = await createStartedAttempt(t, "ZeroWrite");
       const operationId = crypto.randomUUID();
       await forceSubmit(t, attemptId, { operationId, reason: "first" });
       const before = await listReceipts(attemptId);
@@ -1017,13 +1017,13 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-9 committed fact survives a wire-exit failure on the REAL routes", () => {
+  describe("committed fact survives a wire-exit failure on the REAL routes", () => {
     it("force-submit: send-phase failure after commit keeps one completed, no false denied (production hook installed), business fact intact", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 WireFault");
+      const { attemptId } = await createStartedAttempt(t, "WireFault");
       const operationId = crypto.randomUUID();
 
       // Arm the one-shot send fault, then hit the REAL production route
@@ -1058,9 +1058,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("time-grant: send-phase failure after commit keeps one completed, no false denied (production hook installed), ledger committed", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 GrantWire");
+      const { attemptId } = await createStartedAttempt(t, "GrantWire");
       const operationId = crypto.randomUUID();
 
       armResponseSendFault = true;
@@ -1099,9 +1099,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("synthetic privacy markers never reach any admin.command line (reason, URL, error text)", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Privacy");
+      const { attemptId } = await createStartedAttempt(t, "Privacy");
       const marker = `SECRET-MARKER-${crypto.randomUUID()}`;
 
       await forceSubmit(t, attemptId, {
@@ -1156,9 +1156,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       // …and a real request with a healthy sink still works end-to-end.
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Isolation");
+      const { attemptId } = await createStartedAttempt(t, "Isolation");
       const res = await forceSubmit(t, attemptId, {
         operationId: crypto.randomUUID(),
         reason: "isolation",
@@ -1172,14 +1172,14 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("two organizations interleaved: request identities and completed facts do not cross", async () => {
       const orgA = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07A",
+        label: "OrgA",
       });
       const orgB = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07B",
+        label: "OrgB",
       });
-      const a = await createStartedAttempt(orgA, "W07 Interleave A");
-      const b = await createStartedAttempt(orgB, "W07 Interleave B");
+      const a = await createStartedAttempt(orgA, "Interleave A");
+      const b = await createStartedAttempt(orgB, "Interleave B");
       const opA = crypto.randomUUID();
       const opB = crypto.randomUUID();
 
@@ -1211,9 +1211,9 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     it("raw completed/denied line byte sizes stay within the event budget", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
-        label: "W07",
+        label: "AdminCmd",
       });
-      const { attemptId } = await createStartedAttempt(t, "W07 Bytes");
+      const { attemptId } = await createStartedAttempt(t, "Bytes");
       const operationId = crypto.randomUUID();
       await forceSubmit(t, attemptId, { operationId, reason: "bytes" });
       await forceSubmit(t, crypto.randomUUID(), {

@@ -163,7 +163,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           "attemptId",
         ),
       ],
-      // #1008 (E07/W07): 403/404/409 denial correlation. Route-scoped, so the
+      // #1008: 403/404/409 denial correlation. Route-scoped, so the
       // command is a registration-time constant and the other admin routes
       // stay out of scope.
       onResponse: adminCommandDeniedOnResponse("force_submit"),
@@ -211,7 +211,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         { audit: { request } },
       );
 
-      // #1008 (E07/W07): the wrapper resolved successfully — the receipt
+      // #1008: the wrapper resolved successfully — the receipt
       // disposition below is the verified committed fact (primary, auto-retry,
       // exact-23505 recovery, or the no-transaction pre-read replay). Emitted
       // BEFORE the response schema parse so a wire failure cannot rewrite the
@@ -254,7 +254,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           "attemptId",
         ),
       ],
-      // #1008 (E07/W07): 403/404/409 denial correlation (route-scoped).
+      // #1008: 403/404/409 denial correlation (route-scoped).
       onResponse: adminCommandDeniedOnResponse("time_grant"),
       schema: {
         params: AttemptIdParamsSchema,
@@ -314,7 +314,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         { audit: { request } },
       );
 
-      // #1008 (E07/W07): commit-authoritative final outcome, emitted only
+      // #1008: commit-authoritative final outcome, emitted only
       // after the full race-recovery wrapper resolved successfully and before
       // the response is built — the engine outcome below is the verified
       // committed fact (primary, or the post-23505 recovery rerun).

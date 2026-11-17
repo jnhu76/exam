@@ -200,7 +200,7 @@ required merely to identify an HTTP request.
   deployment and lifecycle concerns require a separate architecture decision.
 
 
-## Admin command outcome events (#1008 / E07 / W07)
+## Admin command outcome events (#1008)
 
 The two admin attempt commands `force_submit` and `time_grant` emit
 commit-authoritative technical outcome lines through the route-local typed
@@ -221,8 +221,8 @@ outcome. The classification is taken from the wrapper's own verified return
 value (wire `disposition` / engine outcome), never from the HTTP status, the
 receipt history's stored outcome, or a transaction-internal candidate. Fields:
 `event` (the fixed catalog name `admin.command.completed` — the uniform
-selection basis for technical event lines, same convention as W05's
-`attempt.submit.completed`; `msg` mirrors it as human-readable content and is
+selection basis for technical event lines, same convention as the candidate-submit completed event
+(#1007); `msg` mirrors it as human-readable content and is
 not a query key), `command`, `outcome`, `disposition`, `attemptId`,
 `operationId`, plus the Pino `reqId` binding (= `request.id`, ADR-025 — no
 duplicate requestId field) and the request child-logger's inherited caller
