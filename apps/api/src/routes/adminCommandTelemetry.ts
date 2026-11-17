@@ -27,7 +27,9 @@ import type { GrantOutcome } from "@exam/exam-engine";
  * requestId field is added.
  *
  * INVARIANT (payload whitelist): fields are constructed here from closed
- * unions, never spread from request/ctx/receipt/result/error. Denial lines
+ * unions, never spread from request/ctx/receipt/result/error. Every line
+ * carries the fixed catalog `event` field (the uniform selection basis for
+ * technical events — catalog queries must not depend on `msg`). Denial lines
  * deliberately carry NO target attemptId/operationId/reason/permission
  * relation/error details — the Admin identity does not license logging the
  * specifics of a denied target, and the anti-enumeration 404 must stay one
@@ -43,8 +45,15 @@ export type AdminCommandCompletedOutcome = "applied" | "replay_no_change";
 /** Outcome vocabulary for `admin.command.denied`. */
 export type AdminCommandDeniedOutcome = "forbidden" | "not_found" | "conflict";
 
-export const ADMIN_COMMAND_COMPLETED_MSG = "admin.command.completed";
-export const ADMIN_COMMAND_DENIED_MSG = "admin.command.denied";
+/**
+ * Event-catalog names. They are emitted as the payload `event` field — the
+ * uniform selection basis for all technical event lines (W05's
+ * `attempt.submit.completed` uses the same convention), so catalog queries
+ * never depend on `msg`. `msg` carries the same string as human-readable
+ * content.
+ */
+export const ADMIN_COMMAND_COMPLETED_EVENT = "admin.command.completed";
+export const ADMIN_COMMAND_DENIED_EVENT = "admin.command.denied";
 
 /**
  * Failure isolation boundary: field construction and the synchronous logger
@@ -105,13 +114,14 @@ export function emitForceSubmitCommandCompleted(
   safeEmit(
     request,
     {
+      event: ADMIN_COMMAND_COMPLETED_EVENT,
       command: "force_submit",
       outcome: forceSubmitOutcome(outcome.disposition),
       disposition: outcome.disposition,
       attemptId: outcome.attemptId,
       operationId: outcome.operationId,
     },
-    ADMIN_COMMAND_COMPLETED_MSG,
+    ADMIN_COMMAND_COMPLETED_EVENT,
   );
 }
 
@@ -149,13 +159,14 @@ export function emitTimeGrantCommandCompleted(
   safeEmit(
     request,
     {
+      event: ADMIN_COMMAND_COMPLETED_EVENT,
       command: "time_grant",
       outcome: timeGrantOutcome(result.outcome),
       disposition: result.outcome,
       attemptId: result.attemptId,
       operationId: result.operationId,
     },
-    ADMIN_COMMAND_COMPLETED_MSG,
+    ADMIN_COMMAND_COMPLETED_EVENT,
   );
 }
 
@@ -191,6 +202,10 @@ export function adminCommandDeniedOnResponse(command: AdminCommandName) {
       default:
         return;
     }
-    safeEmit(request, { command, outcome: denied }, ADMIN_COMMAND_DENIED_MSG);
+    safeEmit(
+      request,
+      { event: ADMIN_COMMAND_DENIED_EVENT, command, outcome: denied },
+      ADMIN_COMMAND_DENIED_EVENT,
+    );
   };
 }

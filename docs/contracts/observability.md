@@ -220,11 +220,14 @@ response serialization/schema failure cannot rewrite or drop the committed
 outcome. The classification is taken from the wrapper's own verified return
 value (wire `disposition` / engine outcome), never from the HTTP status, the
 receipt history's stored outcome, or a transaction-internal candidate. Fields:
-`command`, `outcome`, `disposition`, `attemptId`, `operationId`, plus the Pino
-`reqId` binding (= `request.id`, ADR-025 — no duplicate requestId field) and
-the request child-logger's inherited caller bindings
-(`actorId`/`actorRole`/`organizationId`, the authenticated caller's own
-server-verified identity; never the denied target's data).
+`event` (the fixed catalog name `admin.command.completed` — the uniform
+selection basis for technical event lines, same convention as W05's
+`attempt.submit.completed`; `msg` mirrors it as human-readable content and is
+not a query key), `command`, `outcome`, `disposition`, `attemptId`,
+`operationId`, plus the Pino `reqId` binding (= `request.id`, ADR-025 — no
+duplicate requestId field) and the request child-logger's inherited caller
+bindings (`actorId`/`actorRole`/`organizationId`, the authenticated caller's
+own server-verified identity; never the denied target's data).
 
 | command / authoritative return | outcome (top level) | disposition |
 | --- | --- | --- |
@@ -258,12 +261,14 @@ prove this request did NOT commit a business fact:
 misrecord a committed outcome: after the wrapper resolves, the remaining
 failure modes are response-schema parse (400) and serialization (500), both
 outside the mapped set, and `completed` is only emitted on the success path —
-the two events are mutually exclusive. Denial fields: `command`, `outcome`,
-plus `reqId` and the inherited caller bindings only. NO target attemptId,
-operationId, organizationId, reason, permission relation, or error details.
+the two events are mutually exclusive. Denial fields: `event` (fixed catalog
+name `admin.command.denied`, same selection convention as above), `command`,
+`outcome`, plus `reqId` and the inherited caller bindings only. NO target
+attemptId, operationId, organizationId, reason, permission relation, or error
+details.
 
 Measured raw line sizes (real Pino JSON, including envelope + inherited
-bindings): completed 412 B (event payload 183 B), denied 283 B (payload 51 B);
+bindings): completed 445 B (event payload 208 B), denied 313 B (payload 79 B);
 both pinned at <= 512 B by test. Frequency: one completed line per successful
 command request and at most one denied line per covered denial — bounded by
 admin command traffic, not an always-on per-request line. Failure isolation:
@@ -273,11 +278,11 @@ result or the HTTP response. Accepted blindspot: a process crash between
 COMMIT and emit loses that line permanently — no persistence, no outbox, no
 end-to-end exactly-once claim.
 
-> Contract delta note (#1008): the `disposition` dimension and the
-> time_grant `terminal` mapping are the minimal contract addition proposed by
-> this work; the #1015 owner decision adopted the owner-local typed emission
-> boundary (A=ADOPTED) but did NOT pre-approve these new field values. They
-> ride with #1008 review.
+> Contract delta note (#1008): the `event` field, the `disposition` dimension,
+> and the time_grant `terminal` mapping are the minimal contract addition
+> proposed by this work; the #1015 owner decision adopted the owner-local typed
+> emission boundary (A=ADOPTED) but did NOT pre-approve these new field values.
+> They ride with #1008 review.
 
 ## State transition log fields
 
@@ -439,7 +444,7 @@ Diagnostics snapshot (background + redis):
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
 | DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
-| Admin command outcome events (#1008) | Done for force_submit / time_grant (completed + denied, route-local boundary) | `disposition` dimension + time_grant `terminal` mapping are this PR's contract proposal (not pre-approved by #1015); other admin routes stay out of scope | — |
+| Admin command outcome events (#1008) | Done for force_submit / time_grant (completed + denied, route-local boundary; fixed catalog `event` field on every line) | `event` field + `disposition` dimension + time_grant `terminal` mapping are this PR's contract proposal (not pre-approved by #1015); other admin routes stay out of scope | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
 | State transition audit rows | Done (action/target/metadata/createdAt) | Standardize `metadata.stateBefore/stateAfter/source` | SHOULD FIX (incremental) |

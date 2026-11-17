@@ -18,6 +18,10 @@
  *  - Payloads are closed whitelists; denial lines never carry the target
  *    attemptId / operationId / reason / error details; anti-enumeration 404
  *    keeps one uniform outcome value.
+ *  - Both events carry a fixed `event` field (`admin.command.completed` /
+ *    `admin.command.denied`) in the payload, matching the event catalog used
+ *    by the other technical event lines. `msg` stays human-readable content
+ *    and is NEVER used as a selection basis here.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
@@ -61,8 +65,9 @@ import {
 
 type LogLine = Record<string, unknown>;
 
-const COMPLETED_MSG = "admin.command.completed";
-const DENIED_MSG = "admin.command.denied";
+/** Event-catalog names — the payload `event` field IS the selection basis. */
+const COMPLETED_EVENT = "admin.command.completed";
+const DENIED_EVENT = "admin.command.denied";
 const SLUG_PREFIX = "w07-admin-outcome-";
 /** Raw pino line upper bound, pinned like the #1006 WARN budget (512 B). */
 const MAX_EVENT_LINE_BYTES = 512;
@@ -84,6 +89,7 @@ const COMPLETED_LINE_KEYS = [
   "attemptId",
   "command",
   "disposition",
+  "event",
   "hostname",
   "level",
   "msg",
@@ -96,6 +102,7 @@ const COMPLETED_LINE_KEYS = [
 ].sort();
 const DENIED_LINE_KEYS = [
   "command",
+  "event",
   "hostname",
   "level",
   "msg",
@@ -130,7 +137,7 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
   function completedLines(requestId?: string): LogLine[] {
     return parsedLines().filter(
       (line) =>
-        line.msg === COMPLETED_MSG &&
+        line.event === COMPLETED_EVENT &&
         (requestId === undefined || line.reqId === requestId),
     );
   }
@@ -138,14 +145,14 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
   function deniedLines(requestId?: string): LogLine[] {
     return parsedLines().filter(
       (line) =>
-        line.msg === DENIED_MSG &&
+        line.event === DENIED_EVENT &&
         (requestId === undefined || line.reqId === requestId),
     );
   }
 
   function adminCommandEventLines(): LogLine[] {
     return parsedLines().filter(
-      (line) => line.msg === COMPLETED_MSG || line.msg === DENIED_MSG,
+      (line) => line.event === COMPLETED_EVENT || line.event === DENIED_EVENT,
     );
   }
 
@@ -449,6 +456,7 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       expect(linesForRequest).toHaveLength(1);
       const line = linesForRequest[0]!;
       expect(Object.keys(line).sort()).toEqual(COMPLETED_LINE_KEYS);
+      expect(line.event).toBe(COMPLETED_EVENT);
       expect(line.command).toBe("force_submit");
       expect(line.outcome).toBe("applied");
       expect(line.disposition).toBe("applied");
@@ -881,6 +889,7 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       const denied = deniedLines(requestId);
       expect(denied).toHaveLength(1);
       expect(Object.keys(denied[0]!).sort()).toEqual(DENIED_LINE_KEYS);
+      expect(denied[0]!.event).toBe(DENIED_EVENT);
       expect(denied[0]!.command).toBe("force_submit");
       expect(denied[0]!.outcome).toBe("forbidden");
       // Inherited child-logger bindings carry the CALLER's own identity only.
@@ -1119,8 +1128,10 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
 
       const eventLines = adminCommandEventLines();
       expect(eventLines.length).toBeGreaterThanOrEqual(2);
+      const completedRawTag = `"event":"${COMPLETED_EVENT}"`;
+      const deniedRawTag = `"event":"${DENIED_EVENT}"`;
       for (const raw of rawLines()) {
-        if (raw.includes(COMPLETED_MSG) || raw.includes(DENIED_MSG)) {
+        if (raw.includes(completedRawTag) || raw.includes(deniedRawTag)) {
           expect(raw).not.toContain(marker);
         }
       }
@@ -1214,17 +1225,18 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       });
 
       const completedRaw = rawLines().find((l) =>
-        l.includes(`"msg":"${COMPLETED_MSG}"`),
+        l.includes(`"event":"${COMPLETED_EVENT}"`),
       );
       const deniedRaw = rawLines().find((l) =>
-        l.includes(`"msg":"${DENIED_MSG}"`),
+        l.includes(`"event":"${DENIED_EVENT}"`),
       );
       expect(completedRaw).toBeDefined();
       expect(deniedRaw).toBeDefined();
       // Raw-line budget, pinned like the #1006 retry-WARN 512 B bound. As-built
       // reference measurements (real Pino JSON, full line incl. envelope +
-      // inherited caller bindings): completed ≈ 412 B (event payload ≈ 183 B),
-      // denied ≈ 283 B (payload ≈ 51 B) — see docs/contracts/observability.md.
+      // inherited caller bindings + the catalog event field): completed 445 B
+      // (event payload 208 B), denied 313 B (payload 79 B) — see
+      // docs/contracts/observability.md.
       expect(completedRaw!.length).toBeLessThanOrEqual(MAX_EVENT_LINE_BYTES);
       expect(deniedRaw!.length).toBeLessThanOrEqual(MAX_EVENT_LINE_BYTES);
     });
