@@ -58,7 +58,9 @@ for (const path of NODE_WORKFLOWS) {
 }
 
 if (violations.length > 0) {
-  process.stderr.write(`Container runtime violations:\n${violations.join("\n")}\n`);
+  process.stderr.write(
+    `Container runtime violations:\n${violations.join("\n")}\n`,
+  );
   process.exit(1);
 }
 
