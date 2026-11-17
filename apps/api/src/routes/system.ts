@@ -466,6 +466,14 @@ async function buildOperationalDiagnostics(
       failedCount: heartbeatMetrics.disruptionFailedCount,
       incidentReconciliationFailedCount:
         heartbeatMetrics.incidentReconciliationFailedCount,
+      // #1004 (E03/W10): read-only projection of the #304 F4A System
+      // incident reconciliation counters the heartbeat tick maintains.
+      // The plugin metrics remain the single mutation authority; the
+      // route keeps no counter of its own. Values are process-local
+      // (this API instance, since its process start) and reset on
+      // restart — the response must not be read as a cluster aggregate.
+      incidentCreatedCount: heartbeatMetrics.systemIncidentsCreated,
+      incidentConflictCount: heartbeatMetrics.systemIncidentConflicts,
       // #886: read-only projection of the #862 escalation input (consecutive
       // settled ticks with business failures on either leg). The plugin
       // metrics remain the single authority; no second counter here.

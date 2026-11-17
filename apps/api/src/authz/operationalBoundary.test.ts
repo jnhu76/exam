@@ -165,6 +165,10 @@ describe("Operational RBAC Boundary", () => {
       expect(typeof body.deadlineScannerStatus.consecutiveFailedTicks).toBe(
         "number",
       );
+      // #1004: the heartbeat incident counters are part of the same
+      // OPERATIONAL projection (host-operator visibility, never tenant-scoped).
+      expect(typeof body.heartbeatStatus.incidentCreatedCount).toBe("number");
+      expect(typeof body.heartbeatStatus.incidentConflictCount).toBe("number");
     });
 
     it("a dual-role account (hand-edited DB) fails closed at login (D14 read-side)", async () => {

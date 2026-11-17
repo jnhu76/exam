@@ -202,6 +202,14 @@ export const DiagnosticsResponseSchema = z.object({
     // organization discovery).
     failedCount: z.number().int().min(0),
     incidentReconciliationFailedCount: z.number().int().min(0),
+    // #1004 (E03/W10): read-only projection of the heartbeat scanner's
+    // cumulative System-incident reconciliation counters (#304 F4A).
+    // Process-local: "since THIS process started", reset on restart,
+    // never persisted, and NOT aggregated across API instances. These are
+    // host-level operational counters, not a tenant-specific incident
+    // report; multi-instance meaning must not be inferred from them.
+    incidentCreatedCount: z.number().int().min(0),
+    incidentConflictCount: z.number().int().min(0),
     // #862/#886: run-length escalation input — consecutive SETTLED ticks
     // where EITHER leg had business failures. Process-local (reset on
     // restart); NOT the cumulative failedCount counters above.
