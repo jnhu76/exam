@@ -466,7 +466,7 @@ async function buildOperationalDiagnostics(
       failedCount: heartbeatMetrics.disruptionFailedCount,
       incidentReconciliationFailedCount:
         heartbeatMetrics.incidentReconciliationFailedCount,
-      // #1004 (E03/W10): read-only projection of the #304 F4A System
+      // #1004: read-only projection of the #304 F4A System
       // incident reconciliation counters the heartbeat tick maintains.
       // The plugin metrics remain the single mutation authority; the
       // route keeps no counter of its own. Values are process-local

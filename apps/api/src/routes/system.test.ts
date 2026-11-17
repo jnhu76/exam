@@ -576,7 +576,7 @@ describe("system routes", () => {
       }
       resetRuntimeConfigForTest();
     });
-    // ── #1004 / E03 / W10: heartbeat incident counter projection ──────
+    // ── #1004: heartbeat incident counter projection ─────────────────
     // The plugin-owned `heartbeatMetrics` object stays the SINGLE mutation
     // authority; diagnostics only reads it. These tests pin exact-value
     // projection, independence of the two counters, read purity and the

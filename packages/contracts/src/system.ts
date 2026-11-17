@@ -202,7 +202,7 @@ export const DiagnosticsResponseSchema = z.object({
     // organization discovery).
     failedCount: z.number().int().min(0),
     incidentReconciliationFailedCount: z.number().int().min(0),
-    // #1004 (E03/W10): read-only projection of the heartbeat scanner's
+    // #1004: read-only projection of the heartbeat scanner's
     // cumulative System-incident reconciliation counters (#304 F4A).
     // Process-local: "since THIS process started", reset on restart,
     // never persisted, and NOT aggregated across API instances. These are
