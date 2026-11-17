@@ -275,8 +275,15 @@ attemptId, operationId, organizationId, reason, permission relation, or error
 details.
 
 Measured raw line sizes (real Pino JSON, including envelope + inherited
-bindings): completed 445 B (event payload 208 B), denied 313 B (payload 79 B);
-both pinned at <= 512 B by test. Frequency: one completed line per successful
+bindings). The test-pinned figures are completed 445 B (event payload 208 B)
+and denied 313 B (payload 79 B) — measured in the test harness, where
+`buildTestApp` leaves Fastify's default short `req-N` counter as the reqId.
+Production (`server.ts`, ADR-025) mints UUIDv4 request ids (36 chars), which
+lengthens the full lines by 31 B to ≈ 476 B / 344 B (re-measured through the
+same emitters with the production generator and the production logger options;
+±1 B for the pid digit count). Both reqId口径 stay within the pinned
+<= 512 B test budget; log-volume estimates should use the production figures.
+Frequency: one completed line per successful
 command request and at most one denied line per covered denial — bounded by
 admin command traffic, not an always-on per-request line. Failure isolation:
 the emitter swallows a synchronous logger failure (same fail-open contract as
