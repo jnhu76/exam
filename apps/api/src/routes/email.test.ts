@@ -129,8 +129,9 @@ describe("POST /api/email/test", () => {
       const body = res.json();
       expect(body.ok).toBe(false);
       expect(body.status).toBe("failed");
-      expect(typeof body.error).toBe("string");
-      expect(body.error).toContain("Fake email sender failure");
+      // #1012 closed field: the error is the fixed safe classification, not
+      // sender free text.
+      expect(body.error).toBe("email_error:internal_error");
     } finally {
       await cleanup();
     }

@@ -16,6 +16,7 @@ import { createSystemStatsRepo } from "@exam/db/repository/systemStatsRepo";
 import { createEmailOutboxRepo } from "@exam/db/repository/emailOutboxRepo";
 import { createWorkerHeartbeatRepo } from "@exam/db/repository/workerHeartbeatRepo";
 import { createIntegrityDiagnosticsRepo } from "@exam/db/repository/integrityDiagnosticsRepo";
+import { projectStoredEmailError } from "../email/sanitizeError.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/types";
 import {
@@ -49,6 +50,15 @@ const cookieAuth = [{ cookieAuth: [] }] as const;
  * is degraded/unknown (a never-heartbeated worker is not "available"), and
  * `available` only when the outbox query succeeded with `dead === 0` and the
  * worker is available.
+ *
+ * #1012 read-side projection: stored `last_error` values are untrusted input
+ * (rows written before the safe-write policy, or by an old worker during a
+ * rolling upgrade). `projectStoredEmailError` passes through only null, the
+ * fixed bootstrap_pending state, and canonical safe strings; everything else
+ * maps to a fixed undisclosed label. The projection never turns a
+ * current-problem heartbeat healthy — status derivation reads the raw
+ * null/non-null distinction. This protects disclosure only; historical bytes
+ * stay in the database until a separate retention decision (#1013).
  */
 async function buildEmailStatus(
   config: ReturnType<typeof getRuntimeConfig>,
@@ -109,7 +119,7 @@ async function buildEmailStatus(
       lastPollAt = heartbeat.lastPollAt.toISOString();
       lastSuccessAt = heartbeat.lastSuccessAt?.toISOString() ?? null;
       lastErrorAt = heartbeat.lastErrorAt?.toISOString() ?? null;
-      lastError = heartbeat.lastError;
+      lastError = projectStoredEmailError(heartbeat.lastError);
       const age = now.getTime() - heartbeat.lastPollAt.getTime();
       const isFresh = age <= staleThresholdMs;
       const hasSucceeded = heartbeat.lastSuccessAt !== null;

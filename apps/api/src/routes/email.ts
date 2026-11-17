@@ -27,7 +27,8 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
    *  - `EMAIL_ENABLED=false` → `{ ok: true, status: "disabled" }` (no error).
    *  - sender resolves        → `{ ok: true, status: "sent" }`.
    *  - sender rejects         → `{ ok: false, status: "failed", error }` where
-   *    `error` is sanitized (never contains SMTP password / config).
+   *    `error` is the #1012 safe classification string (fixed category +
+   *    allowlisted code only — never raw error text, paths, or recipients).
    *
    * `to` is validated as an email so the endpoint cannot be used as an open
    * relay and rejects malformed input fast.

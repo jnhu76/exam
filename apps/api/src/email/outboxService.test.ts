@@ -13,7 +13,6 @@ import { createOrganizationRepo } from "@exam/db/repository/organizationRepo";
 import type { Database } from "@exam/db/types";
 import { FakeEmailSender } from "./senders.js";
 import { EmailOutboxService } from "./outboxService.js";
-import { sanitizeEmailError } from "./sanitizeError.js";
 
 const permissions: RequestContext["permissions"] = [];
 
@@ -156,7 +155,9 @@ describe("EmailOutboxService.processDueEmails", () => {
     expect(updated?.nextAttemptAt?.toISOString()).toBe(
       "2026-06-01T00:01:00.000Z",
     );
-    expect(updated?.lastError).toContain("Fake email sender failure");
+    // #1012 closed field: the fake sender's failure persists as the fixed
+    // safe classification, never as free text.
+    expect(updated?.lastError).toBe("email_error:internal_error");
   });
 
   it("pending -> dead after reaching maxAttempts (nextAttemptAt null)", async () => {
@@ -289,7 +290,6 @@ describe("EmailOutboxService.processDueEmails", () => {
       ctx,
       sender: leakingSender,
       retryBaseSeconds: 60,
-      scrubSecrets: [SECRET],
     });
     await service.processDueEmails({
       now,
@@ -297,15 +297,13 @@ describe("EmailOutboxService.processDueEmails", () => {
       workerInstanceId: "test-worker-7",
     });
     const updated = await repo.findById(ctx, row.id);
+    // #1012 closed field: provider-echoed secrets never reach the DB, and
+    // only the allowlisted code is retained — the caller no longer needs to
+    // know the secret for the policy to contain it.
+    expect(updated?.lastError).toBe(
+      "email_error:smtp_auth_failed code=EAUTH rc=535",
+    );
     expect(updated?.lastError).not.toContain(SECRET);
-    expect(updated?.lastError).toContain("EAUTH");
-    // sanity: the sanitizer agrees
-    expect(
-      sanitizeEmailError(
-        Object.assign(new Error(`auth failed ${SECRET}`), { code: "EAUTH" }),
-        [SECRET],
-      ),
-    ).not.toContain(SECRET);
   });
 
   it("emits email.send_failed audit event when max attempts reached", async () => {
@@ -424,7 +422,6 @@ describe("EmailOutboxService.processDueEmails", () => {
       ctx,
       sender: leakingSender,
       retryBaseSeconds: 60,
-      scrubSecrets: [SECRET],
       logger: {
         error: (obj, msg) => logged.push({ obj, msg }),
       },
@@ -438,11 +435,13 @@ describe("EmailOutboxService.processDueEmails", () => {
     expect(logged).toHaveLength(1);
     expect(logged[0]!.obj.emailId).toBe(row.id);
     expect(logged[0]!.obj.attemptCount).toBe(3);
-    // Sanitization proof: the log line carries the scrubbed category
+    // Sanitization proof: the log line carries the closed classification
     // (stable SMTP code), never the raw error content or recipient PII.
     expect(JSON.stringify(logged[0])).not.toContain(SECRET);
     expect(JSON.stringify(logged[0])).not.toContain(row.recipientEmail);
-    expect(logged[0]!.obj.lastError).toContain("EAUTH");
+    expect(logged[0]!.obj.lastError).toBe(
+      "email_error:smtp_auth_failed code=EAUTH rc=535",
+    );
     expect(typeof logged[0]!.msg).toBe("string");
     expect((logged[0]!.msg as string).length).toBeGreaterThan(0);
   });
