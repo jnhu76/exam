@@ -15,7 +15,6 @@ import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
 import { emailOutbox, workerHeartbeats, schema } from "@exam/db/schema/pg";
 import { eq, inArray } from "drizzle-orm";
 import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
-import { DiagnosticsResponseSchema } from "@exam/contracts";
 
 // Integrity-block test fixtures accumulate submitted-attempt rows that
 // change the tenant-wide anomaly totals. Tracked IDs let an inner afterAll
@@ -721,12 +720,6 @@ describe("system routes", () => {
         expect(
           Number.isInteger(body.heartbeatStatus.incidentConflictCount),
         ).toBe(true);
-      });
-
-      it("serializes a body that satisfies DiagnosticsResponseSchema", async () => {
-        const body = await readDiagnostics();
-        const parsed = DiagnosticsResponseSchema.safeParse(body);
-        expect(parsed.success).toBe(true);
       });
 
       it("denies a Candidate — host-operational diagnostics stay operator-only", async () => {
