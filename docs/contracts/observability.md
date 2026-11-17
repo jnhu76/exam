@@ -157,6 +157,12 @@ required merely to identify an HTTP request.
   retry exhaustion — the terminal 409 boundary is silent by design, and an
   explicit terminal event is out of scope (D6.2 DEFERRED). Missing evidence is
   UNKNOWN, never "no retry" or "exhausted".
+
+  Volume bound (closed-field rule 7): the extended event emits at most
+  `MAX_RETRIES` (3) retry WARN lines per transaction chain and only for
+  retryable SQLSTATEs (40001/40P01) — there is no always-on per-request line.
+  Worst-case raw line is 333 bytes (pino envelope 125 B + correlation 208 B),
+  pinned at <= 512 bytes by the cross-tenant interleaving test.
 - **Client-claimed candidates.** A requestId sent inside client telemetry
   remains an unverified claim about a previous interaction. The "客户端声明，
   未经服务端核验" label applies to all such metadata until corroborated by
