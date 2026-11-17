@@ -78,6 +78,6 @@ export async function mutateWithAuthorityInvariants<T>(
     // statement (before the lock wait), so the post-condition would miss a
     // concurrently committed assignment and both transactions could commit —
     // the exact write-skew D14 forbids.
-    "read committed",
+    { isolationLevel: "read committed" },
   );
 }

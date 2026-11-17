@@ -730,7 +730,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             );
             return result;
           },
-          "read committed",
+          { isolationLevel: "read committed" },
         );
         attempt = started.attempt;
         isNew = started.isNew;
@@ -989,119 +989,134 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new ValidationError("Path and body identifiers must match");
       }
 
-      const saved = await executeInTransaction(fastify.db, async (tx) => {
-        const txRepo = createAttemptRepo(tx);
-        const candidateProfile = await createCandidateRepo(tx).findByUserId(
-          ctx,
-          ctx.actorId,
-        );
-        if (!candidateProfile) {
-          // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
-          throw new NotFoundError("候选人资料不存在");
-        }
+      const saved = await executeInTransaction(
+        fastify.db,
+        async (tx) => {
+          const txRepo = createAttemptRepo(tx);
+          const candidateProfile = await createCandidateRepo(tx).findByUserId(
+            ctx,
+            ctx.actorId,
+          );
+          if (!candidateProfile) {
+            // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
+            throw new NotFoundError("候选人资料不存在");
+          }
 
-        const { exams, enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: txRepo,
-            enrollmentRepo: createEnrollmentRepo(tx),
-          },
-          ctx,
-        );
-        // Mint the EA capability via the canonical seam
-        // (Enrollment → Attempt order). The canonical seam's locator read
-        // doubles as the existence check; the ownership check runs against the
-        // post-preparation attempt below.
-        const cap = await lockEnrollmentAndAttempt(
-          enrollments,
-          attempts,
-          attemptId,
-        );
-        // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0: the canonical preparation seam
-        // establishes the external preconditions a local Attempt mutation
-        // requires — EA lock provenance (verified against these exact repos),
-        // canonical deadline reconciliation (preserving freeze/grade behavior),
-        // and the canonical effective deadline (computeEffectiveDeadline). It
-        // mints the narrow opaque mutation evidence saveAnswer consumes. The
-        // route no longer owns question-membership legality, effective-deadline
-        // computation, or attempt.deadlineAt read-for-save — those live in
-        // saveAnswer / the preparation seam.
-        const preAttempt = await attempts.findById(attemptId);
-        const saveEpisodeRepo = createInterruptionEpisodeRepoAdapter(
-          createAttemptInterruptionRepo(tx),
-          ctx,
-        );
-        const saveEventRepo = createInterruptionEventRepoAdapter(
-          createAttemptInterruptionEventRepo(tx),
-          ctx,
-        );
-        const saveResolution: SubmitInterruptionResolution =
-          preAttempt?.status === "disrupted"
-            ? {
-                mode: "active_interruption",
-                episodeRepo: saveEpisodeRepo,
-                eventRepo: saveEventRepo,
-                hint: {
-                  policy:
-                    preAttempt.interruptionTimingPolicySnapshot?.policy ??
-                    "strict",
-                  eligibleSeconds: null,
-                  adjustmentId: null,
-                  reasonCode: "deadline_terminalization",
-                },
-              }
-            : {
-                mode: "none",
-                episodeRepo: saveEpisodeRepo,
-                eventRepo: saveEventRepo,
-              };
-        const { attempt: currentAttempt, mutationContext } =
-          await prepareReconciledAttemptMutation(
-            exams,
+          const { exams, enrollments, attempts } = createExamEngineRepos(
+            {
+              examRepo: createExamRepo(tx),
+              attemptRepo: txRepo,
+              enrollmentRepo: createEnrollmentRepo(tx),
+            },
+            ctx,
+          );
+          // Mint the EA capability via the canonical seam
+          // (Enrollment → Attempt order). The canonical seam's locator read
+          // doubles as the existence check; the ownership check runs against the
+          // post-preparation attempt below.
+          const cap = await lockEnrollmentAndAttempt(
             enrollments,
             attempts,
-            createGradingWorksetRepoAdapter(
-              createAttemptGradingEntryRepo(tx),
-              ctx,
-            ),
-            cap,
-            now,
-            saveResolution,
-          );
-        if (currentAttempt.candidateId !== candidateProfile.id) {
-          // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
-          throw new NotFoundError("尝试不存在");
-        }
-
-        // #301 §21 + canonical Save ordering (#301 §5, order
-        // clarified in round 2): the route delegates the WHOLE Save Answer
-        // action to the engine, whose actual order is
-        //   attempt identity → frozen question membership (P1)
-        //     → reconstruct AnswerState → status guards → effective-deadline
-        //     guard → answer canonicalization (frozen-question-bound) →
-        //     idempotency/version semantics → persist.
-        // Question membership therefore precedes the status/deadline guards
-        // (it is a ValidationError in saveAnswer, not a protocol rejection).
-        // The route supplies only the frozen-question-bound canonicalizer and
-        // inspects the returned semantic result to translate it to the wire
-        // contract. It does NOT gate validation on attempt status, does NOT
-        // validate membership, compute the effective deadline, reconstruct
-        // AnswerState, or write attempt.answers itself.
-        const saved = await saveAnswer(
-          attempts,
-          mutationContext,
-          {
             attemptId,
-            questionId,
-            answer: body.answer,
-            clientSeq: body.clientSeq,
-            clientSavedAt: body.clientSavedAt,
-            baseVersion: body.baseVersion,
+          );
+          // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0: the canonical preparation seam
+          // establishes the external preconditions a local Attempt mutation
+          // requires — EA lock provenance (verified against these exact repos),
+          // canonical deadline reconciliation (preserving freeze/grade behavior),
+          // and the canonical effective deadline (computeEffectiveDeadline). It
+          // mints the narrow opaque mutation evidence saveAnswer consumes. The
+          // route no longer owns question-membership legality, effective-deadline
+          // computation, or attempt.deadlineAt read-for-save — those live in
+          // saveAnswer / the preparation seam.
+          const preAttempt = await attempts.findById(attemptId);
+          const saveEpisodeRepo = createInterruptionEpisodeRepoAdapter(
+            createAttemptInterruptionRepo(tx),
+            ctx,
+          );
+          const saveEventRepo = createInterruptionEventRepoAdapter(
+            createAttemptInterruptionEventRepo(tx),
+            ctx,
+          );
+          const saveResolution: SubmitInterruptionResolution =
+            preAttempt?.status === "disrupted"
+              ? {
+                  mode: "active_interruption",
+                  episodeRepo: saveEpisodeRepo,
+                  eventRepo: saveEventRepo,
+                  hint: {
+                    policy:
+                      preAttempt.interruptionTimingPolicySnapshot?.policy ??
+                      "strict",
+                    eligibleSeconds: null,
+                    adjustmentId: null,
+                    reasonCode: "deadline_terminalization",
+                  },
+                }
+              : {
+                  mode: "none",
+                  episodeRepo: saveEpisodeRepo,
+                  eventRepo: saveEventRepo,
+                };
+          const { attempt: currentAttempt, mutationContext } =
+            await prepareReconciledAttemptMutation(
+              exams,
+              enrollments,
+              attempts,
+              createGradingWorksetRepoAdapter(
+                createAttemptGradingEntryRepo(tx),
+                ctx,
+              ),
+              cap,
+              now,
+              saveResolution,
+            );
+          if (currentAttempt.candidateId !== candidateProfile.id) {
+            // i18n-copy-allow: developer-diagnostic — thrown message never reaches the client; the error handler serializes the code only
+            throw new NotFoundError("尝试不存在");
+          }
+
+          // #301 §21 + canonical Save ordering (#301 §5, order
+          // clarified in round 2): the route delegates the WHOLE Save Answer
+          // action to the engine, whose actual order is
+          //   attempt identity → frozen question membership (P1)
+          //     → reconstruct AnswerState → status guards → effective-deadline
+          //     guard → answer canonicalization (frozen-question-bound) →
+          //     idempotency/version semantics → persist.
+          // Question membership therefore precedes the status/deadline guards
+          // (it is a ValidationError in saveAnswer, not a protocol rejection).
+          // The route supplies only the frozen-question-bound canonicalizer and
+          // inspects the returned semantic result to translate it to the wire
+          // contract. It does NOT gate validation on attempt status, does NOT
+          // validate membership, compute the effective deadline, reconstruct
+          // AnswerState, or write attempt.answers itself.
+          const saved = await saveAnswer(
+            attempts,
+            mutationContext,
+            {
+              attemptId,
+              questionId,
+              answer: body.answer,
+              clientSeq: body.clientSeq,
+              clientSavedAt: body.clientSavedAt,
+              baseVersion: body.baseVersion,
+            },
+            validateAnswerForQuestion,
+          );
+          return saved;
+        },
+        {
+          // #1006 D6.1: retry WARNs carry the SAME server-minted request.id as
+          // the response x-request-id header and the framework request trace.
+          // The identity is passed explicitly per call (no ambient/ALS state),
+          // and only for the W03 answer-save transaction.
+          correlation: {
+            requestId: request.id,
+            attemptId,
+            organizationId: ctx.organizationId,
+            operation: "attempt.answer.save",
           },
-          validateAnswerForQuestion,
-        );
-        return saved;
-      });
+        },
+      );
 
       if (saved.accepted) {
         return SaveAnswerAcceptedSchema.parse({

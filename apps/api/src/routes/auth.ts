@@ -974,7 +974,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           });
           return { outcome: "issued", userId: locked.id };
         },
-        "read committed",
+        { isolationLevel: "read committed" },
       );
 
       if (result.outcome !== "issued") {
@@ -1090,7 +1090,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           });
           return updated;
         },
-        "read committed",
+        { isolationLevel: "read committed" },
       );
 
       if (!reset) {

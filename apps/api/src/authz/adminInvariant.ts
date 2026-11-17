@@ -93,6 +93,6 @@ export async function mutateWithEffectiveAdminPostcondition<T>(
     // REPEATABLE READ the transaction snapshot is taken at its first
     // statement (before the lock wait), so the post-condition would miss a
     // concurrently committed assignment — the write-skew D14 forbids.
-    "read committed",
+    { isolationLevel: "read committed" },
   );
 }

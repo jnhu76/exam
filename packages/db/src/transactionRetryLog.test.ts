@@ -23,11 +23,18 @@ interface RecordedWarn {
 }
 
 /** Fakes only the surface executeInTransaction touches (architecture boundary). */
-function fakeDb(script: (call: number) => string | null): Database {
+function fakeDb(
+  script: (call: number) => string | null,
+  observed?: { isolationLevels: unknown[] },
+): Database {
   let call = 0;
   return {
-    transaction: async (fn: (tx: never) => Promise<unknown>) => {
+    transaction: async (
+      fn: (tx: never) => Promise<unknown>,
+      config?: { isolationLevel?: unknown },
+    ) => {
       call += 1;
+      observed?.isolationLevels.push(config?.isolationLevel);
       const code = script(call);
       if (code !== null) {
         throw Object.assign(new Error("tx failed"), { code });
@@ -102,6 +109,85 @@ describe("executeInTransaction retry observability", () => {
     // Only the three RETRIED failures warn; the terminal throw does not.
     expect(warns.map((w) => w.obj.attempt)).toEqual([1, 2, 3]);
     expect(warns.every((w) => w.obj.sqlstate === "40001")).toBe(true);
+  });
+
+  it("attaches the caller-provided closed correlation to every retry warn (#1006)", async () => {
+    const correlation = {
+      requestId: "0f4b6f0e-6a1f-4b5e-9d32-0c9f1f0f9a11",
+      attemptId: "b6d1c4a2-6a4f-4f0e-8f8a-2c8a5a0c3d21",
+      organizationId: "5a0b0c8e-2f57-4c5d-9a1c-7d3f2b6e4a90",
+      operation: "attempt.answer.save",
+    } as const;
+    const db = fakeDb((call) => (call === 1 ? "40001" : null));
+    await executeInTransaction(db, async () => "ok", { correlation });
+    expect(warns).toEqual([
+      {
+        obj: { attempt: 1, sqlstate: "40001", correlation },
+        msg: "transaction retry",
+      },
+    ]);
+  });
+
+  it("keeps warns correlation-free when the caller passes none (no ambient identity)", async () => {
+    const db = fakeDb((call) => (call === 1 ? "40001" : null));
+    await executeInTransaction(db, async () => "ok");
+    expect(warns).toHaveLength(1);
+    expect(warns[0]!.obj).toEqual({ attempt: 1, sqlstate: "40001" });
+    expect(warns[0]!.obj).not.toHaveProperty("correlation");
+  });
+
+  it("forwards the options isolation level and preserves the repeatable-read default", async () => {
+    const observed = { isolationLevels: [] as unknown[] };
+    await executeInTransaction(
+      fakeDb(() => null, observed),
+      async () => "a",
+    );
+    await executeInTransaction(
+      fakeDb(() => null, observed),
+      async () => "b",
+      {
+        isolationLevel: "read committed",
+      },
+    );
+    expect(observed.isolationLevels).toEqual([
+      "repeatable read",
+      "read committed",
+    ]);
+  });
+
+  it("fails open when the wired logger throws synchronously (retry still happens)", async () => {
+    setTransactionRetryLogger({
+      warn() {
+        throw new Error("logger down");
+      },
+    });
+    let calls = 0;
+    const db = fakeDb((call) => {
+      calls = call;
+      return call === 1 ? "40001" : null;
+    });
+    await expect(executeInTransaction(db, async () => "ok")).resolves.toBe(
+      "ok",
+    );
+    // Observability is best-effort: the retry and its result are unchanged.
+    expect(calls).toBe(2);
+  });
+
+  it("fails open on a throwing logger even at the exhausted ceiling (terminal error preserved)", async () => {
+    setTransactionRetryLogger({
+      warn() {
+        throw new Error("logger down");
+      },
+    });
+    let calls = 0;
+    const db = fakeDb((call) => {
+      calls = call;
+      return "40001";
+    });
+    await expect(
+      executeInTransaction(db, async () => "unreachable"),
+    ).rejects.toThrowError("tx failed");
+    expect(calls).toBe(4);
   });
 
   it("stays silent by default when no logger is wired (scripts/tests)", async () => {
