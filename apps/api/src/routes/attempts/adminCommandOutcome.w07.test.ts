@@ -26,14 +26,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
 import { eq, like, sql } from "drizzle-orm";
-import { z } from "zod";
 import type { FastifyPluginAsync } from "fastify";
-import {
-  AttemptIdParamsSchema,
-  ErrorResponseSchema,
-  ForceSubmitWithOperationRequestSchema,
-} from "@exam/contracts";
-import { Permission } from "@exam/authz";
 import { canonicalizeForceSubmitPayload } from "@exam/domain";
 import { schema } from "@exam/db/schema/pg";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
@@ -45,16 +38,7 @@ import { buildTestApp } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { setupRequestIdHeader } from "../../plugins/requestIdHeader.js";
-import { cookieAuth } from "../attempts.shared.js";
-import {
-  ensureTargetOrg,
-  formatZodError,
-  getRequestContext,
-} from "../helpers.js";
-import {
-  forceSubmitWithOperationRaceRecovery,
-  planForceSubmitExecution,
-} from "../../orchestrators/forceSubmitExecution.js";
+import { planForceSubmitExecution } from "../../orchestrators/forceSubmitExecution.js";
 import { createExamEngineRepos } from "../../adapters/repoAdapters.js";
 import { emitForceSubmitCommandCompleted } from "../adminCommandTelemetry.js";
 import {
@@ -351,66 +335,28 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   }
 
+  /**
+   * One-shot response-send fault for W07-9 (owner review round 1, item 4):
+   * when armed, the FIRST response send in this app throws inside the send
+   * phase — a wire-exit failure injected on the REAL production routes (the
+   * routes `attempts.admin.ts` registers, complete with the production
+   * `adminCommandDeniedOnResponse` hook). Consumed on first use so the error
+   * envelope's own send passes through untouched.
+   */
+  let armResponseSendFault = false;
+
   beforeAll(async () => {
     const combinedPlugin: FastifyPluginAsync = async (fastify) => {
       setupRequestIdHeader(fastify);
+      fastify.addHook("onSend", async (_request, _reply, payload) => {
+        if (!armResponseSendFault) {
+          return payload;
+        }
+        armResponseSendFault = false;
+        throw new Error("injected response send failure");
+      });
       await fastify.register(examRoutes, { prefix: "" });
       await fastify.register(attemptRoutes, { prefix: "" });
-      // W07-9 variant route: REAL production orchestrator + REAL emitter, but
-      // a deliberately mismatched response schema so the wire exit fails
-      // AFTER the commit. Proves a wire failure can neither drop the already
-      // committed completed signal nor add a false denied line.
-      fastify.post(
-        "/admin/attempts/:attemptId/force-submit-wire-fault",
-        {
-          preHandler: [
-            fastify.authenticate,
-            fastify.requireScopedCapability(
-              Permission.AttemptForceSubmit,
-              "attempt",
-              "attemptId",
-            ),
-          ],
-          schema: {
-            params: AttemptIdParamsSchema,
-            body: ForceSubmitWithOperationRequestSchema,
-            security: cookieAuth,
-            response: {
-              200: z.object({ forcedSerializationFault: z.string() }),
-              400: ErrorResponseSchema,
-            },
-          },
-        },
-        async (request, reply) => {
-          const parsed = AttemptIdParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            return reply
-              .code(400)
-              .send(formatZodError(request.id, parsed.error));
-          }
-          const body = ForceSubmitWithOperationRequestSchema.safeParse(
-            request.body ?? {},
-          );
-          if (!body.success) {
-            return reply.code(400).send(formatZodError(request.id, body.error));
-          }
-          const ctx2 = ensureTargetOrg(getRequestContext(request));
-          const { attemptId } = parsed.data;
-          const { operationId, reason } = body.data;
-          const result = await forceSubmitWithOperationRaceRecovery(
-            fastify.db,
-            ctx2,
-            { attemptId, operationId, reason, now: fastify.now() },
-            { audit: { request } },
-          );
-          emitForceSubmitCommandCompleted(request, {
-            attemptId,
-            operationId: result.operationId,
-            disposition: result.disposition,
-          });
-          return reply.code(200).send(result);
-        },
-      );
     };
     ctx = await buildTestApp(combinedPlugin, {
       logger: { level: "info", stream: logStream },
@@ -1068,8 +1014,8 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
     });
   });
 
-  describe("W07-9 committed fact survives a wire-exit failure", () => {
-    it("response serialization failure after commit: one completed kept, no false denied, 500 envelope", async () => {
+  describe("W07-9 committed fact survives a wire-exit failure on the REAL routes", () => {
+    it("force-submit: send-phase failure after commit keeps one completed, no false denied (production hook installed), business fact intact", async () => {
       const t = await createIsolatedAttemptOrg(ctx, {
         slugPrefix: SLUG_PREFIX,
         label: "W07",
@@ -1077,12 +1023,20 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       const { attemptId } = await createStartedAttempt(t, "W07 WireFault");
       const operationId = crypto.randomUUID();
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/admin/attempts/${attemptId}/force-submit-wire-fault`,
-        payload: { operationId, reason: "wire fault probe" },
-        cookies: { "auth-token": t.adminToken },
-      });
+      // Arm the one-shot send fault, then hit the REAL production route
+      // (registered by attempts.admin.ts WITH the production
+      // adminCommandDeniedOnResponse hook — unlike the old variant-route
+      // probe, this asserts the hook itself stays silent on a wire fault).
+      armResponseSendFault = true;
+      let res: Awaited<ReturnType<typeof forceSubmit>>;
+      try {
+        res = await forceSubmit(t, attemptId, {
+          operationId,
+          reason: "wire fault probe",
+        });
+      } finally {
+        armResponseSendFault = false;
+      }
       expect(res.statusCode).toBe(500);
       expect(res.json().error?.code).toBe("INTERNAL_ERROR");
 
@@ -1091,10 +1045,50 @@ describe("admin force-submit / time-grant command outcome telemetry (#1008 W07)"
       expect(linesForRequest).toHaveLength(1);
       expect(linesForRequest[0]!.outcome).toBe("applied");
       expect(linesForRequest[0]!.disposition).toBe("applied");
-      // A wire failure is NOT a denial — no 403/404/409 semantics.
+      // A wire failure is NOT a denial — the production hook observes this
+      // 500 and must not emit admin.command.denied.
       expect(deniedLines(requestId)).toHaveLength(0);
       // The business fact really committed.
       expect(await listReceipts(attemptId)).toHaveLength(1);
+    });
+
+    it("time-grant: send-phase failure after commit keeps one completed, no false denied (production hook installed), ledger committed", async () => {
+      const t = await createIsolatedAttemptOrg(ctx, {
+        slugPrefix: SLUG_PREFIX,
+        label: "W07",
+      });
+      const { attemptId } = await createStartedAttempt(t, "W07 GrantWire");
+      const operationId = crypto.randomUUID();
+
+      armResponseSendFault = true;
+      let res: Awaited<ReturnType<typeof timeGrant>>;
+      try {
+        res = await timeGrant(t, attemptId, {
+          operationId,
+          addedSeconds: 300,
+          reasonCode: "candidate_request",
+          reasonText: "wire fault probe",
+        });
+      } finally {
+        armResponseSendFault = false;
+      }
+      expect(res.statusCode).toBe(500);
+      expect(res.json().error?.code).toBe("INTERNAL_ERROR");
+
+      const requestId = res.headers["x-request-id"] as string;
+      const linesForRequest = completedLines(requestId);
+      expect(linesForRequest).toHaveLength(1);
+      expect(linesForRequest[0]!.command).toBe("time_grant");
+      expect(linesForRequest[0]!.outcome).toBe("applied");
+      expect(linesForRequest[0]!.disposition).toBe("granted");
+      expect(deniedLines(requestId)).toHaveLength(0);
+      // The adjustment ledger row really committed.
+      const adjustments = await ctx.db
+        .select()
+        .from(schema.attemptTimeAdjustments)
+        .where(eq(schema.attemptTimeAdjustments.attemptId, attemptId));
+      expect(adjustments).toHaveLength(1);
+      expect(adjustments[0]!.operationId).toBe(operationId);
     });
   });
 
