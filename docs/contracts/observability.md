@@ -163,6 +163,68 @@ required merely to identify an HTTP request.
   retryable SQLSTATEs (40001/40P01) — there is no always-on per-request line.
   Worst-case raw line is 333 bytes (pino envelope 125 B + correlation 208 B),
   pinned at <= 512 bytes by the cross-tenant interleaving test.
+- **Candidate submit outcome (#1007 / E06, commit-authoritative).** The
+  candidate submit + grade orchestrator emits ONE `attempt.submit.completed`
+  info line per successfully committed submit execution, with a closed
+  five-value `outcome` classifying the path THIS transaction took (not the
+  attempt's full grading state):
+
+  | committed path (locked-in authority) | outcome |
+  | --- | --- |
+  | locked read already `graded`, idempotent early return | `replay_no_change` |
+  | deadline reconciliation froze this execution (early return) | `deadline_frozen` |
+  | post-submit `gradingStatus = pending_manual` (fresh OR crash-held) | `pending_manual` |
+  | fresh submit + `finalizeGrading` committed | `graded` |
+  | entry `submitted` (crash-landed) + `finalizeGrading` committed | `recovered` |
+
+  The classification travels as the transaction callback's return value
+  (`SubmitOutcomeClassification`); every failed/retried attempt's
+  classification dies with its transaction. `alreadyGraded` remains the
+  legacy boolean projection (`outcome ∈ {replay_no_change, deadline_frozen}`)
+  with unchanged caller semantics; the outcome channel is internal — it is
+  NOT part of the public HTTP schema.
+
+  Emission law: the only call site (`emitSubmitCompleted`,
+  owner-local typed boundary in `submitAndGradeAttempt.ts` — #1001 方案 A)
+  sits AFTER `await executeInTransaction(...)` resolves (COMMIT confirmed)
+  and BEFORE the out-of-tx response re-read. Therefore: ownership/authz
+  rejection (preHandler `reply.send`, handler never reached), transaction
+  rollback, retry exhaustion, and commit-phase faults emit ZERO completed
+  lines; a post-commit response-build failure (exam re-read 404 / parse 400 /
+  serialization 500) keeps the line un-lost and un-rewritten. Intermediate
+  retry attempts never emit — a WARN `transaction retry` line without a
+  matching completed line means that attempt did not commit (the join rules
+  above still apply). One line per HTTP request: concurrent submits of the
+  same attempt each produce their own line; business side effects remain
+  governed by the idempotent domain protocol, and there is no per-operation
+  log dedup.
+
+  Identity & privacy: emitted through the request-scoped Pino logger, so the
+  line carries the SAME server-minted `reqId` as the `x-request-id` header
+  and the request trace (no duplicate requestId payload field), plus the
+  inherited authenticated-request child bindings (`actorId`, `actorRole`,
+  `organizationId` — `plugins/auth.ts`, business-line tenant scoping). The
+  emitter adds only `{event, outcome, attemptId}` (whitelist object; no
+  answer/score/error/reason/URL content, no spreading request/ctx/result).
+  Non-HTTP callers (demo seed grader) pass no HTTP handle and emit nothing —
+  no fabricated HTTP identity. A synchronous sink throw is swallowed at the
+  single emit point: committed result, HTTP response and retry behavior are
+  unchanged.
+
+  Limits (owner-accepted): sink failure drops the line (no delivery retry);
+  a process crash between COMMIT and the synchronous emit loses the line —
+  the durable business fact is the database row, never this log (EXSEM-013).
+  Measured raw line (production shape, UUID identities): 347–357 B —
+  envelope (level/time/pid/hostname) ≈ 50 B, inherited identity
+  (reqId/actorId/actorRole/organizationId) ≈ 180 B, event payload
+  ({event,outcome,attemptId}) 106–116 B. The design-catalog 256 B target is
+  met by envelope+reqId+payload alone but not by the full line, because the
+  pre-existing per-request child bindings add ≈ 130 B; removing them would
+  mean abandoning the request logger as the identity source, so the
+  deviation is documented rather than truncating the line. Frequency is
+  business-action bound (one line per successful submit request, replays
+  included), not always-on; at the measured 357 B worst case, 1 submit/s ≈
+  0.36 KiB/s of log volume (visible at `info` level only).
 - **Client-claimed candidates.** A requestId sent inside client telemetry
   remains an unverified claim about a previous interaction. The "客户端声明，
   未经服务端核验" label applies to all such metadata until corroborated by
@@ -359,6 +421,7 @@ Diagnostics snapshot (background + redis):
 | Area | Current status | Gap | Priority |
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
+| Candidate submit outcome (#1007 / E06) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (accepted blindspot) | — |
 | DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
