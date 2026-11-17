@@ -66,8 +66,9 @@ import {
  *    not "committed");
  *  - audit mid-tx failures, retry exhaustion, permanent commit faults and
  *    state-machine rejections emit nothing;
- *  - after COMMIT, a later response-construction failure (exam re-read 404 /
- *    parse 400 / serialization 500 family) must not lose or rewrite the line.
+ *  - after COMMIT, a later response-construction failure (the orchestrator's
+ *    internal re-read, the route's exam re-read 404, parse 400 or
+ *    serialization 500) must not lose or rewrite the line.
  *
  * The classification channel itself (`SubmitOutcomeClassification`) is
  * additionally pinned by the crash-recovery fixtures here and by the
@@ -362,6 +363,65 @@ describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", 
   function restoreFailedTransactions(): void {
     restoreTransaction?.();
     restoreTransaction = undefined;
+  }
+
+  /**
+   * Faults the orchestrator's INTERNAL post-commit response re-read — the
+   * out-of-tx `attemptRepo.findById` that runs after COMMIT is confirmed
+   * (matrix 9b; distinct from matrix 9, whose fault sits at the ROUTE's
+   * response construction, after the orchestrator has fully returned — a
+   * passing matrix 9 alone cannot tell an emit placed before the internal
+   * re-read from one placed after it).
+   *
+   * Why the DB-client boundary: PostgreSQL has no SELECT-time trigger, and
+   * permission revocation or backend termination cannot be deterministically
+   * interleaved between COMMIT and this single read, so a real-SQL fault at
+   * exactly this point is not constructible. The injection instead wraps
+   * the shared db handle's own methods — the same external boundary (and
+   * suite pattern) the `failTransactions` helper above already uses for
+   * `db.transaction`: `db.transaction` delegates to the real driver and
+   * arms the fault only after it resolves (the awaited resolve IS the
+   * COMMIT confirmation `executeInTransaction` is built on), then the
+   * FIRST `db.select` on the armed handle throws once — precisely the
+   * orchestrator's re-read, the only post-commit read through this handle
+   * in that request. Transaction, commit, repositories, emitter, logger
+   * and the global error handler all stay real.
+   */
+  function installPostCommitReReadFault(): void {
+    const db = ctx.db as unknown as Record<string, unknown>;
+    const originalTransaction = (
+      db.transaction as (...args: unknown[]) => Promise<unknown>
+    ).bind(ctx.db);
+    const originalSelect = (db.select as (...args: unknown[]) => unknown).bind(
+      ctx.db,
+    );
+    const selectWasOwn = Object.prototype.hasOwnProperty.call(db, "select");
+    let committed = false;
+    db.transaction = async (fn: unknown, config: unknown) => {
+      const result = await originalTransaction(fn, config);
+      // Arm only after the awaited resolve: that is COMMIT confirmed
+      // (`executeInTransaction` = `return await db.transaction(...)`).
+      committed = true;
+      return result;
+    };
+    db.select = (...args: unknown[]) => {
+      if (committed) {
+        // One-shot: fault exactly the first post-commit read — the
+        // orchestrator's re-read — then disarm so later verification
+        // reads through this handle succeed.
+        committed = false;
+        throw new Error("injected post-commit response re-read fault");
+      }
+      return originalSelect(...args);
+    };
+    restoreTransaction = () => {
+      Reflect.deleteProperty(db, "transaction");
+      if (selectWasOwn) {
+        db.select = originalSelect;
+      } else {
+        Reflect.deleteProperty(db, "select");
+      }
+    };
   }
 
   /**
@@ -878,6 +938,40 @@ describe("candidate submit outcome — attempt.submit.completed (#1007 / E06)", 
     expect(row.status).toBe("graded");
     expect(row.score).toBe(100);
     expect(await countSubmitAudits(attemptId)).toBe(1);
+  });
+
+  it("matrix 9b: the orchestrator's INTERNAL post-commit re-read fails → committed facts stand, exactly one completed line, original error semantics reach HTTP unchanged", async () => {
+    const { attemptId } = await createStartedAttempt({
+      title: "Outcome Internal Re-read Fault",
+      questionIds: [objectiveQuestionId],
+    });
+    await saveObjectiveAnswer(attemptId);
+
+    installPostCommitReReadFault();
+    const res = await submit(attemptId);
+
+    // The injected read fault is an unexpected error: production maps it
+    // through the global error handler to 500 INTERNAL_ERROR — the mapping
+    // is unchanged by the already-committed business outcome.
+    expect(res.statusCode).toBe(500);
+    expect(res.json().error.code).toBe("INTERNAL_ERROR");
+
+    // The business facts are COMMITTED: the transaction's effects stand.
+    const row = await attemptRow(attemptId);
+    expect(row.status).toBe("graded");
+    expect(row.score).toBe(100);
+    expect(row.submittedAt).not.toBeNull();
+    expect(await countSubmitAudits(attemptId)).toBe(1);
+
+    // The completed line was emitted BEFORE the internal re-read: exactly
+    // one, correctly classified, joined to the faulted request's identity.
+    // (This is the assertion matrix 9 cannot make: its fault route lets the
+    // orchestrator — internal re-read included — finish successfully.)
+    const emitted = completedLines();
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]!.outcome).toBe("graded");
+    expect(emitted[0]!.attemptId).toBe(attemptId);
+    expect(emitted[0]!.reqId).toBe(res.headers["x-request-id"]);
   });
 
   it("non-HTTP caller: without the HTTP request handle the orchestrator commits but emits nothing", async () => {
