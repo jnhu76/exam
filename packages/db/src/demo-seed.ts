@@ -320,7 +320,7 @@ export async function seedDemo(
             );
           }
         },
-        "read committed",
+        { isolationLevel: "read committed" },
       );
     } else {
       const userId = uuid("user");
@@ -349,7 +349,7 @@ export async function seedDemo(
             role: ud.role,
           });
         },
-        "read committed",
+        { isolationLevel: "read committed" },
       );
     }
   }

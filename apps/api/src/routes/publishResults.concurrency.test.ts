@@ -268,7 +268,7 @@ describe("result publication is single-winner", () => {
           });
           return publishResults(repo, examId, winnerNow);
         },
-        isolation,
+        { isolationLevel: isolation },
       );
 
       try {
@@ -287,7 +287,7 @@ describe("result publication is single-winner", () => {
             });
             return publishResults(repo, examId, loserNow);
           },
-          isolation,
+          { isolationLevel: isolation },
         );
 
         // T2 has signalled it is about to issue its (blocking) FOR UPDATE;

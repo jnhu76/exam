@@ -245,7 +245,7 @@ export async function seed(
           );
         }
       },
-      "read committed",
+      { isolationLevel: "read committed" },
     );
     userIds.push(seededUserId!);
   }

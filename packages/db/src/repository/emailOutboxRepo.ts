@@ -279,7 +279,7 @@ export function createEmailOutboxRepo(db: Database) {
         );
         return rows;
       },
-      "read committed",
+      { isolationLevel: "read committed" },
     );
 
     return result.map(mapRow);

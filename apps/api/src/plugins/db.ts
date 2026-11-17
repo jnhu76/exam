@@ -29,9 +29,11 @@ const dbPlugin: FastifyPluginAsync = async (fastify) => {
     installCapacityResearchInstrumentation(conn.sql);
   }
   fastify.decorate<Database>("db", conn.db);
-  // Retry observability (#800 PR-B): transaction retries anywhere in the
-  // process surface as structured warns on the Fastify logger. Wired once
-  // per process; per-request correlation stays with request-scoped logs.
+  // Retry observability (#800 PR-B, #1006): transaction retries anywhere in
+  // the process surface as structured warns on the Fastify logger. Wired once
+  // per process. This ROOT logger is intentionally not request-scoped, so a
+  // call site that owns a trusted identity passes it explicitly through the
+  // executeInTransaction options (#1006) — no ambient/ALS correlation.
   setTransactionRetryLogger(fastify.log);
   fastify.addHook("onClose", async () => {
     await conn.sql.end({ timeout: Math.ceil(AUDIT_DRAIN_TIMEOUT_MS / 1000) });

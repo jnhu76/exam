@@ -407,7 +407,7 @@ describe("staffInvitationRepo (#297)", () => {
           now: NOW,
         });
       },
-      "repeatable read",
+      { isolationLevel: "repeatable read" },
     );
     await bSnapshotFrozen.promise;
 
@@ -451,7 +451,7 @@ describe("staffInvitationRepo (#297)", () => {
  * never retried).
  */
 function inTx<T>(dbArg: Database, fn: (tx: TransactionDatabase) => Promise<T>) {
-  return executeInTransaction(dbArg, fn, "read committed");
+  return executeInTransaction(dbArg, fn, { isolationLevel: "read committed" });
 }
 
 /**

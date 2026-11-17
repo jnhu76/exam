@@ -131,6 +131,38 @@ required merely to identify an HTTP request.
   id; the server-side fact is settled by receipts / domain state, and a
   missing record is an evidence gap (UNKNOWN, F6), never proof of
   non-arrival.
+- **DB transaction retry correlation (#1006 / E05).** The `transaction retry`
+  WARN emitted by `packages/db` (`executeInTransaction`) carries a CLOSED
+  `correlation` object only when the call site supplies one:
+  `{ requestId?, attemptId?, organizationId?, operation? }` — `requestId` is
+  the same server-minted `request.id` used by the `x-request-id` header and
+  the Pino request trace (ADR-025), `attemptId`/`organizationId` come from the
+  authorized request context, and `operation` is a closed enum (currently only
+  `attempt.answer.save`). W03 answer save is the only wired call site; other
+  call sites omit correlation rather than fabricating an HTTP identity. The
+  retry logger is deliberately synchronous and fail-open: a logger failure
+  never aborts a retry, changes its backoff, or alters the transaction result.
+  Join rule (same `requestId`, complete log capture, W03 transaction only):
+
+  | observed | determinable fact |
+  | --- | --- |
+  | 0 retry WARN + 2xx | request succeeded, no transaction retry observed |
+  | 1–3 retry WARN + 2xx | request succeeded, retries occurred |
+  | 3 retry WARN + 409 | three retries ran and the request ended 409; the final SQLSTATE is UNKNOWN (40001 exhaustion and a 4th-attempt 23505 are indistinguishable) |
+  | 1–2 retry WARN + 409 | retries occurred and the request ended 409; the cause cannot be inferred from the count |
+  | 0 retry WARN + 409 | HTTP conflict with no retry trace; NOT necessarily 23505 |
+
+  Limits (owner-frozen #1006 D6): `0 WARN` does not prove "no retry" when log
+  emission or collection is incomplete, and `3 WARN + 409` does not prove
+  retry exhaustion — the terminal 409 boundary is silent by design, and an
+  explicit terminal event is out of scope (D6.2 DEFERRED). Missing evidence is
+  UNKNOWN, never "no retry" or "exhausted".
+
+  Volume bound (closed-field rule 7): the extended event emits at most
+  `MAX_RETRIES` (3) retry WARN lines per transaction chain and only for
+  retryable SQLSTATEs (40001/40P01) — there is no always-on per-request line.
+  Worst-case raw line is 333 bytes (pino envelope 125 B + correlation 208 B),
+  pinned at <= 512 bytes by the cross-tenant interleaving test.
 - **Client-claimed candidates.** A requestId sent inside client telemetry
   remains an unverified claim about a previous interaction. The "客户端声明，
   未经服务端核验" label applies to all such metadata until corroborated by
@@ -327,6 +359,7 @@ Diagnostics snapshot (background + redis):
 | Area | Current status | Gap | Priority |
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
+| DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
 | State transition audit rows | Done (action/target/metadata/createdAt) | Standardize `metadata.stateBefore/stateAfter/source` | SHOULD FIX (incremental) |

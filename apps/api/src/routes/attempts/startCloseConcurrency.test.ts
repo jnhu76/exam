@@ -564,7 +564,7 @@ async function startComposition(
         );
         return { attemptId: result.attempt.id, isNew: result.isNew };
       },
-      "read committed",
+      { isolationLevel: "read committed" },
     );
     return {
       ok: true,

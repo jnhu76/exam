@@ -95,14 +95,72 @@ const MAX_RETRIES = 3;
  * Minimal pino-compatible warn surface for transaction-retry observability.
  * Structural only — Fastify's root logger satisfies it, so `packages/db`
  * never depends on Fastify.
+ *
+ * INVARIANT (synchronous sink): `warn` MUST return synchronously and MUST
+ * NOT return a thenable. The retry loop never awaits it, and this module
+ * deliberately installs no `.catch` shim: an async adapter is an
+ * out-of-contract wiring (possible unhandled rejection is the caller's
+ * defect, not a supported mode — #1006 D4).
+ *
+ * INVARIANT (best-effort): a synchronous throw is swallowed at the single
+ * emit point; observability failures never abort a retry, change its
+ * backoff, or alter the transaction result.
  */
 export interface TransactionRetryLogger {
   warn(obj: Record<string, unknown>, msg: string): void;
 }
 
+/**
+ * Closed set of business operations allowed to attach retry correlation.
+ * An operation is added only together with an approved observability
+ * contract; the union is the whole vocabulary (currently W03 answer save,
+ * #1006). Deliberately not a free-form string: correlation must not become a
+ * general-purpose operation registry.
+ */
+export type TransactionCorrelationOperation = "attempt.answer.save";
+
+/**
+ * Caller-supplied correlation for the `transaction retry` WARN (#1006 / E05).
+ *
+ * Closed shape — exactly these optional keys; unknown keys do not exist by
+ * construction. Identity ownership stays with the CALLER: `packages/db`
+ * neither mints ids nor reads ambient request state, so concurrent requests
+ * can never share correlation. `requestId` must be the server-minted
+ * `request.id` (ADR-025), `attemptId` the authorized business attempt and
+ * `organizationId` the trusted server-side boundary.
+ *
+ * High-cardinality identities are log-line correlation fields only — never
+ * metric labels, map keys or aggregation dimensions.
+ */
+export interface TransactionCorrelation {
+  requestId?: string;
+  attemptId?: string;
+  organizationId?: string;
+  operation?: TransactionCorrelationOperation;
+}
+
+/**
+ * Options for {@link executeInTransaction}.
+ *
+ * `isolationLevel` replaces the former third POSITIONAL parameter with one
+ * closed object shape, so there is exactly one way to configure a call and
+ * a fourth bare parameter never becomes possible (#1006).
+ */
+export interface ExecuteInTransactionOptions {
+  isolationLevel?: "read committed" | "repeatable read";
+  /**
+   * Optional explicit correlation stamped on every retry WARN. Omit it when
+   * the call site has no trusted identity: emits stay correlation-free
+   * rather than fabricating one.
+   */
+  correlation?: TransactionCorrelation;
+}
+
 // Module-scoped so every executeInTransaction call site reports retries
 // without per-call plumbing; the API process wires its Fastify logger once
 // at db-plugin install. Silent by default so scripts and tests stay quiet.
+// Correlation is NOT module state (#1006): it travels per call so concurrent
+// requests never share ambient identity.
 let transactionRetryLogger: TransactionRetryLogger | null = null;
 
 /** Wires the process-wide retry logger (or `null` to silence). */
@@ -180,14 +238,16 @@ function isRetryableError(err: unknown): boolean {
  *
  * @param db - Database instance.
  * @param fn - Async function that receives a transactional `Database` handle.
- * @param isolationLevel - Transaction isolation level (default: "repeatable read").
+ * @param options - Closed options object: `isolationLevel` (default
+ *   "repeatable read") and optional `correlation` stamped on retry WARNs.
  * @returns The value returned by `fn`.
  */
 export async function executeInTransaction<T>(
   db: Database,
   fn: (tx: TransactionDatabase) => Promise<T>,
-  isolationLevel: "read committed" | "repeatable read" = "repeatable read",
+  options: ExecuteInTransactionOptions = {},
 ): Promise<T> {
+  const { isolationLevel = "repeatable read", correlation } = options;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -214,15 +274,24 @@ export async function executeInTransaction<T>(
       // 409/500 with nothing to distinguish them. The SQLSTATE comes from
       // the same cause-chain walk the classification used; retry count,
       // backoff, isolation, and commit semantics are unchanged.
-      transactionRetryLogger?.warn(
-        {
-          attempt: attempt + 1,
-          sqlstate: [...RETRYABLE_ERROR_CODES].find((code) =>
-            hasPostgresErrorCode(err, code),
-          ),
-        },
-        "transaction retry",
-      );
+      try {
+        transactionRetryLogger?.warn(
+          {
+            attempt: attempt + 1,
+            sqlstate: [...RETRYABLE_ERROR_CODES].find((code) =>
+              hasPostgresErrorCode(err, code),
+            ),
+            // Closed object; omitted entirely when the caller has no identity
+            // so no ambient/fabricated correlation can ever appear.
+            ...(correlation ? { correlation } : {}),
+          },
+          "transaction retry",
+        );
+      } catch {
+        // OBSERVABILITY_MUST_NOT_AFFECT_RETRY (#1006 D4): a synchronous logger
+        // failure must not abort the retry, alter the backoff, or change which
+        // error finally escapes the loop.
+      }
     }
   }
 

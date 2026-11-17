@@ -95,6 +95,6 @@ export async function executeAdminExamTransition<T>(
     // applies to every transition sharing this executor; their exam-side
     // reads stay serialized by the row lock itself, so RC can only make
     // attempt-row predicates (the unresolved guards) fresher, never stale.
-    "read committed",
+    { isolationLevel: "read committed" },
   );
 }
