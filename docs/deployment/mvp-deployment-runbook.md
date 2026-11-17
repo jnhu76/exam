@@ -687,6 +687,7 @@ curl -s -b "auth-token=<JWT>" http://localhost:${EXAM_PORT:-80}/api/system/diagn
 # Expected fields: status, enabled, worker.{status,lastPollAt,lastSuccessAt,
 #                  lastErrorAt,lastError}, outbox.{pending,processing,
 #                  retryWait,sent,dead}, oldestPendingAge,
+#                  oldestDuePendingAgeSeconds,
 #                  lastSuccessfulDeliveryAt
 ```
 
@@ -1075,7 +1076,13 @@ emailStatus.status                — overall: available / degraded / disabled
 emailStatus.worker                — worker heartbeat (last_poll_at, last_success_at,
                                     last_error_at, last_error)
 emailStatus.outbox                — pending / processing / retry_wait / sent / dead
-emailStatus.oldestPendingAge      — seconds, or null
+emailStatus.oldestDuePendingAgeSeconds — age of the oldest DUE pending row in
+                                    whole seconds (floor); null = no row is
+                                    due (a future-scheduled row may still
+                                    exist — null is not an empty backlog)
+emailStatus.oldestPendingAge      — deprecated: identical value from the same
+                                    query during the compatibility window;
+                                    removed once no consumer reads it
 emailStatus.lastSuccessfulDeliveryAt — timestamp, or null
 config                            — heartbeatInterval / heartbeatTimeout / deadlineScanInterval
 ```

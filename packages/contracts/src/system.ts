@@ -107,7 +107,22 @@ export const EmailDiagnosticsStatusSchema = z.object({
     sent: z.number().int().min(0),
     dead: z.number().int().min(0),
   }),
-  oldestPendingAge: z.number().int().min(0).nullable(),
+  oldestPendingAge: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .describe(
+      "Deprecated: superseded by oldestDuePendingAgeSeconds (identical value, identical source). Legacy name kept during the compatibility window and removed once the deployment docs are migrated, one minor release has shipped both fields, and a consumer census finds no remaining reader of the old name.",
+    ),
+  oldestDuePendingAgeSeconds: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .describe(
+      "Age in whole seconds (floor) of the oldest DUE pending outbox row: status=pending AND nextAttemptAt null or in the past, at read time, requesting organization only. null means no row matched this due-pending set — a future-scheduled or non-pending row can still exist, so null is NOT an empty backlog.",
+    ),
   lastSuccessfulDeliveryAt: z.string().nullable(),
 });
 

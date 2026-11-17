@@ -102,6 +102,7 @@ function validDiagnostics(
       },
       outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
       oldestPendingAge: null,
+      oldestDuePendingAgeSeconds: null,
       lastSuccessfulDeliveryAt: null,
     },
     config: {

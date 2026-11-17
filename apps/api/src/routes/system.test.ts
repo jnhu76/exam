@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
   SUPPORTED_PRODUCT_CAPABILITIES,
@@ -12,8 +12,13 @@ import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import { getProductCapabilityProjection } from "../product/compositionRoot.js";
 import { heartbeatMetrics } from "../plugins/heartbeat.js";
 import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
-import { emailOutbox, workerHeartbeats, schema } from "@exam/db/schema/pg";
-import { eq, inArray } from "drizzle-orm";
+import {
+  emailOutbox,
+  organizations,
+  workerHeartbeats,
+  schema,
+} from "@exam/db/schema/pg";
+import { eq, inArray, sql } from "drizzle-orm";
 import { BOOTSTRAP_PENDING_MESSAGE } from "../workers/emailDeliveryWorker.js";
 
 // Integrity-block test fixtures accumulate submitted-attempt rows that
@@ -576,6 +581,368 @@ describe("system routes", () => {
       }
       resetRuntimeConfigForTest();
     });
+
+    // ── #1003: oldest due-pending age projection ─────────────────────
+    // `oldestDuePendingAgeSeconds` is the authoritative field: the age of the
+    // oldest DUE pending outbox row (status=pending AND nextAttemptAt null or
+    // <= now, requesting org only), in whole seconds (floor). null means NO
+    // row matched that due-pending set — a future-scheduled or non-pending
+    // row can still exist, so null is NOT "the backlog is empty".
+    // `oldestPendingAge` is the deprecated legacy name served from the SAME
+    // single findDuePending projection during the compatibility window: the
+    // two fields must stay identical, and any divergence is an implementation
+    // defect. The scenarios pin the due-only set, the second/floor unit, the
+    // boundary semantics and the org isolation over real PostgreSQL.
+    describe("email oldest due-pending age projection (#1003)", () => {
+      const T = new Date("2026-01-15T08:00:00.000Z");
+      let orgBId = "";
+
+      interface EmailAgeProjection {
+        status: string;
+        enabled: boolean;
+        outbox: Record<string, number>;
+        oldestPendingAge: number | null;
+        oldestDuePendingAgeSeconds: number | null;
+      }
+
+      type OutboxSeed = Partial<typeof emailOutbox.$inferInsert> & {
+        organizationId: string;
+      };
+
+      function setEmailEnabledForTest(value: string | undefined) {
+        if (value === undefined) {
+          delete process.env.EMAIL_ENABLED;
+        } else {
+          process.env.EMAIL_ENABLED = value;
+        }
+        resetRuntimeConfigForTest();
+      }
+
+      async function seedOutbox(seed: OutboxSeed) {
+        await ctx.db.insert(emailOutbox).values({
+          id: randomUUID(),
+          type: "grade_notification",
+          recipientEmail: "to@example.com",
+          subject: "s",
+          bodyText: "t",
+          status: "pending",
+          attemptCount: 0,
+          maxAttempts: 3,
+          createdAt: T,
+          updatedAt: T,
+          ...seed,
+        });
+      }
+
+      async function readEmailStatus(): Promise<EmailAgeProjection> {
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        expect(res.statusCode).toBe(200);
+        return res.json().emailStatus as EmailAgeProjection;
+      }
+
+      /** Compatibility-window invariant: one projection, two field names. */
+      function expectDualFieldAge(
+        email: Pick<
+          EmailAgeProjection,
+          "oldestPendingAge" | "oldestDuePendingAgeSeconds"
+        >,
+        expected: number | null,
+      ) {
+        expect(email.oldestDuePendingAgeSeconds).toBe(expected);
+        expect(email.oldestPendingAge).toBe(expected);
+        expect(email.oldestPendingAge).toBe(email.oldestDuePendingAgeSeconds);
+      }
+
+      afterEach(async () => {
+        const orgIds = [ctx.org.id];
+        if (orgBId) {
+          orgIds.push(orgBId);
+        }
+        await ctx.db
+          .delete(emailOutbox)
+          .where(inArray(emailOutbox.organizationId, orgIds));
+        if (orgBId) {
+          await ctx.db
+            .delete(organizations)
+            .where(eq(organizations.id, orgBId));
+          orgBId = "";
+        }
+        ctx.setNow(null);
+        setEmailEnabledForTest(undefined);
+      });
+
+      it("projects the exact age of the oldest due pending row: T-3600s -> 3600", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 3_600_000),
+          nextAttemptAt: null,
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(1);
+        expectDualFieldAge(email, 3600);
+      });
+
+      it("is null when only a future pending row exists (due-only set; pending count stays 1)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 86_400_000),
+          nextAttemptAt: new Date(T.getTime() + 3_600_000),
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(1);
+        expectDualFieldAge(email, null);
+      });
+
+      it("a long-stuck DUE retry_wait row never feeds the age (young due pending sets 60)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          status: "retry_wait",
+          attemptCount: 2,
+          lastError: "smtp unavailable",
+          createdAt: new Date(T.getTime() - 864_000_000),
+          nextAttemptAt: new Date(T.getTime() - 1_000),
+        });
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          status: "pending",
+          createdAt: new Date(T.getTime() - 60_000),
+          nextAttemptAt: null,
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(1);
+        expect(email.outbox.retryWait).toBe(1);
+        expectDualFieldAge(email, 60);
+      });
+
+      it("is null for future retry_wait, processing, dead and sent rows", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          status: "retry_wait",
+          attemptCount: 1,
+          lastError: "smtp 454",
+          createdAt: new Date(T.getTime() - 7_200_000),
+          nextAttemptAt: new Date(T.getTime() + 600_000),
+        });
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          status: "processing",
+          attemptCount: 1,
+          lockedAt: new Date(T.getTime() - 1_000),
+          lockedBy: "pin-worker-1",
+          createdAt: new Date(T.getTime() - 5_000_000),
+        });
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          status: "dead",
+          attemptCount: 3,
+          maxAttempts: 3,
+          lastError: "smtp 550",
+          createdAt: new Date(T.getTime() - 86_400_000),
+        });
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          status: "sent",
+          attemptCount: 1,
+          sentAt: new Date(T.getTime() - 30_000),
+          createdAt: new Date(T.getTime() - 86_400_000),
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox).toEqual({
+          pending: 0,
+          processing: 1,
+          retryWait: 1,
+          sent: 1,
+          dead: 1,
+        });
+        expectDualFieldAge(email, null);
+      });
+
+      it("ties on createdAt: two due pending rows with the same createdAt -> that age (7320)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 7_320_000),
+          nextAttemptAt: null,
+        });
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 7_320_000),
+          nextAttemptAt: null,
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(2);
+        expectDualFieldAge(email, 7320);
+      });
+
+      it("a newer DUE pending row sets the age while an older future pending exists (1, not 86400)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 1_000),
+          nextAttemptAt: null,
+        });
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 86_400_000),
+          nextAttemptAt: new Date(T.getTime() + 3_600_000),
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(2);
+        expectDualFieldAge(email, 1);
+      });
+
+      it("due boundary is inclusive: nextAttemptAt == now feeds the age (500)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 500_000),
+          nextAttemptAt: T,
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(1);
+        expectDualFieldAge(email, 500);
+      });
+
+      it("not-yet-due by 1ms is excluded: nextAttemptAt == now+1ms -> null", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 500_000),
+          nextAttemptAt: new Date(T.getTime() + 1),
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(1);
+        expectDualFieldAge(email, null);
+      });
+
+      it("sub-second ages floor to whole seconds: T-1500ms -> 1", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 1_500),
+          nextAttemptAt: null,
+        });
+        const email = await readEmailStatus();
+        expectDualFieldAge(email, 1);
+      });
+
+      it("T-999ms projects a real 0, distinct from null (a due row exists)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 999),
+          nextAttemptAt: null,
+        });
+        const email = await readEmailStatus();
+        expect(email.outbox.pending).toBe(1);
+        expect(email.oldestDuePendingAgeSeconds).not.toBeNull();
+        expectDualFieldAge(email, 0);
+      });
+
+      it("another org's 10-day due pending row is invisible (org isolation)", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        orgBId = randomUUID();
+        await ctx.db.insert(organizations).values({
+          id: orgBId,
+          name: "pin-org-b",
+          displayName: "Pin Org B",
+          slug: `pin-org-b-${orgBId.slice(0, 8)}`,
+          createdAt: T,
+          updatedAt: T,
+        });
+        await seedOutbox({
+          organizationId: orgBId,
+          createdAt: new Date(T.getTime() - 864_000_000),
+          nextAttemptAt: null,
+        });
+        const before = await readEmailStatus();
+        expect(before.outbox.pending).toBe(0);
+        expectDualFieldAge(before, null);
+
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 100_000),
+          nextAttemptAt: null,
+        });
+        const after = await readEmailStatus();
+        expect(after.outbox.pending).toBe(1);
+        expectDualFieldAge(after, 100);
+      });
+
+      it("disabled email config nulls both fields even though rows exist", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest(undefined);
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 3_600_000),
+          nextAttemptAt: null,
+        });
+        const email = await readEmailStatus();
+        expect(email.status).toBe("disabled");
+        expect(email.enabled).toBe(false);
+        expect(email.outbox).toEqual({
+          pending: 0,
+          processing: 0,
+          retryWait: 0,
+          sent: 0,
+          dead: 0,
+        });
+        expectDualFieldAge(email, null);
+      });
+
+      it("unavailable (email_outbox unreadable) nulls both fields, not fake zeros", async () => {
+        ctx.setNow(T);
+        setEmailEnabledForTest("true");
+        await seedOutbox({
+          organizationId: ctx.org.id,
+          createdAt: new Date(T.getTime() - 3_600_000),
+          nextAttemptAt: null,
+        });
+        // Failure injection at the DB boundary inside this file's disposable
+        // harness schema: pingDb still succeeds, every email_outbox query
+        // throws -> buildEmailStatus catch branch. The rename is reverted in
+        // finally, so the harness-owned table survives the test.
+        await ctx.db.execute(
+          sql`ALTER TABLE email_outbox RENAME TO email_outbox_unavailable_pin`,
+        );
+        try {
+          const email = await readEmailStatus();
+          expect(email.status).toBe("unavailable");
+          expect(email.outbox).toEqual({
+            pending: 0,
+            processing: 0,
+            retryWait: 0,
+            sent: 0,
+            dead: 0,
+          });
+          expectDualFieldAge(email, null);
+        } finally {
+          await ctx.db.execute(
+            sql`ALTER TABLE email_outbox_unavailable_pin RENAME TO email_outbox`,
+          );
+        }
+      });
+    });
+
     // ── #1004: heartbeat incident counter projection ─────────────────
     // The plugin-owned `heartbeatMetrics` object stays the SINGLE mutation
     // authority; diagnostics only reads it. These tests pin exact-value

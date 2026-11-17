@@ -83,6 +83,7 @@ async function buildEmailStatus(
     dead: number;
   };
   oldestPendingAge: number | null;
+  oldestDuePendingAgeSeconds: number | null;
   lastSuccessfulDeliveryAt: string | null;
 }> {
   const enabled = config.email.enabled;
@@ -99,6 +100,7 @@ async function buildEmailStatus(
       },
       outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
       oldestPendingAge: null,
+      oldestDuePendingAgeSeconds: null,
       lastSuccessfulDeliveryAt: null,
     };
   }
@@ -133,13 +135,17 @@ async function buildEmailStatus(
 
     const counts = await emailRepo.countByStatus(ctx);
 
-    const allPendingRows = await emailRepo.findDuePending(ctx, now, 1);
-    let oldestPendingAge: number | null = null;
-    if (allPendingRows.length > 0) {
-      oldestPendingAge = Math.floor(
-        (now.getTime() - allPendingRows[0]!.createdAt.getTime()) / 1000,
+    const duePendingRows = await emailRepo.findDuePending(ctx, now, 1);
+    // INVARIANT(#1003): a single findDuePending call projects BOTH field
+    // names — `oldestPendingAge` (deprecated) and `oldestDuePendingAgeSeconds`
+    // must stay identical; no second query or second computation may exist.
+    let oldestDuePendingAgeSeconds: number | null = null;
+    if (duePendingRows.length > 0) {
+      oldestDuePendingAgeSeconds = Math.floor(
+        (now.getTime() - duePendingRows[0]!.createdAt.getTime()) / 1000,
       );
     }
+    const oldestPendingAge = oldestDuePendingAgeSeconds;
 
     // Determine last successful delivery from actual outbox data
     let lastSuccessfulDeliveryAt: string | null = null;
@@ -166,6 +172,7 @@ async function buildEmailStatus(
       },
       outbox: counts,
       oldestPendingAge,
+      oldestDuePendingAgeSeconds,
       lastSuccessfulDeliveryAt,
     };
   } catch {
@@ -181,6 +188,7 @@ async function buildEmailStatus(
       },
       outbox: { pending: 0, processing: 0, retryWait: 0, sent: 0, dead: 0 },
       oldestPendingAge: null,
+      oldestDuePendingAgeSeconds: null,
       lastSuccessfulDeliveryAt: null,
     };
   }
