@@ -208,7 +208,13 @@ export const DiagnosticsResponseSchema = z.object({
     // never persisted, and NOT aggregated across API instances. These are
     // host-level operational counters, not a tenant-specific incident
     // report; multi-instance meaning must not be inferred from them.
+    /** Distinct applied System-incident creates (max one per interruption
+     * episode; idempotent replays are not counted). */
     incidentCreatedCount: z.number().int().min(0),
+    /** Reconciliation attempts whose operationId was already occupied by a
+     * different command/payload. The same collision is re-observed and
+     * re-counted on every cycle until it is resolved — a conflict-OBSERVATION
+     * count, not a distinct-conflict count. */
     incidentConflictCount: z.number().int().min(0),
     // #862/#886: run-length escalation input — consecutive SETTLED ticks
     // where EITHER leg had business failures. Process-local (reset on

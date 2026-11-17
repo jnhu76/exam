@@ -246,7 +246,7 @@ Phase 2 (in-process `setInterval`). Their diagnostics contract:
 | disruptedCount / autoSubmitCount | scannerMetrics | surfaced in diagnostics |
 | failedCount | scanner error log | pino `logger.error` on failed auto-submit |
 | consecutiveFailedTicks | scannerMetrics | surfaced in diagnostics (#886); #862 escalation run-length (reset on restart, clean settle zeroes, tick throw freezes) — not the cumulative failedCount |
-| incidentCreatedCount / incidentConflictCount | heartbeatMetrics | surfaced in diagnostics (#1004); #304 F4A cumulative System-incident reconciliation counts since process start — process-local, reset on restart, not persisted, never aggregated across API instances |
+| incidentCreatedCount / incidentConflictCount | heartbeatMetrics | surfaced in diagnostics (#1004); #304 F4A System-incident reconciliation counters since process start — process-local, reset on restart, not persisted, never aggregated across API instances. `incidentCreatedCount` = distinct applied creates (max one per interruption episode; idempotent replays excluded); `incidentConflictCount` = per-cycle conflict OBSERVATIONS (the same collision is re-counted each reconciliation cycle until resolved) |
 | organizationId | ctx of the scanned attempt | tenant scoping |
 | attemptId | the scanned row | for incident correlation |
 
