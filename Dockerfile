@@ -108,7 +108,7 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # image (release.yml, docker-compose.yml operator source-build path) pins
 # `target: runner` explicitly — a targetless build would select this final
 # stage and ship nginx as the API.
-FROM nginx:1.30.5-alpine3.24 AS web-runner
+FROM nginx:1.30.5-trixie AS web-runner
 
 COPY deploy/nginx/web.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html

@@ -154,7 +154,7 @@ services:
   # `$$` escapes interpolation: refuses to start without REDIS_PASSWORD and
   # runs --requirepass.
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.12-bookworm
     profiles: ["redis"]
     command:
       - sh

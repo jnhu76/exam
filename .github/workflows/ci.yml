@@ -210,7 +210,7 @@ jobs:
           --health-retries=10
 
       redis:
-        image: redis:7-alpine
+        image: redis:7.4.12-bookworm
         ports:
           - 6379:6379
         options: >-

@@ -177,7 +177,7 @@ allowlist carve-out.
 
 ## Docker Compose
 
-Redis service added to all compose files (`redis:7-alpine`):
+Redis service added to all compose files (`redis:7.4.12-bookworm`):
 
 - `docker-compose.yml` (production): AOF persistence, internal to `exam-net`
   only (no host port) — the app reaches Redis over the internal network
