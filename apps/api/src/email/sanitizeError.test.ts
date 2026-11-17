@@ -155,6 +155,85 @@ describe("classifyEmailError / formatEmailErrorClassification", () => {
   });
 });
 
+describe("classifyEmailError — bounded cause inspection (#1016)", () => {
+  it("classifies a wrapper whose cause carries the SQLSTATE: 08006", () => {
+    const outer = new Error("drizzle wrapper", {
+      cause: Object.assign(new Error("connection terminated"), {
+        code: "08006",
+      }),
+    });
+    expect(sanitizeEmailError(outer)).toBe(
+      "email_error:db_connection_failed code=08006",
+    );
+  });
+
+  it("classifies retryable SQLSTATEs from a cause: 40001 / 40P01", () => {
+    for (const code of ["40001", "40P01"] as const) {
+      const outer = new Error("failed: retryable condition");
+      (outer as { cause?: unknown }).cause = Object.assign(
+        new Error("serialization failure"),
+        { code },
+      );
+      expect(sanitizeEmailError(outer)).toBe(
+        `email_error:db_error code=${code}`,
+      );
+    }
+  });
+
+  it("keeps the top-level classification when the outer error already carries a code", () => {
+    // GUARD: the cause chain is consulted only when the top level yields
+    // nothing — existing single-level semantics are unchanged.
+    const outer = Object.assign(new Error("smtp"), { code: "EAUTH" });
+    (outer as { cause?: unknown }).cause = Object.assign(new Error("db"), {
+      code: "08006",
+    });
+    expect(sanitizeEmailError(outer)).toBe(
+      "email_error:smtp_auth_failed code=EAUTH",
+    );
+  });
+
+  it("degrades to internal_error when the recognizable code sits beyond the cause depth cap", () => {
+    // GUARD: the traversal window is fixed (outer + 2 cause levels); a code
+    // only reachable deeper than that must not escape or hang the traversal.
+    const deep = Object.assign(new Error("deep"), { code: "08006" });
+    const l2 = new Error("l2", { cause: deep });
+    const l1 = new Error("l1", { cause: l2 });
+    const outer = new Error("outer", { cause: l1 });
+    expect(sanitizeEmailError(outer)).toBe("email_error:internal_error");
+  });
+
+  it("does not throw on a circular cause chain and falls back safely", () => {
+    const err = new Error("circular");
+    (err as { cause?: unknown }).cause = err;
+    expect(() => sanitizeEmailError(err)).not.toThrow();
+    expect(sanitizeEmailError(err)).toBe("email_error:internal_error");
+  });
+
+  it("falls back safely when the `cause` getter throws", () => {
+    const hostile = new Error("wrapper");
+    Object.defineProperty(hostile, "cause", {
+      get() {
+        throw new Error("cause getter exploded");
+      },
+    });
+    expect(() => sanitizeEmailError(hostile)).not.toThrow();
+    expect(sanitizeEmailError(hostile)).toBe("email_error:internal_error");
+  });
+
+  it("falls back safely when a nested `code` getter throws", () => {
+    const hostileCause = new Error("inner");
+    Object.defineProperty(hostileCause, "code", {
+      get() {
+        throw new Error("code getter exploded");
+      },
+    });
+    const outer = new Error("outer");
+    (outer as { cause?: unknown }).cause = hostileCause;
+    expect(() => sanitizeEmailError(outer)).not.toThrow();
+    expect(sanitizeEmailError(outer)).toBe("email_error:internal_error");
+  });
+});
+
 describe("projectStoredEmailError (read-side projection)", () => {
   it("keeps null as null (no-current-error contract)", () => {
     expect(projectStoredEmailError(null)).toBeNull();

@@ -156,3 +156,85 @@ describe("sanitizeEmailError — #1012 RED witnesses", () => {
     expect(out).not.toContain(M_STACK);
   });
 });
+
+describe("sanitizeEmailError — #1016 bounded cause inspection witnesses", () => {
+  // #1016: the classifier now READS a bounded cause chain (code / responseCode
+  // / cause only), so nested causes become a live attack surface. These
+  // witnesses pin that the newly-read levels leak nothing: even when a
+  // nested cause carries a recognizable allowlisted code, only the closed
+  // classification is emitted — never the cause's free text.
+
+  it("witness: nested cause free text never leaks even when the cause code is recognizable", () => {
+    const inner = Object.assign(
+      new Error(
+        `db failure: ${M_SQL} with ${M_BIND} secret=${M_SECRET} rcpt=${M_RCPT}`,
+      ),
+      { code: "08006" },
+    );
+    const outer = new Error("drizzle wrapper failed");
+    (outer as { cause?: unknown }).cause = inner;
+    const out = sanitizeEmailError(outer);
+    const leaked = leakedMarkers(out);
+    expect(
+      leaked,
+      `markers leaked via cause inspection: ${leaked.join(", ")}\noutput: ${out}`,
+    ).toEqual([]);
+    // Operability is preserved: the SQLSTATE survives, only as classification.
+    expect(out).toBe("email_error:db_connection_failed code=08006");
+  });
+
+  it("witness: a throwing `cause` getter carrying markers neither throws nor leaks", () => {
+    const hostile = new Error("outer");
+    Object.defineProperty(hostile, "cause", {
+      get() {
+        throw new Error(`getter exploded: ${M_SQL} ${M_SECRET}`);
+      },
+    });
+    let out: string | undefined;
+    expect(() => {
+      out = sanitizeEmailError(hostile);
+    }).not.toThrow();
+    const leaked = leakedMarkers(out ?? "");
+    expect(
+      leaked,
+      `markers leaked via throwing cause getter: ${leaked.join(", ")}\noutput: ${out ?? "<threw>"}`,
+    ).toEqual([]);
+    expect(out).toBe("email_error:internal_error");
+  });
+
+  it("witness: a throwing nested `code` getter carrying markers neither throws nor leaks", () => {
+    const inner = new Error("inner");
+    Object.defineProperty(inner, "code", {
+      get() {
+        throw new Error(`code getter: ${M_SQL} ${M_SECRET}`);
+      },
+    });
+    const outer = new Error("outer");
+    (outer as { cause?: unknown }).cause = inner;
+    let out: string | undefined;
+    expect(() => {
+      out = sanitizeEmailError(outer);
+    }).not.toThrow();
+    const leaked = leakedMarkers(out ?? "");
+    expect(
+      leaked,
+      `markers leaked via throwing code getter: ${leaked.join(", ")}\noutput: ${out ?? "<threw>"}`,
+    ).toEqual([]);
+    expect(out).toBe("email_error:internal_error");
+  });
+
+  it("witness: a circular cause chain carrying markers neither throws nor leaks", () => {
+    const err = new Error(`circular carrier ${M_SQL} ${M_SECRET}`);
+    (err as { cause?: unknown }).cause = err;
+    let out: string | undefined;
+    expect(() => {
+      out = sanitizeEmailError(err);
+    }).not.toThrow();
+    const leaked = leakedMarkers(out ?? "");
+    expect(
+      leaked,
+      `markers leaked via circular cause: ${leaked.join(", ")}\noutput: ${out ?? "<threw>"}`,
+    ).toEqual([]);
+    expect(out).toBe("email_error:internal_error");
+  });
+});

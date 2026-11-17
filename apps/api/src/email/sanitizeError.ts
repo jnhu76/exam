@@ -15,6 +15,11 @@
  *    PostgreSQL SQLSTATEs and an integer SMTP response code in 400–599 are
  *    retainable — a correctly shaped value that is not in the closed sets is
  *    rejected, not passed through;
+ *  - the `cause` chain is inspected through those same closed-field reads
+ *    only, depth-bounded (#1016): a wrapper whose inner error carries the
+ *    SQLSTATE keeps its operability classification, while circular chains,
+ *    throwing getters, and deeper-than-bounded codes degrade to
+ *    `internal_error` — no cause-level free text is ever read;
  *  - classification never throws: hostile shapes (throwing getters, circular
  *    causes, toString/toJSON tricks) degrade to the fixed `internal_error`
  *    category instead of escaping into the delivery state machine.
@@ -177,15 +182,23 @@ function extractResponseCode(error: unknown): number | null {
 }
 
 /**
- * Classify any thrown value into the closed safe representation. Never
- * throws, never reads free-text properties. An {@link EmailSendError} is
- * re-classified from the closed classification it was constructed with —
- * its `message` is derived by this policy, never caller text.
+ * How many nested `cause` levels below the thrown value the classifier
+ * inspects (#1016). WHY 2: a Drizzle/driver failure reaches the worker as
+ * at most a wrapper→wrapper→driver-error chain, so two levels cover the
+ * realistic wrapper shapes while keeping the traversal window fixed — which
+ * is also what makes circular `cause` chains terminate without any
+ * visited-set bookkeeping. A recognizable code only reachable deeper than
+ * this degrades to `internal_error` like any unknown shape.
  */
-export function classifyEmailError(error: unknown): EmailErrorClassification {
-  if (error instanceof EmailSendError) {
-    return error.classification;
-  }
+const MAX_CAUSE_DEPTH = 2;
+
+/**
+ * Closed-field inspection of ONE error object: an allowlisted `code` wins
+ * (with a response code riding the same object), then a lone validated
+ * integer response code. Null when the object yields nothing usable.
+ */
+function inspectClosedFields(error: unknown): EmailErrorClassification | null {
+  if (error === null || typeof error !== "object") return null;
   const code = extractCode(error);
   if (code !== null) {
     const category = SMTP_CODES.has(code)
@@ -196,6 +209,45 @@ export function classifyEmailError(error: unknown): EmailErrorClassification {
   const smtpResponseCode = extractResponseCode(error);
   if (smtpResponseCode !== null) {
     return { category: "smtp_send_failed", code: null, smtpResponseCode };
+  }
+  return null;
+}
+
+/**
+ * Read `cause` off a possibly hostile object without letting a throwing
+ * getter escape into the business flow.
+ */
+function causeOf(error: unknown): unknown {
+  return safeProp(error, () =>
+    error !== null && typeof error === "object"
+      ? (error as { cause?: unknown }).cause
+      : undefined,
+  );
+}
+
+/**
+ * Classify any thrown value into the closed safe representation. Never
+ * throws, never reads free-text properties. An {@link EmailSendError} is
+ * re-classified from the closed classification it was constructed with —
+ * its `message` is derived by this policy, never caller text.
+ *
+ * The thrown value's `cause` chain is inspected when the outer level yields
+ * no closed fields (#1016: Drizzle/postgres wrappers put the SQLSTATE on
+ * the inner error) — through the same closed-field reads only, bounded by
+ * {@link MAX_CAUSE_DEPTH}, circular-safe and hostile-getter-safe.
+ */
+export function classifyEmailError(error: unknown): EmailErrorClassification {
+  if (error instanceof EmailSendError) {
+    return error.classification;
+  }
+  let node: unknown = error;
+  for (let depth = 0; ; depth += 1) {
+    const hit = inspectClosedFields(node);
+    if (hit !== null) return hit;
+    if (depth >= MAX_CAUSE_DEPTH) break;
+    const next = causeOf(node);
+    if (next === undefined || next === null) break;
+    node = next;
   }
   return { category: "internal_error", code: null, smtpResponseCode: null };
 }
