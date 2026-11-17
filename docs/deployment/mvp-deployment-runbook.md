@@ -622,9 +622,9 @@ The implemented MVP separates **liveness**, **readiness**, and
 The Compose `app` healthcheck polls `GET /api/ready` every 30s (5s timeout,
 3 retries, 30s start period) — the API leg ONLY. The SPA HTML proof is NOT
 part of it: the `web` service carries its own healthcheck
-(`wget http://127.0.0.1:80/`), so `web (healthy)` is the public-edge +
-SPA-servable signal (#585). The `web` service depends on the app health
-state: `depends_on` holds web startup until `app` is healthy.
+(`curl -fsS http://127.0.0.1:80/healthz`), so `web (healthy)` is the
+public-edge + SPA-servable signal (#585). The `web` service depends on the
+app health state: `depends_on` holds web startup until `app` is healthy.
 
 ```text
 healthcheck:
