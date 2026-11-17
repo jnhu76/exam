@@ -6,7 +6,7 @@ import { DiagnosticsResponseSchema } from "./system.js";
 // route cannot silently omit. Builders take the counter as a param so the
 // "field absent" cases are expressed directly (undefined ⇒ key omitted).
 //
-// #1004 (E03/W10): the heartbeat incident counters
+// #1004: the heartbeat incident counters
 // (`incidentCreatedCount` / `incidentConflictCount`) are the read-only
 // projection of the plugin-owned `heartbeatMetrics` cumulative counters, so
 // they are REQUIRED non-negative integers on the heartbeat block as well.

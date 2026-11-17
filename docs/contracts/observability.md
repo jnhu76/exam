@@ -131,18 +131,19 @@ required merely to identify an HTTP request.
   id; the server-side fact is settled by receipts / domain state, and a
   missing record is an evidence gap (UNKNOWN, F6), never proof of
   non-arrival.
-- **DB transaction retry correlation (#1006 / E05).** The `transaction retry`
+- **DB transaction retry correlation (#1006).** The `transaction retry`
   WARN emitted by `packages/db` (`executeInTransaction`) carries a CLOSED
   `correlation` object only when the call site supplies one:
   `{ requestId?, attemptId?, organizationId?, operation? }` — `requestId` is
   the same server-minted `request.id` used by the `x-request-id` header and
   the Pino request trace (ADR-025), `attemptId`/`organizationId` come from the
   authorized request context, and `operation` is a closed enum (currently only
-  `attempt.answer.save`). W03 answer save is the only wired call site; other
-  call sites omit correlation rather than fabricating an HTTP identity. The
+  `attempt.answer.save`). The answer-save call site is the only wired one;
+  other call sites omit correlation rather than fabricating an HTTP identity. The
   retry logger is deliberately synchronous and fail-open: a logger failure
   never aborts a retry, changes its backoff, or alters the transaction result.
-  Join rule (same `requestId`, complete log capture, W03 transaction only):
+  Join rule (same `requestId`, complete log capture, the wired answer-save
+  transaction only):
 
   | observed | determinable fact |
   | --- | --- |
@@ -433,7 +434,7 @@ Diagnostics snapshot (background + redis):
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
 | Candidate submit outcome (#1007) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (known blindspot; acceptance pending owner review) | — |
-| DB transaction retry correlation (#1006) | Done for W03 answer save (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
+| DB transaction retry correlation (#1006) | Done for the answer-save call site (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
 | State transition audit rows | Done (action/target/metadata/createdAt) | Standardize `metadata.stateBefore/stateAfter/source` | SHOULD FIX (incremental) |

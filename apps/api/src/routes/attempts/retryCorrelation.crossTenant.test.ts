@@ -2,7 +2,7 @@
  * #1006 — cross-tenant interleaved retry correlation (Owner acceptance evidence 1).
  *
  * #1006 requires two interleaved organizations/requests to keep separate,
- * correct correlation. The W03 save route passes identity EXPLICITLY per call
+ * correct correlation. The answer-save route passes identity EXPLICITLY per call
  * (no ALS/global state), but structural isolation is not counter-evidence:
  * this file runs two authenticated candidates from two DISTINCT organizations
  * concurrently through the real HTTP save route and asserts that every
