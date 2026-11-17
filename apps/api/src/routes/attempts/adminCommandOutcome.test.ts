@@ -1,8 +1,8 @@
 /**
  * #1008 — admin force-submit / time-grant final command outcome
  * and denial correlation, asserted at the REAL Fastify + Pino serialization
- * boundary (a capturing stream, per the #1020 precedent in
- * `retryCorrelation.w03.test.ts`; `logger:false` can only prove business).
+ * boundary (a capturing stream, per the #1020 retry-correlation precedent;
+ * `logger:false` can only prove business).
  *
  * Commit-authoritative contract under test:
  *  - `admin.command.completed` is emitted ONLY after the full
