@@ -685,6 +685,7 @@ describe("EXAM-558 — take/submit deadline authority vs concurrent closeAt chan
       const result = (await submitPromise) as unknown as {
         attempt: ExamAttempt;
         alreadyGraded: boolean;
+        outcome: string;
       };
       if (result instanceof Error) {
         throw result;
@@ -694,6 +695,10 @@ describe("EXAM-558 — take/submit deadline authority vs concurrent closeAt chan
       // candidate's own submit instant — never submissionReason='deadline'
       // with submittedAt = the stale (pre-extension) closeAt.
       expect(result.alreadyGraded).toBe(false);
+      // #1007 outcome channel: the aborted first pass (which was heading for
+      // a deadline freeze) must not leak its would-be classification — the
+      // winning transaction's classification is the only one reported.
+      expect(result.outcome).toBe("graded");
       expect(result.attempt.submissionReason).toBe("manual");
       expect(result.attempt.submittedAt!.getTime()).toBe(arrivalNow.getTime());
       expect(["submitted", "graded"]).toContain(result.attempt.status);
