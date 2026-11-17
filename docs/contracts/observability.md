@@ -281,16 +281,16 @@ and denied 313 B (payload 79 B) — measured in the test harness, where
 Production (`server.ts`, ADR-025) mints UUIDv4 request ids (36 chars), which
 lengthens the full lines by 31 B to ≈ 476 B / 344 B (re-measured through the
 same emitters with the production generator and the production logger options;
-±1 B for the pid digit count). Both reqId口径 stay within the pinned
+±1 B for the pid digit count). Both reqId scopes stay within the pinned
 <= 512 B test budget; log-volume estimates should use the production figures.
 Frequency: one completed line per successful
 command request and at most one denied line per covered denial — bounded by
 admin command traffic, not an always-on per-request line. Failure isolation:
 the emitter swallows a synchronous logger failure (same fail-open contract as
 the transaction retry logger); an emit failure never changes a committed
-result or the HTTP response. Accepted blindspot: a process crash between
-COMMIT and emit loses that line permanently — no persistence, no outbox, no
-end-to-end exactly-once claim.
+result or the HTTP response. Known blindspot (acceptance pending owner
+review): a process crash between COMMIT and emit loses that line permanently —
+no persistence, no outbox, no end-to-end exactly-once claim.
 
 > Contract delta note (#1008): the `event` field, the `disposition` dimension,
 > and the time_grant `terminal` mapping are the minimal contract addition
