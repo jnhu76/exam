@@ -755,4 +755,45 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
       vi.useRealTimers();
     }
   });
+
+  it("REGRESSION (review): a settlement-emission sink failure is NOT a scan throw — four healthy no_op ticks with a synchronously throwing log.info keep consecutiveThrowTicks at 0 (no false operability.tick_failure)", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({ candidates: () => 3, txOutcomes: () => ["false"] }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+    const infoSpy = vi.spyOn(app.log, "info").mockImplementation(() => {
+      throw new Error("forced settlement sink failure");
+    });
+
+    try {
+      await runTick(clock);
+      await runTick(clock);
+      await runTick(clock);
+      await runTick(clock);
+
+      // Four scans completed with all-no-op outcomes; only their settlement
+      // line could not be written. Scan health must reflect exactly that:
+      // zero throws (the monitor's tick_failure escalation input) and four
+      // settled ticks — the emission loss must not be reclassified.
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(0);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(0);
+      expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+      const parsed = parseLines(lines);
+      expect(
+        parsed.filter((l) => l.event === "scanner.tick.completed"),
+      ).toEqual([]);
+      expect(
+        parsed.filter((l) => l.msg === "Error scanning for expired attempts"),
+      ).toEqual([]);
+    } finally {
+      infoSpy.mockRestore();
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
 });

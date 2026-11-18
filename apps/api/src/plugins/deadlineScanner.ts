@@ -500,16 +500,27 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
               : result.submittedCount > 0
                 ? "acted"
                 : "no_op";
-          fastify.log.info({
-            event: "scanner.tick.completed",
-            scanner: "deadline",
-            tickId,
-            outcome,
-            submittedCount: result.submittedCount,
-            failedCount: result.failedCount,
-            discoveredCount: result.discoveredCount,
-            noOpCount: result.noOpCount,
-          });
+          // INTENTIONAL (review of #1009): the settlement line is post-scan
+          // telemetry, so its emission is isolated from the scan-throw
+          // classification below. A failing log sink must never be counted
+          // as a scan throw, or operability.tick_failure (fed by
+          // consecutiveThrowTicks) would fire on a healthy scanner. Losing
+          // this tick's line is the accepted cost — the sink that just threw
+          // is not a channel to report the loss on.
+          try {
+            fastify.log.info({
+              event: "scanner.tick.completed",
+              scanner: "deadline",
+              tickId,
+              outcome,
+              submittedCount: result.submittedCount,
+              failedCount: result.failedCount,
+              discoveredCount: result.discoveredCount,
+              noOpCount: result.noOpCount,
+            });
+          } catch {
+            // swallowed by design — see INTENTIONAL above
+          }
         }
       } catch (err) {
         threw = true;
