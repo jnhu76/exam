@@ -481,6 +481,20 @@ production logger shape, trailing newline excluded), against 157B for the
 former summary line — the per-tick byte delta on previously-emitted ticks is
 +97B (acted) / +107B (partial_failure).
 
+Sink isolation: a synchronous log-sink throw at any of the scanner's three
+emission points — the settlement line, the per-candidate error line, and the
+tick-level error line — is swallowed at the emit point and never reclassified
+as scan evidence: it does not abort the remaining candidates of the tick, does
+not count as a tick throw (`consecutiveThrowTicks` → `operability.tick_failure`
+would fire on a healthy scanner), and never escapes the tick body as an
+unhandled rejection. Losing that line is the accepted cost — the sink that
+just threw is not a channel to report the loss on. The in-process failure
+evidence remains the counted candidate failure (`failedCount` /
+`consecutiveFailedTicks`) and the settled tick counters — process-local
+diagnostics reset on restart, not durable facts. A genuine scan error still
+counts as a tick throw (`consecutiveThrowTicks`) regardless of whether its
+error line could be written.
+
 > Implementation status: scanIntervalMs, lastScanAt, disruptedCount,
 > failedCount, incidentReconciliationFailedCount and consecutiveFailedTicks are
 > surfaced via `/system/diagnostics` from the `heartbeatMetrics` /

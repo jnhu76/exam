@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
+import { Buffer } from "node:buffer";
 import { Writable } from "node:stream";
 import { organizations, examAttempts } from "@exam/db/schema/pg";
 import deadlineScannerPlugin, {
@@ -8,6 +9,12 @@ import deadlineScannerPlugin, {
   type DeadlineCandidate,
 } from "./deadlineScanner.js";
 import { classifyLoopStall } from "./operabilityMonitor.js";
+
+// Real-timer reference captured at module load, before any test activates
+// vi.useFakeTimers() — used to cross REAL macrotask boundaries so Node's
+// unhandled-rejection checkpoint fires deterministically inside fake-time
+// tests.
+const realSetImmediate = setImmediate;
 
 function makeCandidate(
   overrides: Partial<DeadlineCandidate>,
@@ -589,6 +596,24 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
     return lines.map((l) => JSON.parse(l) as Record<string, unknown>);
   }
 
+  // Raw (unparsed) settlement lines, for byte-budget assertions on the
+  // COMPLETE pino JSON line.
+  function settlementRawLines(lines: string[]): string[] {
+    return lines.filter(
+      (l) =>
+        (JSON.parse(l) as Record<string, unknown>).event ===
+        "scanner.tick.completed",
+    );
+  }
+
+  // #1009 byte budget unit: UTF-8 byte length of ONE complete pino line,
+  // trailing newline excluded. Measured baseline at #1029: 254B (no_op),
+  // 254B (acted), 264B (partial_failure); pid/hostname/time widths vary by
+  // environment, so the regression pins the ≤512B budget, not exact bytes.
+  function lineBytes(line: string): number {
+    return Buffer.byteLength(line.endsWith("\n") ? line.slice(0, -1) : line);
+  }
+
   it("emits exactly one scanner.tick.completed with outcome no_op per non-empty all-no-op tick, with a distinct per-tick tickId", async () => {
     vi.useFakeTimers();
     const lines: string[] = [];
@@ -621,6 +646,12 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
 
       const second = completed[1]!;
       expect(second.tickId).not.toBe(first.tickId);
+
+      // Byte budget (#1009): every emitted no_op settlement line stays
+      // within the 512B contract budget.
+      for (const raw of settlementRawLines(lines)) {
+        expect(lineBytes(raw)).toBeLessThanOrEqual(512);
+      }
     } finally {
       await app.close();
       vi.useRealTimers();
@@ -677,6 +708,12 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
       expect(completed[0]!.noOpCount).toBe(0);
       expect(completed[0]!.scanner).toBe("deadline");
       expect(UUID_RE.test(String(completed[0]!.tickId))).toBe(true);
+
+      // Byte budget (#1009): the acted settlement line stays within the
+      // 512B contract budget.
+      for (const raw of settlementRawLines(lines)) {
+        expect(lineBytes(raw)).toBeLessThanOrEqual(512);
+      }
     } finally {
       await app.close();
       vi.useRealTimers();
@@ -718,6 +755,12 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
       expect(candidateErrors[0]!.tickId).toBe(completed[0]!.tickId);
       expect(candidateErrors[0]!.attemptId).toBe("att-2");
       expect(candidateErrors[0]!.organizationId).toBe(ORG.id);
+
+      // Byte budget (#1009): the partial_failure settlement line (not the
+      // per-candidate error line) stays within the 512B contract budget.
+      for (const raw of settlementRawLines(lines)) {
+        expect(lineBytes(raw)).toBeLessThanOrEqual(512);
+      }
     } finally {
       await app.close();
       vi.useRealTimers();
@@ -824,6 +867,126 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
       ).toEqual([]);
     } finally {
       infoSpy.mockRestore();
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  // Selective log-sink fault injection: ONLY the named line's emit throws
+  // synchronously; every other log call keeps writing through the real
+  // logger. This isolates exactly ONE emission point per test, so a failure
+  // identifies the un-isolated emit rather than "logging is broken".
+  function throwOnMsg(
+    app: ReturnType<typeof buildApp>["app"],
+    msg: string,
+    cause: string,
+  ) {
+    const originalError = app.log.error.bind(app.log);
+    return vi.spyOn(app.log, "error").mockImplementation(((
+      ...args: unknown[]
+    ) => {
+      if (args[1] === msg) {
+        throw new Error(cause);
+      }
+      return (originalError as (...a: unknown[]) => void)(...args);
+    }) as never);
+  }
+
+  it("REGRESSION (review): a per-candidate error-line sink throw neither aborts the remaining candidates nor reclassifies the tick — the tick settles partial_failure with business counters, zero tick throws", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({
+        candidates: () => 2,
+        txOutcomes: () => ["throw", "true"],
+      }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+    const errorSpy = throwOnMsg(
+      app,
+      "Failed to auto-submit expired attempt",
+      "forced per-candidate sink failure",
+    );
+
+    try {
+      await runTick(clock);
+
+      // Candidate 1 failed (its error line was lost with the sink — accepted);
+      // candidate 2 was STILL processed and submitted. The tick must settle
+      // as a normal partial_failure business outcome: exactly one settlement
+      // line, business counters advanced, NO tick throw — a failing log sink
+      // must never be counted as a scan throw (operability.tick_failure).
+      const parsed = parseLines(lines);
+      const completed = parsed.filter(
+        (l) => l.event === "scanner.tick.completed",
+      );
+      expect(completed).toHaveLength(1);
+      expect(completed[0]!.outcome).toBe("partial_failure");
+      expect(completed[0]!.submittedCount).toBe(1);
+      expect(completed[0]!.failedCount).toBe(1);
+      expect(completed[0]!.discoveredCount).toBe(2);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(1);
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(0);
+      expect(deadlineScannerMetrics.autoSubmitCount).toBe(1);
+      expect(deadlineScannerMetrics.failedCount).toBe(1);
+    } finally {
+      errorSpy.mockRestore();
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("REGRESSION (review): a tick-level error-line sink throw stays inside the tick body — the tick settles as a throw and no unhandled rejection escapes activeScan", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({
+        candidates: () => 1,
+        txOutcomes: () => ["true"],
+        orgDiscoveryThrows: () => true,
+      }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+    const errorSpy = throwOnMsg(
+      app,
+      "Error scanning for expired attempts",
+      "forced tick-level sink failure",
+    );
+    const unhandled: unknown[] = [];
+    const onUnhandled = (err: unknown) => {
+      unhandled.push(err);
+    };
+    process.on("unhandledRejection", onUnhandled);
+
+    try {
+      await runTick(clock);
+
+      // Settle bookkeeping is unchanged by the sink failure: the tick counts
+      // as a throw; its only record was lost with the sink (accepted — the
+      // sink that just threw is not a channel to report the loss on).
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(1);
+      expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+
+      // The contract under fix: the sink throw must not escape the tick
+      // body. Cross REAL macrotask boundaries (fake timers are active, so
+      // use the module-load reference) to let Node's unhandled-rejection
+      // checkpoint run — an escaped tick-body rejection (process-fatal
+      // under Node's default policy) must be observable here, and there
+      // must be none.
+      await new Promise<void>((resolve) =>
+        realSetImmediate(() => realSetImmediate(resolve)),
+      );
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      errorSpy.mockRestore();
       await app.close();
       vi.useRealTimers();
     }

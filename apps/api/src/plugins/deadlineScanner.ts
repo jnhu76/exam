@@ -420,15 +420,29 @@ export async function scanDatabaseForExpiredAttempts(
       },
       {
         onError: (attemptId, err) => {
-          fastify.log.error(
-            {
-              err,
-              attemptId,
-              organizationId: organization.id,
-              ...(tickId === undefined ? {} : { tickId }),
-            },
-            "Failed to auto-submit expired attempt",
-          );
+          // INTENTIONAL (review of #1009): the per-candidate error line is
+          // post-failure diagnostics, isolated from the candidate loop and
+          // the scan-throw classification exactly like the settlement line
+          // in the tick body. A synchronously throwing sink must neither
+          // abort the remaining candidates of this tick nor reclassify the
+          // tick as a throw (consecutiveThrowTicks /
+          // operability.tick_failure): the candidate's failure has already
+          // been counted where it belongs (failedCount →
+          // consecutiveFailedTicks). Losing this line is the accepted cost —
+          // the sink that just threw is not a channel to report the loss on.
+          try {
+            fastify.log.error(
+              {
+                err,
+                attemptId,
+                organizationId: organization.id,
+                ...(tickId === undefined ? {} : { tickId }),
+              },
+              "Failed to auto-submit expired attempt",
+            );
+          } catch {
+            // swallowed by design — see INTENTIONAL above
+          }
         },
       },
     );
@@ -524,10 +538,22 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
         }
       } catch (err) {
         threw = true;
-        fastify.log.error(
-          { err, tickId },
-          "Error scanning for expired attempts",
-        );
+        // INTENTIONAL (review of #1009): the tick-level error line is
+        // post-failure diagnostics, isolated exactly like the settlement
+        // line above. A synchronously throwing sink must not escape the tick
+        // body: activeScan would become an unhandled rejection
+        // (process-fatal under Node's default policy) while the scan has
+        // already settled as a throw. Losing the tick's only error record is
+        // the accepted cost — the sink that just threw is not a channel to
+        // report the loss on.
+        try {
+          fastify.log.error(
+            { err, tickId },
+            "Error scanning for expired attempts",
+          );
+        } catch {
+          // swallowed by design — see INTENTIONAL above
+        }
       }
     })().finally(() => {
       activeScan = null;
