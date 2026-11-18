@@ -711,6 +711,68 @@ With `EMAIL_ENABLED=false` (default), `DisabledEmailSender` drains outbox
 rows to `sent` status without any network call. This **does not** prove
 external mailbox delivery.
 
+### Reading worker liveness vs delivery health
+
+Stdout is **not** a liveness signal for this loop. A `poll cycle completed`
+line is emitted only when the cycle processed at least one row, so an
+empty-but-healthy queue and a dead loop are indistinguishable in the logs.
+The persisted heartbeat (`worker_heartbeats`, one row per process) plus the
+`emailStatus` projection above are the liveness signal; there is
+deliberately no always-on per-cycle log line (one line per 5s poll would be
+≈17,280 lines/day/instance — #1010 reuse decision).
+
+Read the projection as two independent layers:
+
+- **Worker liveness — `emailStatus.worker.status`.** `available` means: a
+  heartbeat row exists, `now - worker.lastPollAt <= EMAIL_WORKER_HEARTBEAT_STALE_MS`,
+  the row carries a non-null `lastSuccessAt`, and `lastError` is null. Any
+  existing row failing one of those reads `degraded`; no row at all reads
+  `unknown`.
+- **Delivery health — the `outbox` counts plus `lastSuccessfulDeliveryAt`.**
+  `worker.lastSuccessAt` is the last **successful poll** stamp, not a
+  delivery signal: `processDueEmails` never throws for a single email's
+  send failure (failures transition the row to `retry_wait`/`dead` and are
+  counted), so `lastSuccessAt` keeps advancing while every send is failing.
+  `lastSuccessfulDeliveryAt` is read from the newest `sent` row of the
+  requesting organization — with `EMAIL_ENABLED=false` those `sent` rows
+  are `DisabledEmailSender` drains, not mailbox deliveries (see above).
+
+Two consequences to read deliberately:
+
+- `outbox.retryWait` growing while `worker.status` is `available` and
+  `lastSuccessfulDeliveryAt` stalls ⇒ the worker is alive but sends are
+  failing (SMTP-side). Note that the overall `emailStatus.status` stays
+  `available` in this state — only `outbox.dead > 0` (retry budget
+  exhausted), a degraded/unknown worker flips it to `degraded`.
+- Thresholds follow the deployment config, not this page: staleness is
+  judged as `now - lastPollAt > EMAIL_WORKER_HEARTBEAT_STALE_MS` (default
+  60000 ms) and the cadence is `EMAIL_WORKER_POLL_INTERVAL_MS` (default
+  5000 ms), both defined by the settings model. The production Compose
+  file forwards each variable with an empty fallback, so the app default
+  applies unless the deployment's `.env.production` overrides it.
+
+Field values by scenario (all produced by `buildEmailStatus`,
+`apps/api/src/routes/system.ts`):
+
+| Scenario | `status` | `enabled` | `worker.status` | `worker` fields | `outbox` | `lastSuccessfulDeliveryAt` |
+| --- | --- | --- | --- | --- | --- | --- |
+| Email disabled (`EMAIL_ENABLED=false`) | `disabled` | `false` | `disabled` | all null — the projection short-circuits without reading any row (the loop itself still runs and writes heartbeats; they are simply not read) | all 0 | `null` |
+| Bootstrap pending (email enabled, initial organization not bootstrapped yet) | `degraded` | `true` | `degraded` | `lastPollAt` fresh; `lastSuccessAt` `null`; `lastError` = the fixed `bootstrap_pending: initial organization not initialized` label | as stored (typically all 0 on a fresh deploy) | from history, else `null` |
+| Healthy, empty queue | `available` | `true` | `available` | `lastPollAt` fresh; `lastSuccessAt` non-null; `lastError` `null` | all 0, or only historical `sent` | newest `sent` row's time, or `null` if none ever sent |
+| Stale (loop not polling — process dead or wedged) | `degraded` | `true` | `degraded` | `lastPollAt` older than `EMAIL_WORKER_HEARTBEAT_STALE_MS`; `lastError` reflects the last written cycle (`null` when the last poll succeeded) | as stored — `pending`/`processing` accumulate | as stored |
+| No heartbeat row yet (first poll interval after boot) | `degraded` | `true` | `unknown` | all null | as stored | as stored |
+| Diagnostics read failed (e.g. the email-status DB read throws) | `unavailable` | `true` | `unknown` | all null | all 0 | `null` |
+
+`unavailable` means the diagnostics read path failed — it is not evidence
+about the email loop process itself. The bootstrap-pending heartbeat row is
+written every poll interval while the initial organization is missing;
+before bootstrap completes there is no admin session to call the API, so
+via the API that label is visible only within one poll cycle after
+bootstrap completes (direct `psql` on `worker_heartbeats` shows the row
+anytime).
+The restart path for a stale/unknown worker is §13 ("Stale loop
+heartbeat"). Known blind spots of this projection are recorded in §16.
+
 ---
 
 ## 9. Run scanner
@@ -1000,11 +1062,24 @@ docker compose --env-file .env.production restart app
 # Dead Email inspection (admin-only via psql). $POSTGRES_USER / $POSTGRES_DB
 # are expanded INSIDE the db container (postgres image env), not by the
 # host shell — wrap in sh -c.
+# Column notes: there is NO last_attempt_at column. updated_at is the
+# row-update time — every state transition (claim / markSent / markRetryWait
+# / markDead / abandoned-lock recovery) rewrites it, so on a dead row it
+# holds the markDead time (the final failed attempt's finalization), not a
+# dedicated last-attempt clock. next_attempt_at is NULL on terminal rows
+# (sent/dead) — it schedules retries and is NOT a last-attempt timestamp.
+# attempt_count = max_attempts confirms the retry budget is exhausted.
+# recipient_email is the NOT NULL recipient field; recipient_user_id is
+# NULL for identity-flow emails.
 docker compose --env-file .env.production exec db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, recipient_user_id, subject, attempt_count, last_error, created_at, last_attempt_at FROM email_outbox WHERE status = '\''dead'\'';"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, recipient_email, subject, attempt_count, max_attempts, last_error, created_at, updated_at FROM email_outbox WHERE status = '\''dead'\'' ORDER BY created_at DESC;"'
 
 # Replay a dead Email (advanced — inspect last_error first)
 # ⚠️  This re-attempts delivery. Confirm the recipient and content first.
+# The UPDATE does not write updated_at: after a replay the column keeps the
+# dead-letter time until the loop's claim rewrites it. next_attempt_at=now()
+# makes the row immediately due (a pending row is due when next_attempt_at
+# is NULL or in the past).
 docker compose --env-file .env.production exec db sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE email_outbox SET status='\''pending'\'', locked_at=NULL, locked_by=NULL, next_attempt_at=now(), last_error=NULL WHERE id = '\''<UUID>'\'';"'
 
@@ -1154,6 +1229,33 @@ and §24 (deferred capabilities). Highlights:
   that predates REC-I3 / REC-I4-I3B2.)
 - Multi-instance deployment is NOT supported (the in-process scanners assume
   a single API owner).
+- Email liveness diagnostics reuse the persisted `worker_heartbeats` row and
+  the `emailStatus` projection only — no always-on per-cycle log (#1010; a
+  `poll cycle completed` line only appears when a cycle processed ≥1 row).
+  Known blind spots of that projection (see §8 for the field semantics):
+  1. A single failed poll cycle overwrites the heartbeat's `lastSuccessAt`
+     with `null` (the error heartbeat replaces the previous stamp). If the
+     process dies right after, the stored row cannot distinguish "succeeded
+     before" from "never succeeded" — read `lastErrorAt` next to
+     `lastSuccessAt` (a non-null `lastErrorAt` marks the last written cycle
+     as the failing one).
+  2. The standalone worker (`apps/api/src/workers/emailDeliveryWorker.ts`
+     — an escape hatch, not the production topology) stamps a successful
+     poll at cycle START, so the just-written row is born aged by the poll
+     duration: a full batch of sends each burning one 10s SMTP timeout
+     (batch default 20) already exceeds the default 60s staleness threshold
+     and reads `degraded` while the worker is still working. The in-process
+     loop stamps at poll completion, so a written row is fresh (during a
+     long poll both hosts' rows age, but only the standalone row is born
+     stale). Thresholds follow the deployment config (§8).
+  3. The projection reads the single newest heartbeat row per worker name
+     (`ORDER BY last_poll_at DESC LIMIT 1`), so a fresh row from one
+     instance masks a stalled/erroring row from another; in the supported
+     single-instance deployment this is the restart window (each process
+     start mints a new instance id whose fresh row wins). The same
+     latest-row semantics also means deleting the newest row (e.g. a
+     degraded instance's error row) makes the read flip to the
+     next-newest row — the deletion itself fabricates recovery.
 - Timing modes: `timed_window`, `deadline`, and `untimed` are implemented
   (#291 Phase A); `timed_sync` remains NOT ACTIVATED pending the B2 product
   decision (the mode core and the admission runtime exist — see

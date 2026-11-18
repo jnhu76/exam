@@ -53,7 +53,7 @@ Every request has a correlation id. The minimum traceable shape:
 | path / route | matched route template (`routeOptions.url`; #925 serializer) | `/api/attempts/:attemptId/submit` | fixed `(unrouted)` placeholder when no route matched — never the raw URL/query |
 | statusCode | reply status | `200` | pino onResponse log |
 | durationMs | response time | `42` | pino onResponse log |
-| timestamp | pino `time` | ISO | pino default |
+| timestamp | pino `time` | `1730000000000` | epoch-milliseconds integer (pino default); jq needs `(.time / 1000 | todate)` for ISO |
 | actorId | `ctx.actorId` | user id | only when authenticated; include in business log lines |
 | actorRole | `ctx.role` | `Admin`/`Candidate` | include in business log lines |
 | organizationId | `ctx.organizationId` | org id | tenant scoping for log search |
@@ -274,6 +274,247 @@ required merely to identify an HTTP request.
   deployment and lifecycle concerns require a separate architecture decision.
 
 
+## Authentication and rate-limit observability (#1005 — DEFER)
+
+#1000 E04 / #1005 (W01 unauthenticated 401 reason signal) is closed as
+**DEFER + docs-only** (Owner disposition,
+`issues/1005#issuecomment-6960996678`): no diagnostic reason
+channel, counter, or response change was added. This section is the
+documentation deliverable of that disposition (its item 3; not part of any
+code PR) and describes only the as-built behavior of existing code.
+
+### Unified anonymous 401 surface (deliberate)
+
+Every 401 emitted by the `authenticate` preHandler returns the SAME envelope
+— `{error: {code: "AUTH_REQUIRED", message, requestId}}` — from all its
+anonymous exits: missing/unreadable auth cookie (`apps/api/src/plugins/auth.ts:68-77`),
+failed JWT verification (`:82-86`), unknown or inactive user (`:112-116`),
+and authEpoch mismatch (`:123-127`). The no-context exits of
+`requireRole` / `requireCapability` use the same 401 `AUTH_REQUIRED` form
+(`:226-230`, `:267-272`). No reason, epoch value, or credential shape is
+disclosed to the anonymous caller.
+
+This is deliberate design, anchored in two places:
+
+- `apps/api/src/plugins/auth.ts:118-122` — the epoch-mismatch exit shares the
+  generic failure surface by intent ("Same generic failure surface as invalid
+  or expired tokens — no epoch values, no reason distinction"), citing #325.
+  #325 established the durable revocation authority itself — per-user
+  `auth_epoch`, the JWT `authEpoch` claim compared against the persisted
+  epoch on every authenticated request, legacy tokens failing closed — and
+  does not contain a "do not disclose reasons to anonymous clients"
+  sentence in its issue text or comments; that formulation lives in the code
+  comment, in D0.5, and in the #1005 disposition.
+- `docs/contracts/api-contract.md` D0.5 — `error.message` is
+  non-authoritative compatibility text; machine clients must not parse it.
+
+Observed consequence (measured in the #1005 audit's in-process witness): the
+four states — invalid/expired token, unknown/inactive user, epoch mismatch —
+produce byte-identical 401 bodies (only the requestId differs) and identical
+log output. A garbage-credential scan and a legitimate epoch-revocation
+lockout are indistinguishable from response shape or logs alone; that is the
+accepted cost of the unified surface. The distinguishing evidence available
+today is timestamp correlation plus, for the no-active-assignment case, the
+WARN documented below.
+
+Distinct shapes that are NOT this surface: a failed interactive login
+returns 401 `AUTH_INVALID_CREDENTIALS` (`apps/api/src/routes/auth.ts:167-169`
+and the other login-failure exits), and operational failures of the authority
+loader fail closed as 503 `AUTHZ_UNAVAILABLE`, never masquerading as 401
+(`apps/api/src/plugins/auth.ts:146-153`, `:167-174`).
+
+### What a 401/403/429 leaves in stdout
+
+None of these denial exits emits a dedicated log line. The per-request
+evidence is exactly the two Pino trace lines every request already produces
+(see Request trace fields / Request correlation semantics):
+
+- incoming: `msg: "incoming request"` with `reqId` and
+  `req: {method, route, remoteAddress, remotePort}` — `route` is the matched
+  route template (or the fixed `(unrouted)` placeholder); the raw URL is
+  structurally absent (#925);
+- completed: `msg: "request completed"` with `reqId`, `res: {statusCode}`
+  and `responseTime` — with NO `route` (the template lives only on the
+  incoming line) and no `errorCode`.
+
+So a 401/403/429 is visible only as the completed line's `res.statusCode`,
+and any per-route aggregation must join the two lines on `reqId`. The
+`x-request-id` header is stamped on every Fastify-managed response —
+including 401 and 429 (`apps/api/src/plugins/requestIdHeader.ts:34-37`) — so
+a caller-reported request id is directly greppable in stdout.
+
+Key-spelling hazard for aggregation: request-bound lines (the two trace
+lines and anything emitted via `request.log`) carry the Pino binding
+`reqId`, while root-logger events — the login `security.authentication`
+events (`apps/api/src/routes/auth.ts:156-404`), the auth operational error
+lines, and the transaction-retry WARN's `correlation.requestId` (#1006) —
+carry the request identity as a payload field named `requestId`. Same
+stdout, two different keys; a recipe must either match both spellings or
+state which line family it aggregates.
+
+### stdout jq recipes
+
+`time` is an epoch-milliseconds integer, not an ISO string (see Request
+trace fields). Status-code histogram of completed requests:
+
+```bash
+jq -r 'select(.msg == "request completed") | .res.statusCode' app.log \
+  | sort | uniq -c | sort -rn
+```
+
+Error responses aggregated by route template and status code — the completed
+line carries no route, so the recipe joins incoming → completed on `reqId`
+(slurps the whole stream; one line pair per request):
+
+```bash
+jq -sr '
+  (reduce (.[] | select(.msg == "incoming request" and .req.route != null)) as $l
+    ({}; .[$l.reqId] = $l.req.route)) as $route
+  | [.[] | select(.msg == "request completed" and .res.statusCode >= 400)]
+  | group_by([(.reqId | $route[.] // "(unrouted)"), .res.statusCode])
+  | map({route: ((.[0].reqId | $route[.]) // "(unrouted)"),
+         status: .[0].res.statusCode, count: length})
+  | sort_by(-.count)' app.log
+```
+
+Login denial reasons — root-logger events, note the `requestId` payload key
+(not `reqId`) and the closed `reason` enum
+(`unknown_organization|unknown_user|disabled_user|invalid_password|no_active_assignments|admin_maintainer_exclusion|non_login_role`,
+plus `credentials_and_authority_accepted` on success paths):
+
+```bash
+jq -r 'select(.event == "security.authentication")
+  | [(.outcome // "-"), (.reason // "-")] | @tsv' app.log | sort | uniq -c
+```
+
+Full trace for one request id, matching BOTH key spellings (trace lines'
+`reqId`, root-logger events' `requestId`):
+
+```bash
+jq -c 'select(.reqId == "<request-id>" or .requestId == "<request-id>")' app.log
+```
+
+Readable timestamp for one status family:
+
+```bash
+jq -r 'select(.msg == "request completed" and .res.statusCode == 429)
+  | (.time / 1000 | todate)' app.log
+```
+
+### The no-active-assignment WARN and its missing reqId
+
+Naming mapping first: the #1005 disposition calls this the "authority_denied
+WARN". `authority_denied` is the counter-enum vocabulary of the design
+catalog (`docs/design/native-observability-contracts.md:133,406`); no such
+key exists in code. The as-built emission is
+`apps/api/src/plugins/auth.ts:159-162`:
+
+```ts
+fastify.log.warn(
+  { actorId: user.id, reason: authority.reason },
+  "authenticate: no active assignment authority — deny login",
+);
+```
+
+with `reason` fixed to `no_active_assignments` — the only member of
+`AUTHORITY_401_REASONS` (`apps/api/src/plugins/auth.ts:24-27`). It fires when
+the JWT verified, the user is active, and the epoch matched (i.e. past all
+anonymous 401 exits) but no ACTIVE `user_role_assignments` row resolves: one
+WARN per request, carrying `actorId` and `reason` only.
+
+Known limitation (accepted with the DEFER): the line goes through the ROOT
+logger (`fastify.log`), so it carries neither the `reqId` binding nor a
+`requestId` payload — unlike the sibling operational error lines in the same
+function (`apps/api/src/plugins/auth.ts:103-106`, `:146-149`, `:167-170`),
+which all carry `requestId: request.id`. Until re-evaluation, correlation is
+timestamp-proximity plus `actorId` only. The counter-only projection from
+the design catalog is NOT implemented — `GET /api/system/diagnostics`
+exposes no 401/authDenied counters (`apps/api/src/routes/system.ts`).
+
+### 401 vs 403 vs 429 response shapes
+
+| status | code | exit | notes |
+| --- | --- | --- | --- |
+| 401 | `AUTH_REQUIRED` | authenticate anonymous exits + no-ctx gates | unified surface above; no reason disclosed |
+| 401 | `AUTH_INVALID_CREDENTIALS` | interactive login failures (`apps/api/src/routes/auth.ts`) | distinct code; has its own `security.authentication` WARN line |
+| 403 | `PERMISSION_DENIED` | requireRole / requireCapability denials (`apps/api/src/plugins/auth.ts:232-236`, `:274-278`) | authenticated but unauthorized |
+| 403 | `AUTH_REGISTER_DISABLED` | register route disabled (`apps/api/src/routes/auth.ts:115`) | deployment state, not caller fault |
+| 403 | `CSRF_ORIGIN_REJECTED` | origin check (`apps/api/src/plugins/security.ts:160-169`) | onRequest-stage rejection |
+| 429 | `RATE_LIMITED` | limiter `errorResponseBuilder` throws `AppError` → global error handler (`apps/api/src/plugins/rateLimit.ts:107-113`, `apps/api/src/plugins/errors.ts:106-111`) | standard envelope plus rate headers below |
+
+All rows carry the standard envelope, the registry compatibility message,
+and `x-request-id`.
+
+### Rate-limit boundary (429)
+
+Scope: the limiter is registered inside the /api encapsulation
+(`apps/api/src/routes/apiSurface.ts:44-47`) — every `/api` route enters it,
+including `/api/health` and `/api/ready`; the docs surface and the static
+frontend are outside the limiter by encapsulation (no allow-list, no URL
+inspection).
+
+Keys: `request.ip` is HMAC-SHA256-digested with the deployment JWT secret
+(domain separator `exam-ratelimit-ip-v1:`; `apps/api/src/redis/rateLimitKey.ts`)
+— raw IPs never enter the keyspace. Redis keys sit under the `ratelimit:v1:`
+namespace; override routes are additionally prefixed `${method}${url}-`
+(`apps/api/src/redis/rateLimitStores.ts`), which is what isolates their
+budgets per method+route+IP.
+
+Budgets (defaults from the settings leaves `RATE_LIMIT_MAX` = 100 and
+`RATE_LIMIT_WINDOW_MS` = 60000, `apps/api/src/config/settings.ts:694-695`):
+
+| bucket | budget | dimension |
+| --- | --- | --- |
+| all non-override /api routes | 100 per 60 s | ONE shared per-IP bucket across ALL such routes |
+| POST /api/auth/login (`routes/auth.ts:122`) | 10 per 60 s | per method+route+IP |
+| POST /api/auth/invitations/accept (`routes/auth.ts:755`) | 10 per 60 s | per method+route+IP |
+| POST /api/auth/password-reset/consume (`routes/auth.ts:995`) | 10 per 60 s | per method+route+IP |
+| POST /api/auth/password-reset/request (`routes/auth.ts:861`) | 5 per 600 s | per method+route+IP |
+| POST /api/candidates/import (`routes/candidate.ts:533-537`) | 10 per 60 s | per method+route+IP |
+| POST /api/invitations (`routes/invitation.ts:73`) | 20 per 60 s | per method+route+IP |
+| POST /api/launchpad/bootstrap (`routes/launchpad.ts:107`) | 5 per 60 s | per method+route+IP |
+
+The disposition's "单 IP/路由 ≤100/min" is the loose form of this table. The
+as-built default is one cross-route per-IP budget — a single IP drawing on
+two different non-override routes consumes ONE shared bucket, not 100 per
+route — and only the seven overrides isolate per route. No budget bounds the
+aggregate across many IPs: per-IP buckets multiply without a global cap, and
+that unbounded multi-IP aggregate is the accepted current cost of the 429
+boundary (disposition item 3).
+
+429 responses carry `x-ratelimit-limit` / `x-ratelimit-remaining` /
+`x-ratelimit-reset` (also present on un-exceeded responses) and
+`retry-after` (429 only). These are `@fastify/rate-limit` defaults —
+`apps/api/src/plugins/rateLimit.ts:98-114` does not override `addHeaders` —
+so re-verify them if that dependency is upgraded. Enabled logic: production
+always on, e2e fully bypassed, dev/test disable via `RATE_LIMIT_DISABLED`
+(`apps/api/src/config/runtimeConfig.ts:712-716`). Store selection: shared
+Redis while ready, in-process local store when Redis is off or degraded in
+`optional` mode, fail-closed 503 `RATE_LIMIT_UNAVAILABLE` in `required`
+mode.
+
+Deployment sizing (`RATE_LIMIT_MAX` headroom, login staggering, trusted
+proxy wiring) is operator guidance and lives in
+`docs/deployment/mvp-deployment-runbook.md` §"Rate-limit identity, trusted
+proxies, and sizing (#546)"; the code defaults above are the contract.
+
+Re-evaluation triggers for the DEFER (disposition item 4) — any one fires
+the counter-proposal (owner-local fixed-enum counters + a read-only
+diagnostics `authDenied` projection, brief already prepared):
+
+1. any deployment completes E-2 401 rate sampling and the magnitude would
+   interfere with operational judgment;
+2. a real incident needs reason attribution to change a decision;
+3. the Owner approves a `DiagnosticsResponseSchema` additive change — at
+   which point the keep-or-demote decision for the WARN above must be
+   adjudicated in the same batch (demotion permanently loses its `actorId`
+   attribution);
+4. the deployment form changes.
+
+Residual NOT_MEASURED: production 401 rate / reason distribution (no
+deployment has run E-2 sampling).
+
+
 ## Admin command outcome events (#1008)
 
 The two admin attempt commands `force_submit` and `time_grant` emit
@@ -439,8 +680,9 @@ it out in its release notes.
 
 ## Background job log fields
 
-The background scanners (heartbeat, deadline) are the only background jobs in
-Phase 2 (in-process `setInterval`). Their diagnostics contract:
+The background scanners (heartbeat, deadline) and the email outbox delivery
+loop (§Email error privacy) are the background jobs of Phase 2; the scanners
+run in-process on `setInterval`. Their diagnostics contract:
 
 | Field | Source | Notes |
 |---|---|---|
@@ -507,6 +749,132 @@ error line could be written.
 > tenant-scoped incident report. No structured-job-log table exists; this is
 > intentional for Phase 2 (no queue/worker). Redis diagnostics are also
 > surfaced in diagnostics (`redisStatus`).
+
+## Email error privacy (#1012 / E11 — closed-field policy)
+
+#1012 (E11: W12 error-text privacy sinks) landed via PR #1016 (merge commit
+`e5287bc9`): a single privacy-policy owner,
+`apps/api/src/email/sanitizeError.ts`, sits in front of every surface that
+persists, logs, or serves an email-worker error — `SmtpEmailSender` wrapping,
+outbox `lastError` persistence plus the dead-letter log line, both host
+transports, `/email/test` responses, and the diagnostics read-side
+projection. Behavior witnesses:
+`apps/api/src/email/sanitizeError.witness.test.ts`,
+`apps/api/src/email/senders.witness.test.ts`,
+`apps/api/src/email/outboxService.witness.test.ts`,
+`apps/api/src/workers/emailDeliveryWorker.witness.test.ts`,
+`apps/api/src/routes/system.emailPrivacy.witness.test.ts`.
+
+### Closed-field classification
+
+Classification never reads free text: raw `message`, `name`, `stack`,
+`response`, and `String(err)` are structurally unreachable
+(`classifyEmailError`, `sanitizeError.ts:239-253`). The only retainable
+inputs are closed fields:
+
+- `code` must hit a fixed allowlist — 16 SMTP transport codes (`EAUTH`,
+  `ETIMEDOUT`, `EENVELOPE`, …) plus 18 PostgreSQL SQLSTATEs
+  (`sanitizeError.ts:50-87`); a correctly-shaped value outside the closed
+  sets is rejected, not passed through;
+- an integer SMTP `responseCode` within 400–599;
+- the `cause` chain, inspected through the same closed-field reads only and
+  depth-bounded at 2 (the #1016 bounded nested-cause fix): circular chains,
+  throwing getters, and deeper codes degrade to `internal_error`.
+
+Classification never throws; hostile shapes (throwing getters, `toString` /
+`toJSON` tricks) degrade to the fixed `internal_error` category. The output
+is always the canonical safe string — `email_error:<category>` plus optional
+` code=<allowlisted>` and ` rc=<int 400-599>`, e.g.
+`email_error:smtp_auth_failed code=EAUTH rc=535` — the ONLY shape new
+`lastError` writes and log emissions produce
+(`formatEmailErrorClassification`). The seven categories:
+`smtp_auth_failed`, `smtp_connection_failed`, `smtp_recipient_rejected`,
+`smtp_send_failed`, `db_connection_failed`, `db_error`, `internal_error`.
+`smtp_recipient_rejected` never carries `code`/`rc`: a provider-rejected
+recipient keeps delivery-failure semantics without the echoed address
+(`senders.ts:160-173`). `EmailSendError` is constructible only from a
+classification, so its `message` is always the safe rendering
+(`sanitizeError.ts:291-299`).
+
+### Two hosts, one source policy
+
+- **API process (in-process outbox loop)** — the loop's log function routes
+  into `fastify.log`, i.e. the production Pino logger
+  (`apps/api/src/plugins/emailOutboxLoop.ts:46-55`). The email error enters
+  Pino as an already-sanitized `error` string field, not through the `err`
+  serializer channel; the line's safety comes from the source policy, not
+  from Pino redaction.
+- **Standalone worker (`worker:email` entry, `apps/api/package.json:27-28`)** —
+  a self-contained logger writes `JSON.stringify({ts, level, worker, msg,
+  ...meta})` to `process.stderr` (error level) / `process.stdout` (all other
+  levels) (`apps/api/src/workers/emailDeliveryWorker.ts:50-63`) — no Pino, no
+  serializers, no redact list. The entry remains in the tree although the
+  in-process loop is the default deployment topology.
+
+Both hosts import the same `sanitizeEmailError`; the transports do no
+scrubbing of their own. On poll failure each host derives ONE safe
+representation that feeds BOTH exits — the log line and the persisted
+heartbeat — so the two cannot disagree (`emailOutboxLoop.ts:144-150`,
+`emailDeliveryWorker.ts:296-315`).
+
+### Persisted values
+
+`worker_heartbeats.last_error` is a storage passthrough: write-side safety
+is owned by the email policy (every current writer passes only
+`sanitizeEmailError` output, the fixed `bootstrap_pending` label, or `null`),
+and readers must treat any stored value as untrusted input — history written
+by older workers is covered by the read-side projection below, not by
+rewrites (`packages/db/src/repository/workerHeartbeatRepo.ts` OWNERSHIP).
+Likewise `email_outbox.last_error`: `markRetryWait` / `markDead` receive the
+already-sanitized string from their only caller
+(`apps/api/src/email/outboxService.ts:122-125`), and the dead-letter error
+line carries only `emailId` / `attemptCount` / `lastError`
+(`outboxService.ts:144-151`).
+
+### Read-side projection (historical values)
+
+`projectStoredEmailError` (`sanitizeError.ts:387-392`) is the only sanctioned
+way a stored email error re-crosses an HTTP boundary:
+
+| stored value | projected |
+| --- | --- |
+| `null` | `null` (no-current-error contract untouched) |
+| `bootstrap_pending: initial organization not initialized` | passed through |
+| canonical safe string (full-grammar match, closed sets, writer-producible `(category, code, rc)` pairing, byte-identical re-render) | passed through |
+| everything else — pre-policy free text, malformed values, trailing garbage | `email_error:undisclosed` |
+
+The only HTTP consumer is the diagnostics `emailStatus.worker.lastError`
+projection (`apps/api/src/routes/system.ts:124`). Health derivation reads
+the RAW null/non-null distinction (`system.ts:128`), so the projection can
+never cosmetically mask a problem heartbeat as healthy. Read-side
+protection does NOT physically purge historical bytes from the database; it
+only stops their disclosure — retention/cleanup is #1013's scope.
+
+### Where the operational guidance lives
+
+This section is the behavior contract. The operator-facing guidance for the
+three guarantees is NOT duplicated here:
+
+- process output and `/email/test` responses while configuring SMTP —
+  `docs/operations/email-config.md`;
+- persisted values (heartbeat/outbox) and historical-data reading via
+  diagnostics, in deployment-topology context —
+  `docs/deployment/mvp-deployment-runbook.md` §8 (Email outbox loop).
+
+### E10 note: audit actions stay RESERVED
+
+The `email.send_failed` / `email.send_retried` audit actions remain RESERVED
+and unwired: #1011 closed OMIT / keep-RESERVED (Owner ruling
+`issues/1011#issuecomment-6960999077`; NOT_PLANNED close
+`#issuecomment-6979452290`, whose optional contract note rides with the
+#1000 doc closeout). The optional `auditEmitter` callback is retained in
+`outboxService.ts:50-56` but neither production host wires it
+(`emailOutboxLoop.ts`, `emailDeliveryWorker.ts` pass no such dependency).
+Outbox rows, the diagnostics projection, and the log lines above are the
+ONLY operational evidence for email failure/retry; the failed-attempt
+sequence history is an accepted blindspot. Re-evaluate only when a
+compliance/forensic consumer appears or an `audit_logs` retention decision
+is scoped (per the #1011 ruling).
 
 ## Test diagnostics fields
 
@@ -576,10 +944,12 @@ Diagnostics snapshot (background + redis):
 | Candidate submit outcome (#1007) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (known blindspot; acceptance pending owner review) | — |
 | DB transaction retry correlation (#1006) | Done for the answer-save call site (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
 | Admin command outcome events (#1008) | Done for force_submit / time_grant (completed + denied, route-local boundary; fixed catalog `event` field on every line) | `event` field + `disposition` dimension + time_grant `terminal` mapping are this PR's contract proposal (not pre-approved by #1015); other admin routes stay out of scope | — |
+| Anonymous 401 reason diagnostics (#1005) | DEFER — docs-only (§Authentication and rate-limit observability: unified-surface rationale, jq recipes, WARN limitation, 429 boundary) | No reason channel; production 401 rate/reason distribution NOT_MEASURED (no E-2 sampling yet); re-evaluate on the four triggers | DEFER |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |
 | State transition audit rows | Done (action/target/metadata/createdAt) | Standardize `metadata.stateBefore/stateAfter/source` | SHOULD FIX (incremental) |
 | Background job diagnostics | Done via `/system/diagnostics` + scannerMetrics | — | — |
+| Email error privacy (#1012 / E11) | Done via PR #1016 — single closed-field policy owner; classification, dual-host exits, persisted safe values, read-side projection (§Email error privacy, witness tests in `apps/api`) | — | — |
 | Redis diagnostics | Done (`redisStatus` in diagnostics, Phase C) | — | — |
 | Pino redaction (creds/tokens/cookies/auth/standardAnswer) | Done | — | — |
 | No answer-content / full-body logging | Policy (manual discipline) | Add a lint/test guard if abuse appears | DEFER |
