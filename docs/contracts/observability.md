@@ -222,10 +222,10 @@ required merely to identify an HTTP request.
   single emit point: committed result, HTTP response and retry behavior are
   unchanged.
 
-  Limits (proposed, pending owner review): sink failure drops the line (no
-  delivery retry); a process crash between COMMIT and the synchronous emit
-  loses the line — the durable business fact is the database row, never
-  this log (EXSEM-013).
+  Accepted V1 limits (#1000): a sink failure drops the line without a delivery
+  retry. A process crash between COMMIT and the synchronous emit or a log
+  collection filter can also leave no line. The durable business fact is the
+  database row (EXSEM-013).
   Measured raw line (production shape, UUID identities): 347–357 B —
   envelope (level/time/pid/hostname) ≈ 50 B, inherited identity
   (reqId/actorId/actorRole/organizationId) ≈ 180 B, event payload
@@ -325,9 +325,10 @@ loader fail closed as 503 `AUTHZ_UNAVAILABLE`, never masquerading as 401
 
 ### What a 401/403/429 leaves in stdout
 
-None of these denial exits emits a dedicated log line. The per-request
-evidence is exactly the two Pino trace lines every request already produces
-(see Request trace fields / Request correlation semantics):
+For these responses, start with the two Pino request trace lines
+(see Request trace fields / Request correlation semantics). Interactive
+login and the no-active-assignment path can add the separate evidence
+described below.
 
 - incoming: `msg: "incoming request"` with `reqId` and
   `req: {method, route, remoteAddress, remotePort}` — `route` is the matched
@@ -337,8 +338,8 @@ evidence is exactly the two Pino trace lines every request already produces
   and `responseTime` — with NO `route` (the template lives only on the
   incoming line) and no `errorCode`.
 
-So a 401/403/429 is visible only as the completed line's `res.statusCode`,
-and any per-route aggregation must join the two lines on `reqId`. The
+The completed line's `res.statusCode` identifies the response status.
+Per-route aggregation joins the trace lines on `reqId`. The
 `x-request-id` header is stamped on every Fastify-managed response —
 including 401 and 429 (`apps/api/src/plugins/requestIdHeader.ts:34-37`) — so
 a caller-reported request id is directly greppable in stdout.
@@ -348,33 +349,46 @@ lines and anything emitted via `request.log`) carry the Pino binding
 `reqId`, while root-logger events — the login `security.authentication`
 events (`apps/api/src/routes/auth.ts:156-404`), the auth operational error
 lines, and the transaction-retry WARN's `correlation.requestId` (#1006) —
-carry the request identity as a payload field named `requestId`. Same
-stdout, two different keys; a recipe must either match both spellings or
-state which line family it aggregates.
+carry the request identity in `requestId` or `correlation.requestId`, depending
+on the event. A query must state which line families it searches.
 
 ### stdout jq recipes
 
-`time` is an epoch-milliseconds integer, not an ISO string (see Request
-trace fields). Status-code histogram of completed requests:
+Export a bounded time window of app stdout as local `app.log`. The
+preprocessing step retains JSON objects and skips non-JSON lines. Results
+describe the retained records in that window. If the stream was incomplete
+or lines could not be parsed, zero matching records means no matching
+evidence in that export.
 
 ```bash
-jq -r 'select(.msg == "request completed") | .res.statusCode' app.log \
+jq -Rrc 'fromjson? | objects' app.log > app.jsonl
+```
+
+`time` is an epoch-milliseconds integer (see Request trace fields).
+Status-code histogram of completed requests:
+
+```bash
+jq -r 'select(.msg == "request completed") | .res.statusCode' app.jsonl \
   | sort | uniq -c | sort -rn
 ```
 
-Error responses aggregated by route template and status code — the completed
-line carries no route, so the recipe joins incoming → completed on `reqId`
-(slurps the whole stream; one line pair per request):
+Aggregate error responses by route template and status by joining incoming
+and completed lines on `reqId`. This reads the full bounded export into
+memory. `(route unknown)` denotes missing join evidence. `(unrouted)` is the
+route placeholder emitted by the request serializer.
 
 ```bash
 jq -sr '
-  (reduce (.[] | select(.msg == "incoming request" and .req.route != null)) as $l
+  (reduce (.[] | select(.msg == "incoming request" and
+    (.reqId | type) == "string" and (.req.route | type) == "string")) as $l
     ({}; .[$l.reqId] = $l.req.route)) as $route
-  | [.[] | select(.msg == "request completed" and .res.statusCode >= 400)]
-  | group_by([(.reqId | $route[.] // "(unrouted)"), .res.statusCode])
-  | map({route: ((.[0].reqId | $route[.]) // "(unrouted)"),
-         status: .[0].res.statusCode, count: length})
-  | sort_by(-.count)' app.log
+  | [ .[] | select(.msg == "request completed" and
+      (.res.statusCode | type) == "number" and .res.statusCode >= 400)
+    | {route: ($route[(.reqId // "") | tostring] // "(route unknown)"),
+       status: .res.statusCode} ]
+  | group_by([.route, .status])
+  | map(.[0] + {count: length})
+  | sort_by(-.count)' app.jsonl
 ```
 
 Login denial reasons — root-logger events, note the `requestId` payload key
@@ -384,21 +398,22 @@ plus `credentials_and_authority_accepted` on success paths):
 
 ```bash
 jq -r 'select(.event == "security.authentication")
-  | [(.outcome // "-"), (.reason // "-")] | @tsv' app.log | sort | uniq -c
+  | [(.outcome // "-"), (.reason // "-")] | @tsv' app.jsonl | sort | uniq -c
 ```
 
-Full trace for one request id, matching BOTH key spellings (trace lines'
-`reqId`, root-logger events' `requestId`):
+Search the retained trace, root events and retry warnings for one request id:
 
 ```bash
-jq -c 'select(.reqId == "<request-id>" or .requestId == "<request-id>")' app.log
+jq -c --arg id '<request-id>' \
+  'select(.reqId == $id or .requestId == $id or .correlation.requestId == $id)' \
+  app.jsonl
 ```
 
 Readable timestamp for one status family:
 
 ```bash
 jq -r 'select(.msg == "request completed" and .res.statusCode == 429)
-  | (.time / 1000 | todate)' app.log
+  | (.time / 1000 | todate)' app.jsonl
 ```
 
 ### The no-active-assignment WARN and its missing reqId
@@ -514,6 +529,9 @@ diagnostics `authDenied` projection, brief already prepared):
 Residual NOT_MEASURED: production 401 rate / reason distribution (no
 deployment has run E-2 sampling).
 
+The operations-window rehearsal and application entry point are tracked in
+[#1032](https://github.com/jnhu76/exam/issues/1032).
+
 
 ## Admin command outcome events (#1008)
 
@@ -603,15 +621,15 @@ command request and at most one denied line per covered denial — bounded by
 admin command traffic, not an always-on per-request line. Failure isolation:
 the emitter swallows a synchronous logger failure (same fail-open contract as
 the transaction retry logger); an emit failure never changes a committed
-result or the HTTP response. Known blindspot (acceptance pending owner
-review): a process crash between COMMIT and emit loses that line permanently —
-no persistence, no outbox, no end-to-end exactly-once claim.
+result or the HTTP response. Accepted V1 limits (#1000): a process crash
+between COMMIT and emit, sink failure or collection filtering can leave no
+line. Resolve the business outcome from the committed database evidence.
 
-> Contract delta note (#1008): the `event` field, the `disposition` dimension,
-> and the time_grant `terminal` mapping are the minimal contract addition
-> proposed by this work; the #1015 owner decision adopted the owner-local typed
-> emission boundary (A=ADOPTED) but did NOT pre-approve these new field values.
-> They ride with #1008 review.
+> #1000 accepts the shipped #1008 log contract: `event`, `disposition`,
+> and the time-grant `terminal` mapping above. The mapping describes the
+> command disposition for this run. W07 request p99 and CPU remain
+> INCONCLUSIVE; V1 accepts the bounded emission evidence and targeted tests
+> for this command path.
 
 ## State transition log fields
 
@@ -736,6 +754,14 @@ evidence remains the counted candidate failure (`failedCount` /
 diagnostics reset on restart, not durable facts. A genuine scan error still
 counts as a tick throw (`consecutiveThrowTicks`) regardless of whether its
 error line could be written.
+
+E-2 at #1000 closeout: the same-SHA harness observed approximately
+1.9–2.7 µs per emitted settlement in a synthetic scanner workload. The
+pre-registered comparison remains INCONCLUSIVE. The measurement covers
+emission, serialization and the test sink. It excludes the full scan and
+production workload. V1 accepts the tested event-rate and byte bounds;
+full-path CPU verification is deferred. Production frequency and request
+p99 remain unmeasured for this change.
 
 > Implementation status: scanIntervalMs, lastScanAt, disruptedCount,
 > failedCount, incidentReconciliationFailedCount and consecutiveFailedTicks are
@@ -941,9 +967,9 @@ Diagnostics snapshot (background + redis):
 | Area | Current status | Gap | Priority |
 |---|---|---|---|
 | Request trace (requestId/method/status/duration) | Done (pino default) | — | — |
-| Candidate submit outcome (#1007) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | commit-to-emit crash window loses the line (known blindspot; acceptance pending owner review) | — |
+| Candidate submit outcome (#1007) | Done: one commit-authoritative `attempt.submit.completed` per committed submit execution (five-value outcome) | V1 accepts the best-effort emission and collection limits described above | — |
 | DB transaction retry correlation (#1006) | Done for the answer-save call site (closed `correlation` on retry WARN) | other call sites stay opt-in; terminal outcome is a log-join inference only | — |
-| Admin command outcome events (#1008) | Done for force_submit / time_grant (completed + denied, route-local boundary; fixed catalog `event` field on every line) | `event` field + `disposition` dimension + time_grant `terminal` mapping are this PR's contract proposal (not pre-approved by #1015); other admin routes stay out of scope | — |
+| Admin command outcome events (#1008) | Done for force_submit / time_grant (completed + denied; V1 accepts the shipped log contract) | W07 CPU/p99 remains INCONCLUSIVE; other admin routes are outside this scope | — |
 | Anonymous 401 reason diagnostics (#1005) | DEFER — docs-only (§Authentication and rate-limit observability: unified-surface rationale, jq recipes, WARN limitation, 429 boundary) | No reason channel; production 401 rate/reason distribution NOT_MEASURED (no E-2 sampling yet); re-evaluate on the four triggers | DEFER |
 | requestId in error envelope | Done | — | — |
 | actorId/role/orgId in business logs | Available via ctx; included in audit + errors | Standardize in business log statements | SHOULD FIX (incremental) |

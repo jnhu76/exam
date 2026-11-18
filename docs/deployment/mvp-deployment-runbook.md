@@ -1059,7 +1059,7 @@ docker compose --env-file .env.production restart redis       # optional profile
 # recovery, restart the app:
 docker compose --env-file .env.production restart app
 
-# Dead Email inspection (admin-only via psql). $POSTGRES_USER / $POSTGRES_DB
+# Dead email summary (Host Operator with database access). $POSTGRES_USER / $POSTGRES_DB
 # are expanded INSIDE the db container (postgres image env), not by the
 # host shell — wrap in sh -c.
 # Column notes: there is NO last_attempt_at column. updated_at is the
@@ -1068,13 +1068,13 @@ docker compose --env-file .env.production restart app
 # holds the markDead time (the final failed attempt's finalization), not a
 # dedicated last-attempt clock. next_attempt_at is NULL on terminal rows
 # (sent/dead) — it schedules retries and is NOT a last-attempt timestamp.
-# attempt_count = max_attempts confirms the retry budget is exhausted.
-# recipient_email is the NOT NULL recipient field; recipient_user_id is
-# NULL for identity-flow emails.
+# attempt_count >= max_attempts indicates that the retry budget is exhausted.
 docker compose --env-file .env.production exec db sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, recipient_email, subject, attempt_count, max_attempts, last_error, created_at, updated_at FROM email_outbox WHERE status = '\''dead'\'' ORDER BY created_at DESC;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, attempt_count, max_attempts, created_at, updated_at FROM email_outbox WHERE status = '\''dead'\'' ORDER BY created_at DESC LIMIT 100;"'
 
-# Replay a dead Email (advanced — inspect last_error first)
+# Replay a dead email (advanced — inspect the selected row first)
+# Restrict any recipient, subject or last_error inspection to that row and
+# the authorized host session. Historical last_error values may be raw text.
 # ⚠️  This re-attempts delivery. Confirm the recipient and content first.
 # The UPDATE does not write updated_at: after a replay the column keeps the
 # dead-letter time until the loop's claim rewrites it. next_attempt_at=now()

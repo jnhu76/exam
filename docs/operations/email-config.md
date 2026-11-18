@@ -271,10 +271,11 @@ curl -s -b /tmp/admin-cookies.txt \
 
 ### 6.2 Secret hygiene
 
-> The `error` field and every persisted `lastError` are closed
-> classification strings from `sanitizeEmailError` — raw error text,
-> credentials, recipients, and provider-echoed content never reach them.
-> Logs likewise never print `SMTP_PASSWORD` or the full transporter config.
+> The test-send `error` field and current email-error writes use closed
+> classification strings. Heartbeats also support a fixed bootstrap label
+> or null. Older rows can retain raw text; diagnostics applies the read-side
+> projection defined in the [observability contract](../contracts/observability.md).
+> Current email-error logs exclude `SMTP_PASSWORD` and transporter config.
 > Never paste real credentials into issues, chat, or committed files.
 > `.env` is gitignored; keep secrets there.
 
