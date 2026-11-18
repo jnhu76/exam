@@ -1077,12 +1077,19 @@ emailStatus.worker                — worker heartbeat (last_poll_at, last_succe
                                     last_error_at, last_error)
 emailStatus.outbox                — pending / processing / retry_wait / sent / dead
 emailStatus.oldestDuePendingAgeSeconds — age of the oldest DUE pending row in
-                                    whole seconds (floor); null = no row is
-                                    due (a future-scheduled row may still
-                                    exist — null is not an empty backlog)
+                                    whole seconds (floor); on a successful
+                                    read, null = no row is due (a
+                                    future-scheduled row may still exist —
+                                    null is not an empty backlog); null also
+                                    when email is disabled or the read failed
+                                    (emailStatus.status tells which)
 emailStatus.oldestPendingAge      — deprecated: identical value from the same
-                                    query during the compatibility window;
-                                    removed once no consumer reads it
+                                    query during the compatibility window
+                                    (safe only for clients that tolerate
+                                    additional fields — the schema pins
+                                    additionalProperties: false, so strict
+                                    validators must update their schema
+                                    first); removed once no consumer reads it
 emailStatus.lastSuccessfulDeliveryAt — timestamp, or null
 config                            — heartbeatInterval / heartbeatTimeout / deadlineScanInterval
 ```
