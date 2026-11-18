@@ -51,6 +51,16 @@ COPY packages/exam-engine/package.json packages/exam-engine/
 COPY packages/import-export/package.json packages/import-export/
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
+# INVARIANT: every workspace manifest must exist before the frozen install
+# below — pnpm records the workspace structure in its install state, and the
+# later `pnpm run` build layers re-verify it (#1024 sets verifyDepsBeforeRun:
+# error). The source COPY steps add @exam/e2e and the two @exam/source-fixture*
+# members; without their manifests here the recorded structure drifts 10 -> 13
+# mid-build and every build layer fails closed (the pre-#1024 default mode
+# silently spawned a top-up install inside the build layers instead).
+COPY packages/source-fixture/package.json packages/source-fixture/
+COPY packages/source-fixture-dep/package.json packages/source-fixture-dep/
+COPY apps/e2e/package.json apps/e2e/
 
 RUN pnpm install --frozen-lockfile --reporter=append-only
 

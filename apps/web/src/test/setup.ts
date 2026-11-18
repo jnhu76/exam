@@ -5,6 +5,10 @@ import "@testing-library/jest-dom/vitest";
 // useTranslation()/t() resolve keys against the zh-CN catalog (mirrors the
 // production bootstrap in src/main.tsx).
 import "@/i18n";
+// See src/test/jsdomStorageBinding.ts for why the browser storage globals may
+// need re-binding in the vitest jsdom env (Node ≥26 native Web Storage split
+// realm) and what invariant the binding restores.
+import { bindJsdomBrowserStorage } from "@/test/jsdomStorageBinding";
 
 if (typeof window !== "undefined") {
   if (!window.HTMLElement.prototype.hasPointerCapture) {
@@ -123,6 +127,11 @@ if (
     writable: true,
   });
 }
+
+// See src/test/jsdomStorageBinding.ts for why the browser storage globals may
+// need re-binding in the vitest jsdom env (Node ≥26 native Web Storage split
+// realm) and what invariant the binding restores.
+bindJsdomBrowserStorage();
 
 afterEach(() => {
   cleanup();
