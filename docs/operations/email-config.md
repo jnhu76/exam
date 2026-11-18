@@ -40,8 +40,14 @@ AppRuntimeConfig.email  ──►  createEmailSender(config)
 - `EMAIL_TRANSPORT` and `EMAIL_FAKE_MODE` are **strict lower-case** (`smtp`, not
   `SMTP`; `success`/`failure`). The loader fails fast on anything else.
 - `SMTP_*` is read **only** when `EMAIL_TRANSPORT=smtp`.
-- SMTP password is never logged / never stringified into `lastError`
-  (`sanitizeEmailError` scrubs password/pass/bearer/authorization shapes).
+- Email errors never surface as raw text: `sanitizeEmailError` classifies
+  every thrown error into a closed category string
+  (`email_error:<category>[ code=…][ rc=…]`); raw `message`/`name`/`stack`/
+  `response` are never read, so credentials, recipients, and
+  provider-echoed content cannot reach any sink. What the diagnostics
+  surface is guaranteed to exclude is owned by the contract
+  (`packages/contracts` `EmailDiagnosticsStatusSchema`); reading the labels
+  in practice is §6 below.
 
 ---
 
@@ -60,14 +66,14 @@ All resolved by the application semantic settings model
 | `EMAIL_TRANSPORT` | `fake` | no | **`fake`** \| **`smtp`** (lower-case only) | Transport selection. |
 | `EMAIL_FROM` | `no-reply@example.local` | when enabled | email string | Sender `From` address. |
 | `EMAIL_FROM_NAME` | `Exam Platform` | no | string | Sender display name. |
-| `EMAIL_MAX_ATTEMPTS` | `3` | no | positive int | Max send attempts before `failed`. |
+| `EMAIL_MAX_ATTEMPTS` | `3` | no | positive int | Max send attempts before the row is marked `dead` (terminal). |
 | `EMAIL_RETRY_BASE_SECONDS` | `60` | no | positive int | Exponential-backoff base: `base * 2**(attempts-1)`. |
 
 ### 2.2 Fake transport config
 
 | Variable | Default | Allowed | Meaning |
 | --- | --- | --- | --- |
-| `EMAIL_FAKE_MODE` | `success` | **`success`** \| **`failure`** | `success` always resolves; `failure` always throws the fixed string `"Fake email sender failure"` (for testing the failure/retry path deterministically). |
+| `EMAIL_FAKE_MODE` | `success` | **`success`** \| **`failure`** | `success` always resolves; `failure` always rejects with the fixed safe classification `email_error:internal_error` (for testing the failure/retry path deterministically). |
 
 ### 2.3 SMTP transport config (only used when `EMAIL_TRANSPORT=smtp`)
 
@@ -89,6 +95,23 @@ All resolved by the application semantic settings model
 > ints must be **positive integers** or the loader throws. `SMTP_SECURE`,
 > `SMTP_REQUIRE_TLS`, `SMTP_TLS_REJECT_UNAUTHORIZED` use `parseStrictBool`
 > (strict `true`/`false`, not truthy).
+
+### 2.4 Worker loop thresholds (`EMAIL_WORKER_*`)
+
+These govern the in-process outbox loop. Defaults are defined by the
+settings model (`apps/api/src/config/settings.ts`) — the single authority;
+the production Compose file forwards each variable with an empty fallback,
+so the app default applies unless the deployment's `.env.production`
+overrides it. The stale-shell `env -u` gotcha (§5) applies to these the
+same way. How these feed liveness reading is §6.3 below.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `EMAIL_WORKER_POLL_INTERVAL_MS` | `5000` | Poll cadence; the heartbeat advances once per cycle. |
+| `EMAIL_WORKER_BATCH_SIZE` | `20` | Max outbox rows claimed per poll. |
+| `EMAIL_WORKER_LOCK_TIMEOUT_MS` | `300000` | Abandoned-lock recovery threshold for `processing` rows. |
+| `EMAIL_WORKER_HEARTBEAT_STALE_MS` | `60000` | `emailStatus.worker` reads `degraded` once `now - lastPollAt` exceeds this. |
+| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | `8000` | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery. |
 
 ---
 
@@ -174,7 +197,7 @@ SMTP_TLS_REJECT_UNAUTHORIZED=true
 | Self-hosted (Postfix etc.) | your host | 465 or 587 per your config | per your config | If the host is an IP/intranet alias, set `SMTP_TLS_SERVERNAME` to the cert's CN. |
 
 > **Port reachability is network-dependent.** If you get
-> `EmailSendError | Timeout | code=ETIMEDOUT | command=CONN`, the port is
+> `email_error:smtp_connection_failed code=ETIMEDOUT`, the port is
 > blocked on your egress (common on cloud/ISP firewalls that block 587/25). See
 > §6 Troubleshooting.
 
@@ -220,7 +243,7 @@ curl -s -b /tmp/admin-cookies.txt \
 | --- | --- |
 | `sent` | SMTP server accepted the message. (Final inbox delivery still depends on the receiver's anti-spam.) |
 | `disabled` | `EMAIL_ENABLED=false` OR a stale shell `EMAIL_*` var silently overrode `.env`. Server resolved to DisabledEmailSender. |
-| `failed` | SMTP error. The `error` field is **sanitized** (no password). See §6. |
+| `failed` | SMTP error. The `error` field is the closed classification string (`email_error:<category>[ code=…][ rc=…]`) — never raw error text. See §6. |
 
 > **Note:** `POST /api/email/test` sends **synchronously** via
 > `fastify.emailSender.send()` and bypasses the outbox — this is intentional
@@ -233,21 +256,54 @@ curl -s -b /tmp/admin-cookies.txt \
 
 ## 6. Troubleshooting
 
+### 6.1 Send / config errors
+
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `status: "disabled"` despite `EMAIL_ENABLED=true` in `.env` | A stale `EMAIL_*` value in your shell `env` is overriding `.env` (dotenv never overwrites `process.env`). | Restart the API under `env -u EMAIL_ENABLED ...` (full list in §5), or run in a fresh shell. |
 | API crashes at boot: `EMAIL_TRANSPORT must be "fake" or "smtp" (got: SMTP)` | `EMAIL_TRANSPORT` is **case-sensitive** — must be lower-case `smtp`, not `SMTP`. | Set `EMAIL_TRANSPORT=smtp`. |
 | API crashes at boot: `EMAIL_TRANSPORT=smtp requires SMTP_HOST to be set` | `SMTP_HOST` empty while transport is smtp. | Set `SMTP_HOST`. |
-| `EmailSendError \| Timeout \| code=ETIMEDOUT \| command=CONN` | TCP connect to `SMTP_HOST:SMTP_PORT` blocked/unreachable on your network. | Switch port (587↔465). Verify reachability: `timeout 8 bash -c "</dev/tcp/$HOST/$PORT"`. Cloud/ISP firewalls commonly block 587/25. |
-| `EmailSendError \| ... \| code=EAUTH` | Bad credentials — wrong user, wrong password, or you used the mailbox password instead of the SMTP auth code. | Use the provider's **app-specific / SMTP authorization code**. Re-enable SMTP service in the provider's settings. |
-| `EmailSendError \| ... \| code=EENVELOPE` (55x) | From address rejected, or recipient rejected by spam policy. | `EMAIL_FROM` must be an address owned/authorized by the SMTP account. For cross-domain sends, expect receiver-side filtering. |
+| `error: "email_error:smtp_connection_failed code=ETIMEDOUT"` | TCP connect to `SMTP_HOST:SMTP_PORT` blocked/unreachable on your network. | Switch port (587↔465). Verify reachability: `timeout 8 bash -c "</dev/tcp/$HOST/$PORT"`. Cloud/ISP firewalls commonly block 587/25. |
+| `error: "email_error:smtp_auth_failed code=EAUTH"` | Bad credentials — wrong user, wrong password, or you used the mailbox password instead of the SMTP auth code. | Use the provider's **app-specific / SMTP authorization code**. Re-enable SMTP service in the provider's settings. |
+| `error: "email_error:smtp_send_failed code=EENVELOPE"` (a 55x response rides as `rc=5xx`) | From address rejected, or recipient rejected by spam policy. | `EMAIL_FROM` must be an address owned/authorized by the SMTP account. For cross-domain sends, expect receiver-side filtering. |
 | TLS/self-signed cert error in local dev | `SMTP_TLS_REJECT_UNAUTHORIZED=true` rejecting a self-signed cert. | **Local dev only:** temporarily set `SMTP_TLS_REJECT_UNAUTHORIZED=false`. Never in production. |
 | API says `sent` but no email arrives | SMTP accepted it; receiver anti-spam dropped/quarantined it. | Check the recipient's spam folder. Check the provider's send log. Avoid `from === to` bursts and same-sender flooding. |
 
-> **Secret hygiene:** the `error` field never contains the password
-> (`sanitizeEmailError`). Logs likewise never print `SMTP_PASSWORD` or the full
-> transporter config. Never paste real credentials into issues, chat, or
-> committed files. `.env` is gitignored; keep secrets there.
+### 6.2 Secret hygiene
+
+> The test-send `error` field and current email-error writes use closed
+> classification strings. Heartbeats also support a fixed bootstrap label
+> or null. Older rows can retain raw text; diagnostics applies the read-side
+> projection defined in the [observability contract](../contracts/observability.md).
+> Current email-error logs exclude `SMTP_PASSWORD` and transporter config.
+> Never paste real credentials into issues, chat, or committed files.
+> `.env` is gitignored; keep secrets there.
+
+### 6.3 Loop liveness (`emailStatus`)
+
+Liveness of the in-process outbox loop is read from
+`GET /api/system/diagnostics` (`emailStatus.worker.status`) — **not** from
+stdout: a `poll cycle completed` line only appears when a cycle processed
+≥1 row, so a healthy empty queue and a dead loop look identical in logs.
+`worker.lastSuccessAt` is the last **successful poll** stamp (it advances
+even while every send fails into `retry_wait`/`dead`); actual delivery is
+read from the `outbox` counts plus `lastSuccessfulDeliveryAt` (the newest
+`sent` row — with `EMAIL_ENABLED=false` those are drains, not mailbox
+deliveries).
+
+| Signal | Meaning | Action |
+| --- | --- | --- |
+| `worker.status = "available"`, queue empty, no poll log lines | Normal — liveness is the heartbeat, not stdout. | None. |
+| `worker.status = "degraded"`, `lastPollAt` older than `EMAIL_WORKER_HEARTBEAT_STALE_MS` (default 60s) | Loop stale (process dead or wedged). | `docker compose restart app` (runbook §13). |
+| `worker.status = "degraded"`, `lastError` set | Last poll cycle threw; the value is a closed classification string, or the fixed `bootstrap_pending: initial organization not initialized` label while the initial organization is missing. | If it persists across cycles, read app logs (`poll cycle failed`); `bootstrap_pending` clears once bootstrap completes. |
+| `outbox.retryWait` grows while `worker.status = "available"` and `lastSuccessfulDeliveryAt` stalls | Worker alive, sends failing (SMTP-side). Overall `status` stays `available` until rows exhaust their budget (`dead > 0`). | Check SMTP reachability/credentials (§6.1); watch `outbox.dead`. |
+| `emailStatus.status = "unavailable"` | The diagnostics read itself failed (e.g. DB unreachable) — not evidence about the email loop process. | Restore the DB/read path first (runbook §13). |
+| `worker.lastError = "email_error:undisclosed"` | Historical free-text row written before the closed-classification policy (or by an old worker during a rolling upgrade); its content is not disclosed by design. | No content is available by design; correlate app logs at `lastErrorAt`. |
+
+The full field-by-scenario matrix and the known blind spots (a poll throw
+clears `lastSuccessAt`; long standalone polls can read stale; the newest
+heartbeat row can mask another instance's error) are in the deployment
+runbook §8 / §16.
 
 ---
 
@@ -341,9 +397,11 @@ row. That is a separate Middle/Large job, not a Phase 1 task.
 
 ```bash
 # unit + integration tests for the email stack (no real SMTP)
-pnpm --filter @exam/db test -- email
-pnpm --filter @exam/api test -- email
-pnpm --filter @exam/api test -- outbox
+# (no "--" separator before the filter: pnpm forwards a literal "--" to
+#  the script, and vitest then ignores the filter and runs the whole suite)
+pnpm --filter @exam/db test email
+pnpm --filter @exam/api test email
+pnpm --filter @exam/api test outbox
 
 # full gate
 pnpm verify
@@ -371,6 +429,11 @@ pnpm verify
 - **Test-email route:** `apps/api/src/routes/email.ts` (`POST /api/email/test`).
 - **Outbox schema/repo:** `packages/db/src/schema/pg.ts` (`emailOutbox`),
   `packages/db/src/repository/emailOutboxRepo.ts`.
+- **Loop liveness & dead-letter operations:**
+  `docs/deployment/mvp-deployment-runbook.md` §8 (reading
+  `emailStatus.worker` liveness vs delivery health, field values by
+  scenario, known blind spots in §16) and §13 (stale-heartbeat restart,
+  dead-row inspection/replay SQL).
 - **Env template:** `.env.production.example` (optional Email block).
 - **Local DB discipline (env-var priority rules):**
   `docs/standards/testing.md` §2 — the `env -u` pattern in §5 of this doc is

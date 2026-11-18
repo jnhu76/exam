@@ -81,6 +81,111 @@ app container means the deployment readiness state is violated (e.g.
 PostgreSQL is down); it is an orchestration/visibility signal, NOT a
 runtime traffic block — health status never routes or restarts traffic.
 
+### Worker heartbeats storage growth (`worker_heartbeats`)
+
+`worker_heartbeats` backs the `emailStatus.worker` projection of
+`GET /api/system/diagnostics`. Every API/worker process start mints a fresh
+random `workerInstanceId` (`hostname-pid-uuid`,
+`apps/api/src/plugins/emailOutboxLoop.ts`), and heartbeats UPSERT on that
+key (unique index `worker_heartbeats_instance_uk`), so each process restart
+nets one new row per worker name; churn within a live instance updates in
+place and adds no rows. No code path deletes expired instance rows (#1013).
+
+Growth is measured — not cleaned — by the read-only CLI
+(`apps/api/src/scripts/measure-worker-heartbeat-growth.ts`):
+
+```bash
+pnpm --filter @exam/api measure:worker-heartbeats                          # single snapshot
+pnpm --filter @exam/api measure:worker-heartbeats --sample-seconds 300     # two snapshots + deltas
+pnpm --filter @exam/api measure:worker-heartbeats --worker-name NAME       # EXPLAIN probe target only
+pnpm --filter @exam/api measure:worker-heartbeats --schema NAME            # pin the search_path
+```
+
+The tool is strictly read-only: it opens one dedicated connection (`max: 1`),
+sets `default_transaction_read_only = on` for the session, and issues only
+one aggregate `SELECT` plus one `EXPLAIN (ANALYZE, FORMAT JSON)`. Write
+refusal on that handle is proven by
+`apps/api/src/scripts/measure-worker-heartbeats.readonly.test.ts` (expects
+PostgreSQL error 25006). On success the measurement is printed as JSON on
+stdout; on failure stderr gets `measurement failed: <message>` (never the
+connection URL) and the exit code is 1. Unknown arguments are rejected.
+
+**Snapshot fields** (single-snapshot output): `capturedAt`, `database`,
+`serverVersion`, `totalRows`, `byWorker[]` — per `worker_name`:
+`workerName`, `rows`, `distinctInstances`, `latestPollAt`, `oldestCreatedAt`
+(full-table `GROUP BY worker_name`) — and `findLatestByNameProbe`:
+`workerName`, `planNode`, `executionTimeMs`. With `--sample-seconds N > 0`
+the output is `{ sampleSeconds, first, second, deltaRows, deltaByWorker }`
+(`first`/`second` are full snapshots).
+
+**Reading the diff.** Run the tool periodically (cron), archive the JSON
+outputs, and compare two archived snapshots for the growth rate;
+`--sample-seconds N` captures a bounded-interval delta in one invocation.
+The two samples are separate implicit read-only transactions on one
+connection — the sleep between them holds no transaction — so deltas are
+plain scalar differences with no window or locking semantics.
+`deltaByWorker` is keyed off the second snapshot's worker set: a worker
+name that disappears between snapshots produces no negative entry.
+`--worker-name` changes only the EXPLAIN probe target and never filters
+`byWorker`. The daily restart rate of a worker ≈ its `deltaByWorker` entry
+over a 24-hour window (equivalently, the increase of its
+`byWorker[].distinctInstances` between archived snapshots), because each
+process start nets one row and same-instance churn does not.
+
+**Target database and environment** (ownership per
+[`../standards/testing.md` §2.8](../standards/testing.md)). The tool never
+creates, migrates, or drops anything — it connects and reads — so the
+target database must already exist and already contain the migrated
+`worker_heartbeats` table. Mode routing: `APP_MODE` is authoritative,
+`NODE_ENV` is the fallback. Test-like modes (`test`/`ci`/`e2e`) read
+`TEST_DATABASE_URL ?? TEST_DB_URL` (database name must contain
+`test`/`e2e`/`ci`), else construct the local `exam_test` URL from
+`DB_HOST_PORT`; an explicit `TEST_DATABASE_URL` target is operator-owned
+and must already exist — the harness never creates or drops it. Any other
+mode resolves as development: `DATABASE_URL` — including values admitted
+from the repository-root `.env`, which the tool loads — or the constructed
+dev `exam` database. Exporting `TEST_DATABASE_URL` alone therefore does
+NOT route to the test database; set `APP_MODE=test` (or `NODE_ENV=test`)
+as well. `TEST_RUNTIME_ENV` applies only inside vitest projects, not to
+direct CLI invocations.
+
+**Re-measurement triggers** (#1013 disposition; measurement is the
+delivered scope):
+
+1. `totalRows` exceeds 100,000;
+2. sustained >50 restarts/day for several weeks (read from
+   `deltaByWorker` / `distinctInstances` growth as above);
+3. the `findLatestByName` plan degrades to a Sort under the Limit node
+   while the table holds more than ~10k rows. The probe's `planNode`
+   exports only the root node type, which is always `Limit` (the query
+   has `LIMIT 1`), so it cannot by itself distinguish
+   `Limit → Index Scan Backward` from `Limit → Sort`; judge this trigger
+   by running the full EXPLAIN manually — the probe's exact statement is
+   `EXPLAIN (ANALYZE, FORMAT JSON) SELECT * FROM worker_heartbeats WHERE
+   worker_name = 'email-delivery' ORDER BY last_poll_at DESC LIMIT 1`
+   (the probe interpolates an escaped literal where production issues a
+   parameterized statement, so plan shapes can differ at the margin). The
+   expected shape walks `worker_heartbeats_last_poll_at_idx`; a Sort node
+   means the planner abandoned the index (typically stale statistics). For
+   the row-count term, the figure that directly drives this query's cost
+   is the probe worker's `byWorker[].rows` (the statement filters on
+   `worker_name`); `totalRows` is the looser, table-level proxy #1013
+   records.
+
+**Deleting rows can fabricate recovery.** `emailStatus.worker` is derived
+entirely from the single newest row per worker name (`ORDER BY
+last_poll_at DESC LIMIT 1`). Deleting that newest row — e.g. a degraded
+instance holding `lastError` — makes the same query return the
+next-newest row immediately: a fresh row with a success and no error
+flips `workerStatus` to `available`, so the deletion itself fabricates
+recovery, and even a stale successor erases the `lastError`/`lastErrorAt`
+evidence from the projection.
+
+**Retention status.** #1013's disposition is DEFER: cleanup and retention
+thresholds are a separate future owner decision that this page does not
+make. The procedure and triggers above exist so that decision can be
+taken on evidence.
+
 ## Active Alerting (operability events)
 
 The app emits BOUNDED structured transition events on critical operational
