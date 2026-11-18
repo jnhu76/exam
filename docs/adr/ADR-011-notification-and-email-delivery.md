@@ -953,7 +953,16 @@ Rules:
 
 The worker must expose the following metrics, queryable from the existing diagnostics surface (`/api/system`):
 
-- `oldestPendingAge`: age of the oldest pending outbox row
+- `oldestDuePendingAgeSeconds`: age of the oldest DUE pending outbox row
+  (status `pending` with `nextAttemptAt` null or due) in whole seconds
+  (floor); on a successful read, null when no row is due, which is not an
+  empty backlog; null also when email is disabled or the diagnostics read
+  failed (`emailStatus.status` distinguishes) (supersedes
+  `oldestPendingAge`, kept as a deprecated alias with the identical value
+  during the #1003 compatibility window — value identity holds only for
+  clients that tolerate additional response fields; the published schema
+  sets `additionalProperties: false`, so strict validators of the
+  pre-#1003 schema must update before accepting current responses)
 - `pendingCount`: number of rows with status `pending`
 - `retryWaitCount`: number of rows with status `retry_wait`
 - `processingCount`: number of rows with status `processing`

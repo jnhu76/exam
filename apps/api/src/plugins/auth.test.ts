@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Writable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { signJWT } from "@exam/auth/session";
@@ -9,19 +10,76 @@ import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 
 /** The role the mocked userRepo returns; override per-test. */
 let mockRole = "Admin";
+
+/**
+ * Per-test failure injection for the user-query path (#1002). When `error`
+ * is set, the mocked `findByOrganizationAndId` rejects; every existing suite
+ * leaves it unset, so the mock resolves a user exactly as before. Hoisted so
+ * the `vi.mock` factory can read it at call time.
+ */
+const userQueryFailure = vi.hoisted(() => ({
+  error: undefined as Error | undefined,
+}));
+
 vi.mock("@exam/db/repository/userRepo", () => ({
   createUserRepo: () => ({
-    findByOrganizationAndId: async () => ({
-      id: "user-1",
-      organizationId: "org-1",
-      role: mockRole,
-      isActive: true,
-      // #325: authenticate compares the JWT authEpoch claim against this
-      // durable authority; fixture tokens are minted with epoch 0.
-      authEpoch: 0,
-    }),
+    findByOrganizationAndId: async () => {
+      if (userQueryFailure.error) {
+        throw userQueryFailure.error;
+      }
+      return {
+        id: "user-1",
+        organizationId: "org-1",
+        role: mockRole,
+        isActive: true,
+        // #325: authenticate compares the JWT authEpoch claim against this
+        // durable authority; fixture tokens are minted with epoch 0.
+        authEpoch: 0,
+      };
+    },
   }),
 }));
+
+/**
+ * Captures pino JSON lines written by the app logger, for log-payload
+ * assertions (#1002). Same capture pattern as requestIdWireContract.test.ts.
+ */
+class LogCapture extends Writable {
+  readonly lines: string[] = [];
+  override _write(
+    chunk: Buffer,
+    _enc: BufferEncoding,
+    done: (err?: Error | null) => void,
+  ) {
+    this.lines.push(chunk.toString("utf8"));
+    done();
+  }
+  /** All captured lines, parsed. */
+  parsed(): Array<Record<string, unknown>> {
+    return this.lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+  }
+}
+
+/** Typed accessor for apps built with a LogCapture stream. */
+type LoggedApp = FastifyInstance & {
+  getLogLines: () => Array<Record<string, unknown>>;
+};
+
+/** The requestId the client received in the error envelope. */
+function envelopeRequestIdOf(res: { json: () => unknown }): string {
+  const body = res.json() as { error: { requestId: string } };
+  return body.error.requestId;
+}
+
+/** The log line carrying exactly `msg`; asserts presence so a missing row is a distinct failure. */
+function logLineFor(
+  app: FastifyInstance,
+  msg: string,
+): Record<string, unknown> {
+  const line = (app as LoggedApp).getLogLines().find((l) => l.msg === msg);
+  expect(line, `expected a captured log line "${msg}"`).toBeDefined();
+  return line!;
+}
 
 /**
  * RBAC-M10-E: the mocked userRepo returns a user with no real DB, so the
@@ -268,7 +326,8 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
   async function buildAppWithFailingLoader(
     loader: () => Promise<unknown>,
   ): Promise<FastifyInstance> {
-    const app = Fastify();
+    const logs = new LogCapture();
+    const app = Fastify({ logger: { level: "info", stream: logs } });
     await app.register(cookie);
     app.decorate("db", {} as never);
     await app.register(
@@ -280,8 +339,12 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
       return { actorId: req.ctx?.actorId };
     });
     await app.ready();
-    // Attach an accessor so tests can inspect post-request state.
-    Object.assign(app, { getHandlerReached: () => handlerReached });
+    // Attach accessors so tests can inspect post-request state and the
+    // captured log rows.
+    Object.assign(app, {
+      getHandlerReached: () => handlerReached,
+      getLogLines: () => logs.parsed(),
+    });
     return app;
   }
 
@@ -316,6 +379,16 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
         app as unknown as { getHandlerReached: () => boolean }
       ).getHandlerReached(),
     ).toBe(false);
+    // #1002: the 503 error row must carry requestId so it is locatable by
+    // the id the client received in the envelope (audit matrix S6 gap:
+    // hasReqId=false). `err` is intentionally absent on this site — only
+    // the thrown-loader site has an err to serialize.
+    const line = logLineFor(
+      app,
+      "authenticate: assignment authority resolution failed — fail closed",
+    );
+    expect(line.requestId).toBe(envelopeRequestIdOf(res));
+    expect(line.actorId).toBe("user-1");
     await app.close();
   });
 
@@ -337,6 +410,16 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
         app as unknown as { getHandlerReached: () => boolean }
       ).getHandlerReached(),
     ).toBe(false);
+    // #1002: the thrown-loader error row must carry requestId (audit
+    // matrix S6 gap: hasReqId=false), preserving the err and actorId
+    // payload fields.
+    const line = logLineFor(
+      app,
+      "authenticate: assignment authority loader threw — fail closed",
+    );
+    expect(line.requestId).toBe(envelopeRequestIdOf(res));
+    expect(line.err).toBeDefined();
+    expect(line.actorId).toBe("user-1");
     await app.close();
   });
 
@@ -369,6 +452,16 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
           app as unknown as { getHandlerReached: () => boolean }
         ).getHandlerReached(),
       ).toBe(false);
+      // #1002: every operational-failure row carries requestId (audit
+      // matrix S6 gap: hasReqId=false); the reason itself stays in the
+      // payload.
+      const line = logLineFor(
+        app,
+        "authenticate: assignment authority resolution failed — fail closed",
+      );
+      expect(line.requestId).toBe(envelopeRequestIdOf(res));
+      expect(line.reason).toBe(reason);
+      expect(line.actorId).toBe("user-1");
       await app.close();
     },
   );
@@ -394,6 +487,74 @@ describe("auth plugin: E14 — loader failure fails closed (503 AUTHZ_UNAVAILABL
         app as unknown as { getHandlerReached: () => boolean }
       ).getHandlerReached(),
     ).toBe(false);
+    await app.close();
+  });
+});
+
+describe("auth plugin: user-query failure log carries requestId (#1002)", () => {
+  beforeEach(() => {
+    vi.stubEnv("APP_MODE", "test");
+    vi.stubEnv("JWT_SECRET", "runtime-secret-A");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetRuntimeConfigForTest();
+    userQueryFailure.error = undefined;
+  });
+
+  async function buildAppWithCapturedLogs(): Promise<FastifyInstance> {
+    resetRuntimeConfigForTest();
+    const logs = new LogCapture();
+    const app = Fastify({ logger: { level: "info", stream: logs } });
+    await app.register(cookie);
+    app.decorate("db", {} as never);
+    await app.register(
+      buildAuthPluginFp({ loadAssignmentAuthority: mockLoadAuthority() }),
+    );
+    app.get("/protected", { preHandler: app.authenticate }, async (req) => ({
+      actorId: req.ctx?.actorId,
+    }));
+    await app.ready();
+    Object.assign(app, { getLogLines: () => logs.parsed() });
+    return app;
+  }
+
+  function validToken(): string {
+    return signJWT(
+      {
+        actorId: "user-1",
+        role: "Admin",
+        organizationId: "org-1",
+        authEpoch: 0,
+      },
+      "runtime-secret-A",
+    );
+  }
+
+  it("DB failure while loading the user (500) logs requestId matching the envelope", async () => {
+    userQueryFailure.error = new Error("db pool exhausted");
+    const app = await buildAppWithCapturedLogs();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/protected",
+      cookies: { "auth-token": validToken() },
+    });
+
+    // Response contract unchanged: 500 INTERNAL_ERROR envelope.
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toMatchObject({
+      error: { code: "INTERNAL_ERROR" },
+    });
+
+    // #1002: the error row must be locatable by the requestId the client
+    // received — the gap the audit matrix measured as S5 hasReqId=false
+    // (indistinguishable from a handler-bug 500 by the envelope alone).
+    const line = logLineFor(app, "Database error during authentication");
+    expect(line.requestId).toBe(envelopeRequestIdOf(res));
+    // Existing payload fields preserved: err (#998 channel) and actorId.
+    expect(line.err).toBeDefined();
+    expect(line.actorId).toBe("user-1");
     await app.close();
   });
 });

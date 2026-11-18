@@ -107,7 +107,22 @@ export const EmailDiagnosticsStatusSchema = z.object({
     sent: z.number().int().min(0),
     dead: z.number().int().min(0),
   }),
-  oldestPendingAge: z.number().int().min(0).nullable(),
+  oldestPendingAge: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .describe(
+      "Deprecated: superseded by oldestDuePendingAgeSeconds (identical value, identical source, identical null semantics). Legacy name kept during the compatibility window and removed once the deployment docs are migrated, one minor release has shipped both fields, and a consumer census finds no remaining reader of the old name. The window guarantees value identity only for clients that tolerate additional response fields: this object is published with additionalProperties: false, so a client strictly validating the pre-#1003 schema rejects current responses until its schema is updated.",
+    ),
+  oldestDuePendingAgeSeconds: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .describe(
+      "Age in whole seconds (floor) of the oldest DUE pending outbox row: status=pending AND nextAttemptAt null or in the past, at read time, requesting organization only. On a successful read, null means no row matched this due-pending set — a future-scheduled or non-pending row can still exist, so null is NOT an empty backlog. null is also returned when email is disabled or the diagnostics read failed; emailStatus.status (disabled/unavailable) distinguishes those from a successful read.",
+    ),
   lastSuccessfulDeliveryAt: z.string().nullable(),
 });
 

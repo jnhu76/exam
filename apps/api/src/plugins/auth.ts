@@ -101,7 +101,7 @@ export function buildAuthPlugin(
         );
       } catch (err) {
         fastify.log.error(
-          { err, actorId: payload.actorId },
+          { err, actorId: payload.actorId, requestId: request.id },
           "Database error during authentication",
         );
         return reply
@@ -144,7 +144,7 @@ export function buildAuthPlugin(
         // operational / integrity failure: 503, never masquerade as 401,
         // never fall back to users.role (E14 / ADR §3.9).
         fastify.log.error(
-          { err, actorId: user.id },
+          { err, actorId: user.id, requestId: request.id },
           "authenticate: assignment authority loader threw — fail closed",
         );
         return reply
@@ -165,7 +165,7 @@ export function buildAuthPlugin(
             .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
         }
         fastify.log.error(
-          { actorId: user.id, reason: authority.reason },
+          { actorId: user.id, reason: authority.reason, requestId: request.id },
           "authenticate: assignment authority resolution failed — fail closed",
         );
         return reply

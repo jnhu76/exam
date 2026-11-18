@@ -485,3 +485,347 @@ describe("deadline scanner plugin — persistent business-failure escalation inp
     }
   });
 });
+
+// Issue #1009 — tick settlement emission. A settled NON-EMPTY tick emits
+// exactly ONE `scanner.tick.completed` line (outcome ∈ {no_op, acted,
+// partial_failure}); empty discovery stays silent (frozen blindspot — no
+// `empty` outcome); a thrown tick keeps the error path and never emits a
+// fabricated settlement; per-candidate error lines carry the tick's `tickId`
+// as the join key (one randomUUID per tick, never an HTTP requestId).
+describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
+  const ORG = { id: "org-1" };
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  type TickTxOutcome = "true" | "false" | "throw";
+
+  function resetSettlementFacts() {
+    deadlineScannerMetrics.startedAt = null;
+    deadlineScannerMetrics.lastStartedAt = null;
+    deadlineScannerMetrics.lastSettledAt = null;
+    deadlineScannerMetrics.activeSince = null;
+    deadlineScannerMetrics.lastScanAt = null;
+    deadlineScannerMetrics.autoSubmitCount = 0;
+    deadlineScannerMetrics.failedCount = 0;
+    deadlineScannerMetrics.consecutiveFailedTicks = 0;
+    deadlineScannerMetrics.consecutiveThrowTicks = 0;
+  }
+
+  function buildApp(db: unknown, lines: string[]) {
+    const clock = { current: new Date("2026-11-18T08:00:00Z") };
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        lines.push(chunk.toString());
+        callback();
+      },
+    });
+    const app = Fastify({ logger: { level: "info", stream } });
+    app.decorate<unknown>("db", db as never);
+    app.decorate("now", () => clock.current);
+    return { app, clock };
+  }
+
+  /**
+   * Fake drizzle edge (outermost architecture boundary): org discovery
+   * resolves ONE org (or throws while `orgDiscoveryThrows()` — the tick-level
+   * throw path); candidate discovery resolves `candidates()` rows;
+   * `db.transaction` resolves the next outcome from `txOutcomes()` in order
+   * (clamped to the last element), so `autoSubmitAndGrade`'s stateChanged
+   * guard turns "false" into an under-lock no-op without running any
+   * transaction-body query.
+   */
+  function buildSettlementDb(legs: {
+    candidates: () => number;
+    txOutcomes: () => TickTxOutcome[];
+    orgDiscoveryThrows?: () => boolean;
+  }): unknown {
+    let txCalls = 0;
+    return {
+      select: () => ({
+        from: (table: unknown) => {
+          if (table === organizations) {
+            if (legs.orgDiscoveryThrows?.()) {
+              throw new Error("forced org discovery failure");
+            }
+            return Promise.resolve([ORG]);
+          }
+          if (table === examAttempts) {
+            return {
+              innerJoin: () => ({
+                where: () =>
+                  Promise.resolve(
+                    Array.from({ length: legs.candidates() }, (_, i) => ({
+                      attempt: {
+                        id: `att-${i + 1}`,
+                        status: "in_progress",
+                        organizationId: ORG.id,
+                      },
+                    })),
+                  ),
+              }),
+            };
+          }
+          throw new Error("unexpected table in deadline scanner fake db");
+        },
+      }),
+      transaction: async () => {
+        const outcomes = legs.txOutcomes();
+        const outcome = outcomes[Math.min(txCalls, outcomes.length - 1)];
+        txCalls += 1;
+        if (outcome === "throw") {
+          throw new Error("forced auto-submit failure");
+        }
+        return outcome === "true";
+      },
+    };
+  }
+
+  async function runTick(clock: { current: Date }) {
+    clock.current = new Date(clock.current.getTime() + 30_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+  }
+
+  function parseLines(lines: string[]): Array<Record<string, unknown>> {
+    return lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+  }
+
+  it("emits exactly one scanner.tick.completed with outcome no_op per non-empty all-no-op tick, with a distinct per-tick tickId", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({ candidates: () => 3, txOutcomes: () => ["false"] }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+      await runTick(clock);
+
+      const completed = parseLines(lines).filter(
+        (l) => l.event === "scanner.tick.completed",
+      );
+      expect(completed).toHaveLength(2);
+
+      const first = completed[0]!;
+      expect(first.scanner).toBe("deadline");
+      expect(first.outcome).toBe("no_op");
+      expect(first.discoveredCount).toBe(3);
+      expect(first.noOpCount).toBe(3);
+      expect(first.submittedCount).toBe(0);
+      expect(first.failedCount).toBe(0);
+      expect(typeof first.tickId).toBe("string");
+      expect(UUID_RE.test(String(first.tickId))).toBe(true);
+
+      const second = completed[1]!;
+      expect(second.tickId).not.toBe(first.tickId);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps empty discovery ticks silent — zero lines of any kind (frozen blindspot, no empty outcome)", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({ candidates: () => 0, txOutcomes: () => ["true"] }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+
+      expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+      expect(lines).toEqual([]);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps an all-submitted tick to exactly one settlement line with outcome acted, replacing the count-gated summary 1:1", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({ candidates: () => 2, txOutcomes: () => ["true"] }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+
+      const parsed = parseLines(lines);
+      const completed = parsed.filter(
+        (l) => l.event === "scanner.tick.completed",
+      );
+      expect(completed).toHaveLength(1);
+      // 1:1 replacement: the settlement line is the ONLY line the tick emits.
+      expect(parsed).toHaveLength(1);
+      expect(completed[0]!.outcome).toBe("acted");
+      expect(completed[0]!.submittedCount).toBe(2);
+      expect(completed[0]!.failedCount).toBe(0);
+      expect(completed[0]!.discoveredCount).toBe(2);
+      expect(completed[0]!.noOpCount).toBe(0);
+      expect(completed[0]!.scanner).toBe("deadline");
+      expect(UUID_RE.test(String(completed[0]!.tickId))).toBe(true);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps a partial tick (one commit, one candidate throw) to outcome partial_failure and joins the per-candidate error line to the same tickId", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({
+        candidates: () => 2,
+        txOutcomes: () => ["true", "throw"],
+      }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+
+      const parsed = parseLines(lines);
+      const completed = parsed.filter(
+        (l) => l.event === "scanner.tick.completed",
+      );
+      expect(completed).toHaveLength(1);
+      expect(completed[0]!.outcome).toBe("partial_failure");
+      expect(completed[0]!.submittedCount).toBe(1);
+      expect(completed[0]!.failedCount).toBe(1);
+      expect(completed[0]!.discoveredCount).toBe(2);
+      expect(completed[0]!.noOpCount).toBe(0);
+
+      const candidateErrors = parsed.filter(
+        (l) => l.msg === "Failed to auto-submit expired attempt",
+      );
+      expect(candidateErrors).toHaveLength(1);
+      expect(candidateErrors[0]!.tickId).toBe(completed[0]!.tickId);
+      expect(candidateErrors[0]!.attemptId).toBe("att-2");
+      expect(candidateErrors[0]!.organizationId).toBe(ORG.id);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps thrown ticks on the error path — error line + consecutiveThrowTicks, never a completed settlement", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({
+        candidates: () => 1,
+        txOutcomes: () => ["true"],
+        orgDiscoveryThrows: () => true,
+      }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+
+      const parsed = parseLines(lines);
+      expect(
+        parsed.filter((l) => l.msg === "Error scanning for expired attempts"),
+      ).toHaveLength(1);
+      expect(
+        parsed.filter((l) => l.event === "scanner.tick.completed"),
+      ).toEqual([]);
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(1);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("REGRESSION (review): the tick-level error line carries its tick's own tickId — a valid UUID, distinct across consecutive thrown ticks", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({
+        candidates: () => 1,
+        txOutcomes: () => ["true"],
+        orgDiscoveryThrows: () => true,
+      }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+      await runTick(clock);
+
+      const tickErrors = parseLines(lines).filter(
+        (l) => l.msg === "Error scanning for expired attempts",
+      );
+      expect(tickErrors).toHaveLength(2);
+      expect(UUID_RE.test(String(tickErrors[0]!.tickId))).toBe(true);
+      expect(UUID_RE.test(String(tickErrors[1]!.tickId))).toBe(true);
+      expect(tickErrors[0]!.tickId).not.toBe(tickErrors[1]!.tickId);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("REGRESSION (review): a settlement-emission sink failure is NOT a scan throw — four healthy no_op ticks with a synchronously throwing log.info keep consecutiveThrowTicks at 0 (no false operability.tick_failure)", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({ candidates: () => 3, txOutcomes: () => ["false"] }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+    const infoSpy = vi.spyOn(app.log, "info").mockImplementation(() => {
+      throw new Error("forced settlement sink failure");
+    });
+
+    try {
+      await runTick(clock);
+      await runTick(clock);
+      await runTick(clock);
+      await runTick(clock);
+
+      // Four scans completed with all-no-op outcomes; only their settlement
+      // line could not be written. Scan health must reflect exactly that:
+      // zero throws (the monitor's tick_failure escalation input) and four
+      // settled ticks — the emission loss must not be reclassified.
+      expect(deadlineScannerMetrics.consecutiveThrowTicks).toBe(0);
+      expect(deadlineScannerMetrics.consecutiveFailedTicks).toBe(0);
+      expect(deadlineScannerMetrics.lastSettledAt).not.toBeNull();
+      const parsed = parseLines(lines);
+      expect(
+        parsed.filter((l) => l.event === "scanner.tick.completed"),
+      ).toEqual([]);
+      expect(
+        parsed.filter((l) => l.msg === "Error scanning for expired attempts"),
+      ).toEqual([]);
+    } finally {
+      infoSpy.mockRestore();
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+});
