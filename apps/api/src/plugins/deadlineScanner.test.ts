@@ -756,6 +756,38 @@ describe("deadline scanner plugin — tick settlement emission (#1009)", () => {
     }
   });
 
+  it("REGRESSION (review): the tick-level error line carries its tick's own tickId — a valid UUID, distinct across consecutive thrown ticks", async () => {
+    vi.useFakeTimers();
+    const lines: string[] = [];
+    const { app, clock } = buildApp(
+      buildSettlementDb({
+        candidates: () => 1,
+        txOutcomes: () => ["true"],
+        orgDiscoveryThrows: () => true,
+      }),
+      lines,
+    );
+    resetSettlementFacts();
+    await app.register(deadlineScannerPlugin);
+    await app.ready();
+
+    try {
+      await runTick(clock);
+      await runTick(clock);
+
+      const tickErrors = parseLines(lines).filter(
+        (l) => l.msg === "Error scanning for expired attempts",
+      );
+      expect(tickErrors).toHaveLength(2);
+      expect(UUID_RE.test(String(tickErrors[0]!.tickId))).toBe(true);
+      expect(UUID_RE.test(String(tickErrors[1]!.tickId))).toBe(true);
+      expect(tickErrors[0]!.tickId).not.toBe(tickErrors[1]!.tickId);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("REGRESSION (review): a settlement-emission sink failure is NOT a scan throw — four healthy no_op ticks with a synchronously throwing log.info keep consecutiveThrowTicks at 0 (no false operability.tick_failure)", async () => {
     vi.useFakeTimers();
     const lines: string[] = [];

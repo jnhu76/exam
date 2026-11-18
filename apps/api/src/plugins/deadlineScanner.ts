@@ -459,9 +459,9 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
     // maintains the run-length counter without a second write point.
     let threw = false;
     // PROTOCOL (#1009): one randomUUID per FIRED tick — the join key between
-    // this tick's per-candidate error lines and its settlement line. A
-    // background identity, never an HTTP requestId; skipped ticks (the
-    // early return above) mint none.
+    // this tick's per-candidate error lines, its settlement line, and its
+    // tick-level error line. A background identity, never an HTTP requestId;
+    // skipped ticks (the early return above) mint none.
     const tickId = randomUUID();
     activeScan = (async () => {
       // #547 stall facts: in-flight window; settle clears activeSince and
@@ -524,7 +524,10 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
         }
       } catch (err) {
         threw = true;
-        fastify.log.error({ err }, "Error scanning for expired attempts");
+        fastify.log.error(
+          { err, tickId },
+          "Error scanning for expired attempts",
+        );
       }
     })().finally(() => {
       activeScan = null;
