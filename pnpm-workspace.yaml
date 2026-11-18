@@ -1,6 +1,13 @@
 packages:
   - "apps/*"
   - "packages/*"
+# INVARIANT: pnpm run/exec must fail closed when node_modules are stale — an
+# explicit `pnpm install` is the operator's decision, never a silent auto-install
+# spawned by a routine check (pnpm 11.1.2 default `install` mode spawns one).
+# verifyDepsBeforeRun is the only config surface that reaches the nested pnpm
+# checks inside turbo tasks (turbo strict env filters parent-env overrides).
+# Keep this key in pnpm-workspace.yaml; #1024 workstream B.
+verifyDepsBeforeRun: error
 allowBuilds:
   argon2: true
   esbuild: true
