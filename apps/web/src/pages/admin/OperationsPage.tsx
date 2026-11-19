@@ -75,6 +75,7 @@ export function OperationsPage() {
     sessionKey: `health|${sessionBase}`,
     pollMs: POLL_MS,
     timeoutMs: REQUEST_TIMEOUT_MS,
+    staleAfterMs: STALE_AFTER_MS,
     logSource: "health",
   });
   const {
@@ -87,6 +88,7 @@ export function OperationsPage() {
     sessionKey: `diagnostics|${sessionBase}|${canDiagnose}`,
     pollMs: POLL_MS,
     timeoutMs: REQUEST_TIMEOUT_MS,
+    staleAfterMs: STALE_AFTER_MS,
     logSource: "diagnostics",
   });
 

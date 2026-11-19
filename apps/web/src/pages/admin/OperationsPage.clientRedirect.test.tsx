@@ -17,11 +17,12 @@ import { OperationsPage } from "./OperationsPage";
 // inside the FIRST microtask continuation after `await fetch` resolves
 // (requestWithMeta navigates BEFORE parsing the error body), while every
 // abort() call site here (retry click, request deadline, unmount) executes
-// in a later macrotask — and the microtask queue drains between tasks. So a
-// delivered 401 always navigates while the request is STILL current, and an
-// already-superseded request can only ever reject with AbortError. No
-// reachable interleaving lets a superseded request trigger the redirect,
-// which is why the shared client keeps its zero-change boundary.
+// in a later macrotask — and the microtask queue drains between tasks.
+// EVIDENCE SCOPE: the executable witness below covers the abort-BEFORE-
+// delivery path. The delivered-then-superseded ordering — a delivered 401
+// navigates while the request is still current — rests on the static
+// microtask argument above, not on a test. Both support the same boundary
+// decision: the shared client stays unchanged for #1032.
 
 interface FetchCall {
   url: string;

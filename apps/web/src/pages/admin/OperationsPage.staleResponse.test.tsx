@@ -439,16 +439,17 @@ describe("OperationsPage stream read ownership (#1032)", () => {
     expect(screen.getAllByText(/最近成功接收/).length).toBe(2);
   });
 
-  it("stale age counts from each source's own receive time, not the poll grid (off-beat receive)", async () => {
+  it("stale age counts from each source's own receive time, not the poll grid or the render tick (sub-second off-beat receive)", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     renderPage();
     await act(async () => {
       healthReads[0]!.resolve(healthOf(10));
     });
-    // Diagnostics lands at t=2s — off the 15s poll grid — so ITS receive time
-    // anchors the freshness window at t=32s, not at any grid tick.
+    // Diagnostics lands at t=2.5s — off the 15s poll grid AND off any whole-
+    // second render beat — so ITS receive time anchors the freshness window
+    // at exactly t=32.5s.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(2_500);
       diagReads[0]!.resolve(diagOf(5));
     });
     expect(screen.getByText("5 ms")).toBeInTheDocument();
@@ -456,7 +457,7 @@ describe("OperationsPage stream read ownership (#1032)", () => {
     // t=15s: both ticks fire; health commits immediately, the diagnostics
     // read hangs (its own 10s deadline would land at t=25s).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(13_000);
+      await vi.advanceTimersByTimeAsync(12_500);
       healthReads[1]!.resolve(healthOf(11));
     });
 
@@ -470,10 +471,10 @@ describe("OperationsPage stream read ownership (#1032)", () => {
     fireEvent.click(screen.getByRole("button", { name: "重试诊断读取" }));
     expect(diagCalls()).toHaveLength(3);
 
-    // t=31s: diagnostics is 29s old — inside the window; health (received
+    // t=32s: diagnostics is 29.5s old — inside the window; health (received
     // t=15s) is fresh. Neither source shows a stale marker.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.advanceTimersByTimeAsync(9_000);
     });
     expect(
       screen.queryByText("运行时诊断已过期，显示上次成功接收的结果"),
@@ -482,11 +483,12 @@ describe("OperationsPage stream read ownership (#1032)", () => {
       screen.queryByText("系统健康数据已过期，显示上次成功接收的结果"),
     ).not.toBeInTheDocument();
 
-    // t=32s: exactly 30s after the t=2s receive — diagnostics goes stale by
-    // age while health (17s old, its t=30s read in flight within its
-    // deadline) does not.
+    // t=32.5s: EXACTLY 30s after the t=2.5s receive, between whole-second
+    // beats — the stale marker must appear now, not at the next render tick.
+    // Health (17.5s old, its t=30s read in flight within its deadline)
+    // stays fresh, proving the boundary is per-source.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(500);
     });
     expect(
       screen.getByText("运行时诊断已过期，显示上次成功接收的结果"),

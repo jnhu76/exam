@@ -62,6 +62,7 @@ function baseProps(read: (signal: AbortSignal) => Promise<number>) {
     sessionKey: "session-1",
     pollMs: 15_000,
     timeoutMs: 10_000,
+    staleAfterMs: 30_000,
     logSource: "test",
   };
 }

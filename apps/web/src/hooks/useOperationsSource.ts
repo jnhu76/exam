@@ -74,8 +74,34 @@ export interface UseOperationsSourceOptions<T> {
   /** Per-request deadline; a hung read converges as this source's failure
    * and releases its polling slot. */
   timeoutMs: number;
+  /** Freshness window for the committed snapshot. Each success arms a
+   * one-shot render at `receivedAt + staleAfterMs` so the view-layer stale
+   * marker appears exactly when the window is crossed — never quantized to a
+   * render tick. */
+  staleAfterMs: number;
   /** Log-source name for bounded poll-failure warns. */
   logSource: string;
+}
+
+/** Mutable per-instance control state (ref-held, never a dependency). */
+interface SourceControl {
+  session: string;
+  generation: number;
+  controller: AbortController | null;
+  pollTimer: ReturnType<typeof setInterval> | null;
+  /** Pending one-shot freshness-boundary render for the committed snapshot. */
+  staleTimer: ReturnType<typeof setTimeout> | null;
+  inFlight: boolean;
+  stopped: boolean;
+}
+
+/** Disarms the pending freshness-boundary render — the snapshot is wiped or
+ * its owner is gone, so no boundary is left to announce. */
+function disarmStaleBoundary(c: SourceControl) {
+  if (c.staleTimer !== null) {
+    clearTimeout(c.staleTimer);
+    c.staleTimer = null;
+  }
 }
 
 /**
@@ -98,6 +124,7 @@ export function useOperationsSource<T>({
   sessionKey,
   pollMs,
   timeoutMs,
+  staleAfterMs,
   logSource,
 }: UseOperationsSourceOptions<T>) {
   // Mirrored per render (same pattern as useAdminTodoCount): the tick and
@@ -107,12 +134,12 @@ export function useOperationsSource<T>({
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
-  const control = useRef({
+  const control = useRef<SourceControl>({
     session: sessionKey,
     generation: 0,
-    controller: null as AbortController | null,
-    pollTimer: null as ReturnType<typeof setInterval> | null,
-    ageTimer: null as ReturnType<typeof setInterval> | null,
+    controller: null,
+    pollTimer: null,
+    staleTimer: null,
     inFlight: false,
     stopped: false,
   });
@@ -162,9 +189,22 @@ export function useOperationsSource<T>({
         c.inFlight = false;
         c.controller = null;
         c.stopped = false;
+        const receivedAt = Date.now();
+        // Arm the freshness-boundary render for THIS commit. The view layer
+        // derives staleness from receivedAt; this one-shot only guarantees a
+        // render at the exact crossing — a periodic tick would announce it
+        // up to one tick late (sub-second receive times proved that).
+        if (c.staleTimer !== null) clearTimeout(c.staleTimer);
+        c.staleTimer = setTimeout(
+          () => {
+            control.current.staleTimer = null;
+            setView((prev) => (prev.receivedAt === null ? prev : { ...prev }));
+          },
+          Math.max(0, receivedAt + staleAfterMs - Date.now()),
+        );
         setView({
           snapshot: data,
-          receivedAt: Date.now(),
+          receivedAt,
           failure: null,
           inFlight: false,
           settled: true,
@@ -180,6 +220,7 @@ export function useOperationsSource<T>({
           // Proven access loss: the snapshot and its receive time are no
           // longer presentable, and scheduled polling stops.
           c.stopped = true;
+          disarmStaleBoundary(c);
           setView({
             snapshot: null,
             receivedAt: null,
@@ -205,7 +246,7 @@ export function useOperationsSource<T>({
         }
       },
     );
-  }, [logSource, timeoutMs]);
+  }, [logSource, timeoutMs, staleAfterMs]);
 
   /** Aborts the current read, wipes the snapshot, and suspends scheduled
    * polling — used when page-level access (401/overview 403) is gone. */
@@ -216,6 +257,7 @@ export function useOperationsSource<T>({
     c.controller = null;
     c.inFlight = false;
     c.stopped = true;
+    disarmStaleBoundary(c);
     setView({
       snapshot: null,
       receivedAt: null,
@@ -237,13 +279,6 @@ export function useOperationsSource<T>({
         void refresh();
       }
     }, pollMs);
-    // Freshness is age-based: the stale marker must flip when the snapshot
-    // crosses its window even while the next read is still pending, so the
-    // view re-renders on a 1s boundary (same pattern as the diagnostics
-    // page's uptime ticker).
-    c.ageTimer = setInterval(() => {
-      setView((prev) => (prev.snapshot === null ? prev : { ...prev }));
-    }, 1_000);
     return () => {
       // INVARIANT: cleanup invalidates commits BEFORE cancelling resources —
       // a late settlement after cleanup must be discarded, not merely
@@ -257,10 +292,7 @@ export function useOperationsSource<T>({
         clearInterval(control.current.pollTimer);
         control.current.pollTimer = null;
       }
-      if (control.current.ageTimer) {
-        clearInterval(control.current.ageTimer);
-        control.current.ageTimer = null;
-      }
+      disarmStaleBoundary(control.current);
     };
   }, [refresh, pollMs, enabled, sessionKey]);
 
