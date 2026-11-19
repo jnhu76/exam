@@ -464,13 +464,24 @@ const zhCN = {
   },
 
   /** Operations surface copy (Admin business-owner summary +
-   *  Application Maintainer detail). */
+   *  Application Maintainer detail). Each source (health / diagnostics)
+   *  carries its own availability, staleness, and retry copy (#1032). */
   ops: {
     title: "运维总览",
     subtitle: "系统运行状态与运行时诊断",
-    staleWarning: "数据刷新失败，页面显示的是上次成功加载的结果。",
-    errors: {
-      loadFailed: "运维数据加载失败",
+    lastReceived: "最近成功接收：{{time}}",
+    sources: {
+      health: {
+        unavailable: "系统健康数据当前不可用",
+        stale: "系统健康数据已过期，显示上次成功接收的结果",
+        retry: "重试健康读取",
+      },
+      diagnostics: {
+        unavailable: "运行时诊断当前不可用",
+        denied: "无权访问运行时诊断",
+        stale: "运行时诊断已过期，显示上次成功接收的结果",
+        retry: "重试诊断读取",
+      },
     },
     health: {
       section: "系统健康",
