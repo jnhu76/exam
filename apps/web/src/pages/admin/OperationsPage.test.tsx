@@ -8,6 +8,31 @@ import { logger } from "@/lib/logger";
 import { OperationsPage } from "./OperationsPage";
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly message: string;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
+    readonly serverMessage?: string;
+    constructor(
+      status: number,
+      message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
+      serverMessage?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+      this.message = message;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
+      this.serverMessage = serverMessage ?? message;
+    }
+  },
   api: {
     get: vi.fn(),
   },
@@ -155,12 +180,20 @@ describe("OperationsPage", () => {
     expect(body).not.toMatch(/\/var\/|postgresql:\/\/|password|secret/i);
   });
 
-  it("shows an error state when loading fails", async () => {
+  it("shows each source's unavailable state when both first reads fail (#1032)", async () => {
     getMock.mockRejectedValue(new Error("boom"));
     await renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("运维数据加载失败")).toBeInTheDocument();
+      expect(screen.getByText("系统健康数据当前不可用")).toBeInTheDocument();
     });
+    expect(screen.getByText("运行时诊断当前不可用")).toBeInTheDocument();
+    // Per-source retry stays available for both failed sources.
+    expect(
+      screen.getByRole("button", { name: "重试健康读取" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "重试诊断读取" }),
+    ).toBeInTheDocument();
   });
 });
