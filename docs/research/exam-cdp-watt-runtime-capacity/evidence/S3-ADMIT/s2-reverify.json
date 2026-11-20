@@ -1,0 +1,109 @@
+{
+ "experiment": "S3-ADMIT",
+ "s2Revalidation": {
+  "description": "S2-TIMING core gate re-run on the S3 arm (SUBMIT_ADMISSION=1, S_sub=4/Q=200/W=15000) against the same S2 baseline runs (S2-GATE-r1).",
+  "armCheckPre": "S3-ADMIT/S3-S2-ARMCHECK-pre.json",
+  "armCheckPost": "S3-ADMIT/S3-S2-ARMCHECK-post.json",
+  "gateCommand": "SUBMIT_ADMISSION=1 SUBMIT_ADMISSION_PERMITS=4 SUBMIT_ADMISSION_QUEUE_CAPACITY=200 SUBMIT_ADMISSION_WAIT_BUDGET_MS=15000 node .wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/s2-gate.mjs --run-id=S3-ADMIT-S2-GATE-r1",
+  "live": {
+   "baselineTotal": 38,
+   "s3Total": 38,
+   "baselineFailed": 0,
+   "s3Failed": 0,
+   "sameCaseAssertionOrder": true,
+   "differingAssertions": 1,
+   "diffsOnlyDynamicTimestamps": true,
+   "diffs": [
+    {
+     "case": "③-b response-lost-recovery",
+     "assertion": "submittedAt unchanged by retry",
+     "expectedBaseline": "2026-11-20 15:37:57.157+08",
+     "expectedS3": "2026-11-20 16:23:45.04+08",
+     "passBaseline": true,
+     "passS3": true
+    }
+   ]
+  },
+  "inprocess": {
+   "baselineTotal": 36,
+   "s3Total": 36,
+   "baselineFailed": 0,
+   "s3Failed": 0,
+   "sameCaseAssertionOrder": true,
+   "differingAssertions": 6,
+   "diffsOnlyDynamicTimestamps": true,
+   "diffs": [
+    {
+     "case": "②-a manual-first-cross-deadline",
+     "assertion": "submittedAt == route-entry sample (T-2s) not wall clock",
+     "expectedBaseline": 1795160283514,
+     "expectedS3": 1795163031501,
+     "passBaseline": true,
+     "passS3": true
+    },
+    {
+     "case": "②-b scanner-first",
+     "assertion": "scanner submittedAt == effectiveDeadline T (backdated)",
+     "expectedBaseline": 1795160288583,
+     "expectedS3": 1795163036572,
+     "passBaseline": true,
+     "passS3": true
+    },
+    {
+     "case": "②-b scanner-first",
+     "assertion": "submittedAt unchanged (still T)",
+     "expectedBaseline": 1795160288583,
+     "expectedS3": 1795163036572,
+     "passBaseline": true,
+     "passS3": true
+    },
+    {
+     "case": "②-c boundary now==T",
+     "assertion": "submittedAt == T (business deadline backfill)",
+     "expectedBaseline": 1795160292653,
+     "expectedS3": 1795163040647,
+     "passBaseline": true,
+     "passS3": true
+    },
+    {
+     "case": "②-d boundary now==T-1ms",
+     "assertion": "submittedAt == T-1ms (route sample)",
+     "expectedBaseline": 1795160292712,
+     "expectedS3": 1795163040712,
+     "passBaseline": true,
+     "passS3": true
+    },
+    {
+     "case": "②-e1 save at now==T (inline reconcile freezes first)",
+     "assertion": "frozen submittedAt == T",
+     "expectedBaseline": 1795160292759,
+     "expectedS3": 1795163040755,
+     "passBaseline": true,
+     "passS3": true
+    }
+   ]
+  },
+  "verdict": "PASS",
+  "browser": {
+   "description": "S2 browser fault-injection cases (①-b-browser, ③-c/③-d, ④-A/④-B) re-run through real Chromium + nginx + isolated proxy under S3 (API :3301, proxy :3300, both starts inherit SUBMIT_ADMISSION env).",
+   "baselineRuns": [
+    "S2-BROWSER-r3",
+    "S2-BROWSER-r4"
+   ],
+   "s3Run": "S3-ADMIT/S2-BROWSER-r1",
+   "baselineTotal": [
+    25,
+    25
+   ],
+   "baselineFailed": [
+    0,
+    0
+   ],
+   "s3Total": 25,
+   "s3Failed": 0,
+   "sameCaseAssertionOrder": true,
+   "passValuesSame": true,
+   "armCheckPostRestart": "S3-ADMIT/S3-S2-BROWSER-ARMCHECK-post.json"
+  }
+ }
+}

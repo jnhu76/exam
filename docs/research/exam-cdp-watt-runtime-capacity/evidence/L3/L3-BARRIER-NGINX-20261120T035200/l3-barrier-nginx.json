@@ -1,0 +1,192 @@
+{
+  "runId": "L3-BARRIER-NGINX-20261120T035200",
+  "startedAt": "2026-11-20T03:52:00.450Z",
+  "finishedAt": "2026-11-20T04:00:09.019Z",
+  "branch": "research/capacity-900-1021-l3-admission",
+  "topology": {
+    "nginxContainer": "exam-cap-nginx-l3",
+    "nginxPort": 8081,
+    "network": "exam-cap-net-l3",
+    "apiPort": 3310,
+    "apiBuild": "apps/api/dist-l3 (experiment branch)",
+    "database": "exam_550_l3_barrier",
+    "sourceIps": "distinct 127.0.0.x per client (T-DIRECT discipline)"
+  },
+  "aIsolation": {
+    "before": {
+      "nginx": "exam-cap-nginx Up 5 hours",
+      "api3300": "http 200"
+    },
+    "after": {
+      "nginx": "exam-cap-nginx Up 5 hours",
+      "api3300": "http 200"
+    }
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 63,
+        "closerSettledAtMs": 84,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 174
+      }
+    },
+    {
+      "rep": 1,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 63,
+        "closerSettledAtMs": 83,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 168
+      }
+    },
+    {
+      "rep": 2,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 63,
+        "closerSettledAtMs": 84,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 180
+      }
+    },
+    {
+      "rep": 3,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 63,
+        "closerSettledAtMs": 84,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 171
+      }
+    },
+    {
+      "rep": 4,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 59653,
+        "closerSettledAtMs": 59672,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 59760
+      }
+    },
+    {
+      "rep": 0,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 207
+      }
+    },
+    {
+      "rep": 1,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 203
+      }
+    },
+    {
+      "rep": 2,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 208
+      }
+    },
+    {
+      "rep": 3,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 211
+      }
+    },
+    {
+      "rep": 4,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 240
+      }
+    },
+    {
+      "rep": 0,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [503, 503, 503],
+        "totalMs": 974
+      }
+    },
+    {
+      "rep": 1,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [503, 503, 503],
+        "totalMs": 994
+      }
+    },
+    {
+      "rep": 2,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [503, 503, 503],
+        "totalMs": 1004
+      }
+    },
+    {
+      "rep": 3,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [503, 503, 503],
+        "totalMs": 981
+      }
+    },
+    {
+      "rep": 4,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [503, 503, 503],
+        "totalMs": 984
+      }
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "ok": 15,
+    "repsPerCase": 5
+  }
+}

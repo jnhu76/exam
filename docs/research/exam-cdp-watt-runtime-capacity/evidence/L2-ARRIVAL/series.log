@@ -1,0 +1,782 @@
+[series 17:02:20] == stage pilot ==
+[series 17:02:20] SKIP L2-PILOT-P2-S20-r1 (complete)
+[series 17:02:20] == stage pairs S20（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 17:02:20] START L2-ARRIVAL-P1-S20-r1 (profile=p1 n=20 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2085625 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S20-r1
+[series 17:07:14] DONE  L2-ARRIVAL-P1-S20-r1 (294s)
+[series 17:07:14] START L2-ARRIVAL-P2-S20-r1 (profile=p2 n=20 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2088066 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S20-r1
+[series 17:12:13] DONE  L2-ARRIVAL-P2-S20-r1 (299s)
+[series 17:12:13] START L2-ARRIVAL-P2-S20-r2 (profile=p2 n=20 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2090503 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S20-r2
+[series 17:17:12] DONE  L2-ARRIVAL-P2-S20-r2 (299s)
+[series 17:17:12] START L2-ARRIVAL-P1-S20-r2 (profile=p1 n=20 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2092950 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S20-r2
+[series 17:22:06] DONE  L2-ARRIVAL-P1-S20-r2 (294s)
+[series 17:22:06] START L2-ARRIVAL-P1-S20-r3 (profile=p1 n=20 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2095411 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S20-r3
+[series 17:26:59] DONE  L2-ARRIVAL-P1-S20-r3 (293s)
+[series 17:26:59] START L2-ARRIVAL-P2-S20-r3 (profile=p2 n=20 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2097846 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S20-r3
+[series 17:31:59] DONE  L2-ARRIVAL-P2-S20-r3 (300s)
+[series 17:31:59] START L2-ARRIVAL-P2-S20-r4 (profile=p2 n=20 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2100290 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S20-r4
+[series 17:36:58] DONE  L2-ARRIVAL-P2-S20-r4 (299s)
+[series 17:36:58] START L2-ARRIVAL-P1-S20-r4 (profile=p1 n=20 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2102724 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S20-r4
+[series 17:41:51] DONE  L2-ARRIVAL-P1-S20-r4 (293s)
+[series 17:41:51] START L2-ARRIVAL-P1-S20-r5 (profile=p1 n=20 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2105160 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S20-r5
+[series 17:46:44] DONE  L2-ARRIVAL-P1-S20-r5 (293s)
+[series 17:46:44] START L2-ARRIVAL-P2-S20-r5 (profile=p2 n=20 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2107598 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S20-r5
+[series 17:51:44] DONE  L2-ARRIVAL-P2-S20-r5 (300s)
+[series 17:51:44] == stage pairs S50（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 17:51:44] START L2-ARRIVAL-P1-S50-r1 (profile=p1 n=50 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2110113 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S50-r1
+[series 17:56:46] DONE  L2-ARRIVAL-P1-S50-r1 (302s)
+[series 17:56:46] START L2-ARRIVAL-P2-S50-r1 (profile=p2 n=50 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2114002 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S50-r1
+[series 18:01:48] DONE  L2-ARRIVAL-P2-S50-r1 (302s)
+[series 18:01:48] START L2-ARRIVAL-P2-S50-r2 (profile=p2 n=50 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2117878 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S50-r2
+[series 18:06:50] DONE  L2-ARRIVAL-P2-S50-r2 (302s)
+[series 18:06:50] START L2-ARRIVAL-P1-S50-r2 (profile=p1 n=50 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2121759 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S50-r2
+[series 18:11:49] DONE  L2-ARRIVAL-P1-S50-r2 (299s)
+[series 18:11:49] START L2-ARRIVAL-P1-S50-r3 (profile=p1 n=50 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2125635 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S50-r3
+[series 18:16:48] DONE  L2-ARRIVAL-P1-S50-r3 (298s)
+[series 18:16:48] START L2-ARRIVAL-P2-S50-r3 (profile=p2 n=50 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2129526 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S50-r3
+[series 18:21:49] DONE  L2-ARRIVAL-P2-S50-r3 (301s)
+[series 18:21:49] START L2-ARRIVAL-P2-S50-r4 (profile=p2 n=50 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2133430 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S50-r4
+[series 18:26:52] DONE  L2-ARRIVAL-P2-S50-r4 (303s)
+[series 18:26:52] START L2-ARRIVAL-P1-S50-r4 (profile=p1 n=50 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2137318 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S50-r4
+[series 18:31:50] DONE  L2-ARRIVAL-P1-S50-r4 (298s)
+[series 18:31:50] START L2-ARRIVAL-P1-S50-r5 (profile=p1 n=50 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2141196 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S50-r5
+[series 18:36:49] DONE  L2-ARRIVAL-P1-S50-r5 (299s)
+[series 18:36:49] START L2-ARRIVAL-P2-S50-r5 (profile=p2 n=50 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2145085 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S50-r5
+[series 18:41:51] DONE  L2-ARRIVAL-P2-S50-r5 (302s)
+[series 18:41:51] == stage pairs S100（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 18:41:51] START L2-ARRIVAL-P1-S100-r1 (profile=p1 n=100 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2148967 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S100-r1
+[series 18:46:52] DONE  L2-ARRIVAL-P1-S100-r1 (301s)
+[series 18:46:52] START L2-ARRIVAL-P2-S100-r1 (profile=p2 n=100 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2155255 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S100-r1
+[series 18:51:54] DONE  L2-ARRIVAL-P2-S100-r1 (302s)
+[series 18:51:54] START L2-ARRIVAL-P2-S100-r2 (profile=p2 n=100 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2161598 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S100-r2
+[series 18:56:56] DONE  L2-ARRIVAL-P2-S100-r2 (302s)
+[series 18:56:56] START L2-ARRIVAL-P1-S100-r2 (profile=p1 n=100 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2167884 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S100-r2
+[series 19:01:57] DONE  L2-ARRIVAL-P1-S100-r2 (301s)
+[series 19:01:57] START L2-ARRIVAL-P1-S100-r3 (profile=p1 n=100 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2174160 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S100-r3
+[series 19:06:57] DONE  L2-ARRIVAL-P1-S100-r3 (300s)
+[series 19:06:57] START L2-ARRIVAL-P2-S100-r3 (profile=p2 n=100 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2180449 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S100-r3
+[series 19:12:00] DONE  L2-ARRIVAL-P2-S100-r3 (303s)
+[series 19:12:00] START L2-ARRIVAL-P2-S100-r4 (profile=p2 n=100 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2186730 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S100-r4
+[series 19:17:02] DONE  L2-ARRIVAL-P2-S100-r4 (302s)
+[series 19:17:02] START L2-ARRIVAL-P1-S100-r4 (profile=p1 n=100 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2193024 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S100-r4
+[series 19:22:03] DONE  L2-ARRIVAL-P1-S100-r4 (301s)
+[series 19:22:03] START L2-ARRIVAL-P1-S100-r5 (profile=p1 n=100 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2199299 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S100-r5
+[series 19:27:03] DONE  L2-ARRIVAL-P1-S100-r5 (300s)
+[series 19:27:03] START L2-ARRIVAL-P2-S100-r5 (profile=p2 n=100 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2205611 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S100-r5
+[series 19:32:05] DONE  L2-ARRIVAL-P2-S100-r5 (302s)
+[series 19:32:05] == stage pairs S200（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 19:32:05] START L2-ARRIVAL-P1-S200-r1 (profile=p1 n=200 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2211892 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S200-r1
+[series 19:37:08] DONE  L2-ARRIVAL-P1-S200-r1 (303s)
+[series 19:37:08] START L2-ARRIVAL-P2-S200-r1 (profile=p2 n=200 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2223033 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s (via nginx)
+[series 20:29:00] == stage pairs S20（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S20-r1 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S20-r1 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S20-r2 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S20-r2 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S20-r3 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S20-r3 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S20-r4 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S20-r4 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S20-r5 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S20-r5 (complete)
+[series 20:29:00] == stage pairs S50（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S50-r1 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S50-r1 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S50-r2 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S50-r2 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S50-r3 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S50-r3 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S50-r4 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S50-r4 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S50-r5 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S50-r5 (complete)
+[series 20:29:00] == stage pairs S100（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S100-r1 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S100-r1 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S100-r2 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S100-r2 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S100-r3 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S100-r3 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S100-r4 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S100-r4 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S100-r5 (complete)
+[series 20:29:00] SKIP L2-ARRIVAL-P2-S100-r5 (complete)
+[series 20:29:00] == stage pairs S200（交错配对：奇对 P1→P2，偶对 P2→P1）==
+[series 20:29:00] SKIP L2-ARRIVAL-P1-S200-r1 (complete)
+[series 20:29:00] START L2-ARRIVAL-P2-S200-r1 (profile=p2 n=200 topo=direct scen=full pair=1)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2292975 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S200-r1
+[series 20:34:04] DONE  L2-ARRIVAL-P2-S200-r1 (304s)
+[series 20:34:04] START L2-ARRIVAL-P2-S200-r2 (profile=p2 n=200 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2304144 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S200-r2
+[series 20:39:08] DONE  L2-ARRIVAL-P2-S200-r2 (304s)
+[series 20:39:08] START L2-ARRIVAL-P1-S200-r2 (profile=p1 n=200 topo=direct scen=full pair=2)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2315261 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S200-r2
+[series 20:44:12] DONE  L2-ARRIVAL-P1-S200-r2 (304s)
+[series 20:44:12] START L2-ARRIVAL-P1-S200-r3 (profile=p1 n=200 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2326379 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S200-r3
+[series 20:49:17] DONE  L2-ARRIVAL-P1-S200-r3 (305s)
+[series 20:49:17] START L2-ARRIVAL-P2-S200-r3 (profile=p2 n=200 topo=direct scen=full pair=3)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2337492 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S200-r3
+[series 20:54:21] DONE  L2-ARRIVAL-P2-S200-r3 (304s)
+[series 20:54:21] START L2-ARRIVAL-P2-S200-r4 (profile=p2 n=200 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2348613 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S200-r4
+[series 20:59:25] DONE  L2-ARRIVAL-P2-S200-r4 (304s)
+[series 20:59:25] START L2-ARRIVAL-P1-S200-r4 (profile=p1 n=200 topo=direct scen=full pair=4)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2359752 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S200-r4
+[series 21:04:29] DONE  L2-ARRIVAL-P1-S200-r4 (304s)
+[series 21:04:29] START L2-ARRIVAL-P1-S200-r5 (profile=p1 n=200 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2370873 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p1 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P1-S200-r5
+[series 21:09:33] DONE  L2-ARRIVAL-P1-S200-r5 (304s)
+[series 21:09:33] START L2-ARRIVAL-P2-S200-r5 (profile=p2 n=200 topo=direct scen=full pair=5)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2381992 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P2-S200-r5
+[series 21:14:42] DONE  L2-ARRIVAL-P2-S200-r5 (309s)
+[series 21:14:42] == series stage 'pairs' finished ==
+[series 21:19:42] == stage p3 S20 ==
+[series 21:19:42] START L2-ARRIVAL-P3-S20-r1 (profile=p3 n=20 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2393174 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S20-r1
+[series 21:20:46] DONE  L2-ARRIVAL-P3-S20-r1 (64s)
+[series 21:20:46] START L2-ARRIVAL-P3-S20-r2 (profile=p3 n=20 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2395623 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S20-r2
+[series 21:21:51] DONE  L2-ARRIVAL-P3-S20-r2 (65s)
+[series 21:21:51] START L2-ARRIVAL-P3-S20-r3 (profile=p3 n=20 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2398062 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S20-r3
+[series 21:22:55] DONE  L2-ARRIVAL-P3-S20-r3 (64s)
+[series 21:22:55] START L2-ARRIVAL-P3-S20-r4 (profile=p3 n=20 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2400503 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S20-r4
+[series 21:24:00] DONE  L2-ARRIVAL-P3-S20-r4 (65s)
+[series 21:24:00] START L2-ARRIVAL-P3-S20-r5 (profile=p3 n=20 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2402940 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=20 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S20-r5
+[series 21:25:04] DONE  L2-ARRIVAL-P3-S20-r5 (64s)
+[series 21:25:04] == stage p3 S50 ==
+[series 21:25:04] START L2-ARRIVAL-P3-S50-r1 (profile=p3 n=50 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2405379 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S50-r1
+[series 21:26:09] DONE  L2-ARRIVAL-P3-S50-r1 (65s)
+[series 21:26:09] START L2-ARRIVAL-P3-S50-r2 (profile=p3 n=50 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2409257 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S50-r2
+[series 21:27:14] DONE  L2-ARRIVAL-P3-S50-r2 (65s)
+[series 21:27:14] START L2-ARRIVAL-P3-S50-r3 (profile=p3 n=50 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2413159 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S50-r3
+[series 21:28:19] DONE  L2-ARRIVAL-P3-S50-r3 (65s)
+[series 21:28:19] START L2-ARRIVAL-P3-S50-r4 (profile=p3 n=50 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2417039 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S50-r4
+[series 21:29:24] DONE  L2-ARRIVAL-P3-S50-r4 (65s)
+[series 21:29:25] START L2-ARRIVAL-P3-S50-r5 (profile=p3 n=50 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2420922 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=50 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S50-r5
+[series 21:30:30] DONE  L2-ARRIVAL-P3-S50-r5 (65s)
+[series 21:30:30] == stage p3 S100 ==
+[series 21:30:30] START L2-ARRIVAL-P3-S100-r1 (profile=p3 n=100 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2424817 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S100-r1
+[series 21:31:35] DONE  L2-ARRIVAL-P3-S100-r1 (65s)
+[series 21:31:35] START L2-ARRIVAL-P3-S100-r2 (profile=p3 n=100 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2431096 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S100-r2
+[series 21:32:41] DONE  L2-ARRIVAL-P3-S100-r2 (66s)
+[series 21:32:41] START L2-ARRIVAL-P3-S100-r3 (profile=p3 n=100 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2437379 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S100-r3
+[series 21:33:47] DONE  L2-ARRIVAL-P3-S100-r3 (66s)
+[series 21:33:47] START L2-ARRIVAL-P3-S100-r4 (profile=p3 n=100 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2443655 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S100-r4
+[series 21:34:53] DONE  L2-ARRIVAL-P3-S100-r4 (66s)
+[series 21:34:53] START L2-ARRIVAL-P3-S100-r5 (profile=p3 n=100 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2449930 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S100-r5
+[series 21:35:59] DONE  L2-ARRIVAL-P3-S100-r5 (66s)
+[series 21:35:59] == stage p3 S200 ==
+[series 21:35:59] START L2-ARRIVAL-P3-S200-r1 (profile=p3 n=200 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2456211 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S200-r1
+[series 21:37:07] DONE  L2-ARRIVAL-P3-S200-r1 (68s)
+[series 21:37:07] START L2-ARRIVAL-P3-S200-r2 (profile=p3 n=200 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2467286 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S200-r2
+[series 21:38:15] DONE  L2-ARRIVAL-P3-S200-r2 (68s)
+[series 21:38:15] START L2-ARRIVAL-P3-S200-r3 (profile=p3 n=200 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2478378 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S200-r3
+[series 21:39:23] DONE  L2-ARRIVAL-P3-S200-r3 (68s)
+[series 21:39:23] START L2-ARRIVAL-P3-S200-r4 (profile=p3 n=200 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2489461 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S200-r4
+[series 21:40:31] DONE  L2-ARRIVAL-P3-S200-r4 (68s)
+[series 21:40:31] START L2-ARRIVAL-P3-S200-r5 (profile=p3 n=200 topo=direct scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2500538 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p3 n=200 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-ARRIVAL-P3-S200-r5
+[series 21:41:45] DONE  L2-ARRIVAL-P3-S200-r5 (74s)
+[series 21:41:45] == series stage 'p3' finished ==
+[series 21:41:45] == stage supplement（纯登录补测：CPU/成功 增量分解）==
+[series 21:41:45] START L2-LOGINONLY-P2-S100-r1 (profile=p2 n=100 topo=direct scen=login-only pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2511623 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=login-only profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-LOGINONLY-P2-S100-r1
+[series 21:46:08] DONE  L2-LOGINONLY-P2-S100-r1 (263s)
+[series 21:46:08] START L2-LOGINONLY-P3-S100-r1 (profile=p3 n=100 topo=direct scen=login-only pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2517904 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=login-only profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-LOGINONLY-P3-S100-r1
+[series 21:46:31] DONE  L2-LOGINONLY-P3-S100-r1 (23s)
+[series 21:46:31] START L2-LOGINONLY-P2-S100-r2 (profile=p2 n=100 topo=direct scen=login-only pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2524181 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=login-only profile=p2 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-LOGINONLY-P2-S100-r2
+[series 21:50:54] DONE  L2-LOGINONLY-P2-S100-r2 (263s)
+[series 21:50:54] START L2-LOGINONLY-P3-S100-r2 (profile=p3 n=100 topo=direct scen=login-only pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2530477 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=login-only profile=p3 n=100 topo=direct window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-LOGINONLY-P3-S100-r2
+[series 21:51:17] DONE  L2-LOGINONLY-P3-S100-r2 (23s)
+[series 21:51:17] == series stage 'supplement' finished ==
+[series 21:51:17] == stage shared（T-SHARED 单列：共享出口可用性限制）==
+[series 21:51:17] START L2-SHARED-P2-S100-r1 (profile=p2 n=100 topo=shared scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2536768 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=shared window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-SHARED-P2-S100-r1
+[series 21:56:21] DONE  L2-SHARED-P2-S100-r1 (304s)
+[series 21:56:21] START L2-SHARED-P2-S100-r2 (profile=p2 n=100 topo=shared scen=full pair=—)
+[l2] 1/8 full R1 reset (topology.sh reset)
+[l2] 2/8 API pid=2539872 (fresh JWT secret per reset, R3)
+[l2] 3/8 starting API sampler (background)
+[l2] 4/8 driver: scenario=full profile=p2 n=100 topo=shared window=240s tail=30s (via nginx)
+[l2] 5/8 stop sampler
+[l2] 6/8 DB durable oracle (driver oracle.ts + psql counts)
+[l2] 7/8 l2-metrics.py (per-run indicators + T6 verdict)
+[l2] 8/8 run-meta + cmd.sh
+[l2] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L2-ARRIVAL/L2-SHARED-P2-S100-r2
+[series 22:01:25] DONE  L2-SHARED-P2-S100-r2 (304s)
+[series 22:01:25] == series stage 'shared' finished ==

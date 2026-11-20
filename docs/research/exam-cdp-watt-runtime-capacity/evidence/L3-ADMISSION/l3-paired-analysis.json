@@ -1,0 +1,1043 @@
+{
+  "aaRuns": [
+    "L3-ADMISSION-A-P2-S200-aa1",
+    "L3-ADMISSION-A-P2-S200-aa2"
+  ],
+  "aaFloorPct": {
+    "loginP99": 14.68,
+    "loginP95": 9.88,
+    "loginP50": 1.74,
+    "loginMax": 9.61,
+    "cpuPerSuccess": 1.77,
+    "procCpuMs": 1.75,
+    "vmHwmKb": 3.47,
+    "indepSuccess": 0.0,
+    "saveP99": 5.56,
+    "hbP99": 37.84,
+    "startP99": 29.79,
+    "lastLoginOkMs": 0.0,
+    "lastSubmitOkMs": 0.0
+  },
+  "pairs": [
+    {
+      "pair": 1,
+      "a": "L3-ADMISSION-A-P2-S200-r1a",
+      "b": "L3-ADMISSION-B-P2-S200-r1b",
+      "aFailed": false,
+      "bFailed": false,
+      "deltas": {
+        "loginP99": {
+          "a": 104,
+          "b": 101,
+          "delta": -0.028846153846153848
+        },
+        "loginP95": {
+          "a": 84,
+          "b": 81,
+          "delta": -0.03571428571428571
+        },
+        "loginP50": {
+          "a": 58,
+          "b": 57,
+          "delta": -0.017241379310344827
+        },
+        "loginMax": {
+          "a": 116,
+          "b": 106,
+          "delta": -0.08620689655172414
+        },
+        "cpuPerSuccess": {
+          "a": 180.8,
+          "b": 176.8,
+          "delta": -0.022123893805309734
+        },
+        "procCpuMs": {
+          "a": 36160,
+          "b": 35350,
+          "delta": -0.022400442477876106
+        },
+        "vmHwmKb": {
+          "a": 484448,
+          "b": 520152,
+          "delta": 0.07370037651099809
+        },
+        "indepSuccess": {
+          "a": 200,
+          "b": 200,
+          "delta": 0.0
+        },
+        "saveP99": {
+          "a": 78,
+          "b": 76,
+          "delta": -0.02564102564102564
+        },
+        "hbP99": {
+          "a": 35,
+          "b": 29,
+          "delta": -0.17142857142857143
+        },
+        "startP99": {
+          "a": 83,
+          "b": 89,
+          "delta": 0.07228915662650602
+        },
+        "lastLoginOkMs": {
+          "a": 240006,
+          "b": 240004,
+          "delta": -8.333125005208204e-06
+        },
+        "lastSubmitOkMs": {
+          "a": 283619,
+          "b": 283617,
+          "delta": -7.051713742732328e-06
+        }
+      },
+      "aLogin503": 0,
+      "bLogin503": 0,
+      "bAdmission": {
+        "counters": {
+          "acquireEntered": 204,
+          "admitted": 204,
+          "queueFull": 0,
+          "timeout": 0,
+          "disconnected": 0,
+          "released": 204,
+          "verifyStarts": 204,
+          "verifyEnds": 204
+        },
+        "peaks": {
+          "waiting": 0,
+          "permits": 4
+        },
+        "live": {
+          "waiting": 0,
+          "permits": 0,
+          "activeTimers": 0,
+          "activeDisconnectWatchers": 0
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "a": "L3-ADMISSION-A-P2-S200-r2a",
+      "b": "L3-ADMISSION-B-P2-S200-r2b",
+      "aFailed": false,
+      "bFailed": false,
+      "deltas": {
+        "loginP99": {
+          "a": 101,
+          "b": 99,
+          "delta": -0.019801980198019802
+        },
+        "loginP95": {
+          "a": 81,
+          "b": 80,
+          "delta": -0.012345679012345678
+        },
+        "loginP50": {
+          "a": 58,
+          "b": 58,
+          "delta": 0.0
+        },
+        "loginMax": {
+          "a": 101,
+          "b": 101,
+          "delta": 0.0
+        },
+        "cpuPerSuccess": {
+          "a": 179.5,
+          "b": 176.6,
+          "delta": -0.01615598885793875
+        },
+        "procCpuMs": {
+          "a": 35900,
+          "b": 35320,
+          "delta": -0.01615598885793872
+        },
+        "vmHwmKb": {
+          "a": 476928,
+          "b": 526384,
+          "delta": 0.10369699409554482
+        },
+        "indepSuccess": {
+          "a": 200,
+          "b": 200,
+          "delta": 0.0
+        },
+        "saveP99": {
+          "a": 72,
+          "b": 80,
+          "delta": 0.1111111111111111
+        },
+        "hbP99": {
+          "a": 28,
+          "b": 32,
+          "delta": 0.14285714285714285
+        },
+        "startP99": {
+          "a": 89,
+          "b": 114,
+          "delta": 0.2808988764044944
+        },
+        "lastLoginOkMs": {
+          "a": 240004,
+          "b": 240001,
+          "delta": -1.2499791670138831e-05
+        },
+        "lastSubmitOkMs": {
+          "a": 283623,
+          "b": 283614,
+          "delta": -3.173226430860685e-05
+        }
+      },
+      "aLogin503": 0,
+      "bLogin503": 0,
+      "bAdmission": {
+        "counters": {
+          "acquireEntered": 204,
+          "admitted": 204,
+          "queueFull": 0,
+          "timeout": 0,
+          "disconnected": 0,
+          "released": 204,
+          "verifyStarts": 204,
+          "verifyEnds": 204
+        },
+        "peaks": {
+          "waiting": 0,
+          "permits": 4
+        },
+        "live": {
+          "waiting": 0,
+          "permits": 0,
+          "activeTimers": 0,
+          "activeDisconnectWatchers": 0
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "a": "L3-ADMISSION-A-P2-S200-r3a",
+      "b": "L3-ADMISSION-B-P2-S200-r3b",
+      "aFailed": false,
+      "bFailed": false,
+      "deltas": {
+        "loginP99": {
+          "a": 104,
+          "b": 99,
+          "delta": -0.04807692307692308
+        },
+        "loginP95": {
+          "a": 80,
+          "b": 82,
+          "delta": 0.025
+        },
+        "loginP50": {
+          "a": 58,
+          "b": 58,
+          "delta": 0.0
+        },
+        "loginMax": {
+          "a": 113,
+          "b": 107,
+          "delta": -0.05309734513274336
+        },
+        "cpuPerSuccess": {
+          "a": 176.7,
+          "b": 174.4,
+          "delta": -0.01301641199773618
+        },
+        "procCpuMs": {
+          "a": 35330,
+          "b": 34880,
+          "delta": -0.01273705066515709
+        },
+        "vmHwmKb": {
+          "a": 522540,
+          "b": 502280,
+          "delta": -0.0387721514142458
+        },
+        "indepSuccess": {
+          "a": 200,
+          "b": 200,
+          "delta": 0.0
+        },
+        "saveP99": {
+          "a": 76,
+          "b": 79,
+          "delta": 0.039473684210526314
+        },
+        "hbP99": {
+          "a": 35,
+          "b": 26,
+          "delta": -0.2571428571428571
+        },
+        "startP99": {
+          "a": 96,
+          "b": 106,
+          "delta": 0.10416666666666667
+        },
+        "lastLoginOkMs": {
+          "a": 240008,
+          "b": 240007,
+          "delta": -4.1665277824072535e-06
+        },
+        "lastSubmitOkMs": {
+          "a": 283620,
+          "b": 283617,
+          "delta": -1.0577533319229955e-05
+        }
+      },
+      "aLogin503": 0,
+      "bLogin503": 0,
+      "bAdmission": {
+        "counters": {
+          "acquireEntered": 204,
+          "admitted": 204,
+          "queueFull": 0,
+          "timeout": 0,
+          "disconnected": 0,
+          "released": 204,
+          "verifyStarts": 204,
+          "verifyEnds": 204
+        },
+        "peaks": {
+          "waiting": 0,
+          "permits": 4
+        },
+        "live": {
+          "waiting": 0,
+          "permits": 0,
+          "activeTimers": 0,
+          "activeDisconnectWatchers": 0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "loginP99": {
+      "aMedian": 104,
+      "bMedian": 99,
+      "deltaMedianPct": -2.88,
+      "deltaMinPct": -4.81,
+      "deltaMaxPct": -1.98,
+      "directionConsistent": true,
+      "nPairs": 3,
+      "aaFloorPct": 14.68
+    },
+    "loginP95": {
+      "aMedian": 81,
+      "bMedian": 81,
+      "deltaMedianPct": -1.23,
+      "deltaMinPct": -3.57,
+      "deltaMaxPct": 2.5,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 9.88
+    },
+    "loginP50": {
+      "aMedian": 58,
+      "bMedian": 58,
+      "deltaMedianPct": 0.0,
+      "deltaMinPct": -1.72,
+      "deltaMaxPct": 0.0,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 1.74
+    },
+    "loginMax": {
+      "aMedian": 113,
+      "bMedian": 106,
+      "deltaMedianPct": -5.31,
+      "deltaMinPct": -8.62,
+      "deltaMaxPct": 0.0,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 9.61
+    },
+    "cpuPerSuccess": {
+      "aMedian": 179.5,
+      "bMedian": 176.6,
+      "deltaMedianPct": -1.62,
+      "deltaMinPct": -2.21,
+      "deltaMaxPct": -1.3,
+      "directionConsistent": true,
+      "nPairs": 3,
+      "aaFloorPct": 1.77
+    },
+    "procCpuMs": {
+      "aMedian": 35900,
+      "bMedian": 35320,
+      "deltaMedianPct": -1.62,
+      "deltaMinPct": -2.24,
+      "deltaMaxPct": -1.27,
+      "directionConsistent": true,
+      "nPairs": 3,
+      "aaFloorPct": 1.75
+    },
+    "vmHwmKb": {
+      "aMedian": 484448,
+      "bMedian": 520152,
+      "deltaMedianPct": 7.37,
+      "deltaMinPct": -3.88,
+      "deltaMaxPct": 10.37,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 3.47
+    },
+    "indepSuccess": {
+      "aMedian": 200,
+      "bMedian": 200,
+      "deltaMedianPct": 0.0,
+      "deltaMinPct": 0.0,
+      "deltaMaxPct": 0.0,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 0.0
+    },
+    "saveP99": {
+      "aMedian": 76,
+      "bMedian": 79,
+      "deltaMedianPct": 3.95,
+      "deltaMinPct": -2.56,
+      "deltaMaxPct": 11.11,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 5.56
+    },
+    "hbP99": {
+      "aMedian": 35,
+      "bMedian": 29,
+      "deltaMedianPct": -17.14,
+      "deltaMinPct": -25.71,
+      "deltaMaxPct": 14.29,
+      "directionConsistent": false,
+      "nPairs": 3,
+      "aaFloorPct": 37.84
+    },
+    "startP99": {
+      "aMedian": 89,
+      "bMedian": 106,
+      "deltaMedianPct": 10.42,
+      "deltaMinPct": 7.23,
+      "deltaMaxPct": 28.09,
+      "directionConsistent": true,
+      "nPairs": 3,
+      "aaFloorPct": 29.79
+    },
+    "lastLoginOkMs": {
+      "aMedian": 240006,
+      "bMedian": 240004,
+      "deltaMedianPct": -0.0,
+      "deltaMinPct": -0.0,
+      "deltaMaxPct": -0.0,
+      "directionConsistent": true,
+      "nPairs": 3,
+      "aaFloorPct": 0.0
+    },
+    "lastSubmitOkMs": {
+      "aMedian": 283620,
+      "bMedian": 283617,
+      "deltaMedianPct": -0.0,
+      "deltaMinPct": -0.0,
+      "deltaMaxPct": -0.0,
+      "directionConsistent": true,
+      "nPairs": 3,
+      "aaFloorPct": 0.0
+    }
+  },
+  "verdictInputs": {
+    "t1LoginP99ImprovePct": -2.88,
+    "t1CpuPerSuccessImprovePct": 1.62,
+    "t1RssGrowthPct": 7.37,
+    "t3SaveP99Pct": 3.95,
+    "t3HbP99Pct": -17.14,
+    "bLogin503Total": 0,
+    "substantialRejections": null
+  },
+  "runDetails": [
+    {
+      "runId": "L3-ADMISSION-A-P2-S200-aa1",
+      "arm": "a",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 58,
+        "p95": 85,
+        "p99": 117,
+        "max": 120,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 74,
+        "hbP99": 30,
+        "startP99": 108,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 35260,
+        "cpuPerSuccessMs": 176.3,
+        "vmHwmKb": 511300,
+        "busyThreadsMax": 7,
+        "eventLoopMaxMs": 20.99,
+        "elP90MaxMs": 1.46
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240006,
+        "lastSubmitOkAfterWindowStartMs": 283613,
+        "lastVerifiedOpAfterWindowStartMs": 283778
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": null
+    },
+    {
+      "runId": "L3-ADMISSION-A-P2-S200-aa2",
+      "arm": "a",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 57,
+        "p95": 77,
+        "p99": 101,
+        "max": 109,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 70,
+        "hbP99": 44,
+        "startP99": 80,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 34650,
+        "cpuPerSuccessMs": 173.2,
+        "vmHwmKb": 493856,
+        "busyThreadsMax": 8,
+        "eventLoopMaxMs": 16.62,
+        "elP90MaxMs": 1.44
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240001,
+        "lastSubmitOkAfterWindowStartMs": 283619,
+        "lastVerifiedOpAfterWindowStartMs": 283776
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": null
+    },
+    {
+      "runId": "L3-ADMISSION-A-P2-S200-r1a",
+      "arm": "a",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 58,
+        "p95": 84,
+        "p99": 104,
+        "max": 116,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 78,
+        "hbP99": 35,
+        "startP99": 83,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 36160,
+        "cpuPerSuccessMs": 180.8,
+        "vmHwmKb": 484448,
+        "busyThreadsMax": 6,
+        "eventLoopMaxMs": 16.49,
+        "elP90MaxMs": 1.5
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240006,
+        "lastSubmitOkAfterWindowStartMs": 283619,
+        "lastVerifiedOpAfterWindowStartMs": 283774
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": null
+    },
+    {
+      "runId": "L3-ADMISSION-B-P2-S200-r1b",
+      "arm": "b",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 57,
+        "p95": 81,
+        "p99": 101,
+        "max": 106,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 76,
+        "hbP99": 29,
+        "startP99": 89,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 35350,
+        "cpuPerSuccessMs": 176.8,
+        "vmHwmKb": 520152,
+        "busyThreadsMax": 7,
+        "eventLoopMaxMs": 23.92,
+        "elP90MaxMs": 1.45
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240004,
+        "lastSubmitOkAfterWindowStartMs": 283617,
+        "lastVerifiedOpAfterWindowStartMs": 283774
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": {
+        "counters": {
+          "acquireEntered": 204,
+          "admitted": 204,
+          "queueFull": 0,
+          "timeout": 0,
+          "disconnected": 0,
+          "released": 204,
+          "verifyStarts": 204,
+          "verifyEnds": 204
+        },
+        "peaks": {
+          "waiting": 0,
+          "permits": 4
+        },
+        "live": {
+          "waiting": 0,
+          "permits": 0,
+          "activeTimers": 0,
+          "activeDisconnectWatchers": 0
+        }
+      }
+    },
+    {
+      "runId": "L3-ADMISSION-A-P2-S200-r2a",
+      "arm": "a",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 58,
+        "p95": 81,
+        "p99": 101,
+        "max": 101,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 72,
+        "hbP99": 28,
+        "startP99": 89,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 35900,
+        "cpuPerSuccessMs": 179.5,
+        "vmHwmKb": 476928,
+        "busyThreadsMax": 8,
+        "eventLoopMaxMs": 23.31,
+        "elP90MaxMs": 1.45
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240004,
+        "lastSubmitOkAfterWindowStartMs": 283623,
+        "lastVerifiedOpAfterWindowStartMs": 283773
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": null
+    },
+    {
+      "runId": "L3-ADMISSION-B-P2-S200-r2b",
+      "arm": "b",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 58,
+        "p95": 80,
+        "p99": 99,
+        "max": 101,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 80,
+        "hbP99": 32,
+        "startP99": 114,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 35320,
+        "cpuPerSuccessMs": 176.6,
+        "vmHwmKb": 526384,
+        "busyThreadsMax": 8,
+        "eventLoopMaxMs": 18.5,
+        "elP90MaxMs": 1.46
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240001,
+        "lastSubmitOkAfterWindowStartMs": 283614,
+        "lastVerifiedOpAfterWindowStartMs": 283773
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": {
+        "counters": {
+          "acquireEntered": 204,
+          "admitted": 204,
+          "queueFull": 0,
+          "timeout": 0,
+          "disconnected": 0,
+          "released": 204,
+          "verifyStarts": 204,
+          "verifyEnds": 204
+        },
+        "peaks": {
+          "waiting": 0,
+          "permits": 4
+        },
+        "live": {
+          "waiting": 0,
+          "permits": 0,
+          "activeTimers": 0,
+          "activeDisconnectWatchers": 0
+        }
+      }
+    },
+    {
+      "runId": "L3-ADMISSION-A-P2-S200-r3a",
+      "arm": "a",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 58,
+        "p95": 80,
+        "p99": 104,
+        "max": 113,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 76,
+        "hbP99": 35,
+        "startP99": 96,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 35330,
+        "cpuPerSuccessMs": 176.7,
+        "vmHwmKb": 522540,
+        "busyThreadsMax": 7,
+        "eventLoopMaxMs": 20.74,
+        "elP90MaxMs": 1.47
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240008,
+        "lastSubmitOkAfterWindowStartMs": 283620,
+        "lastVerifiedOpAfterWindowStartMs": 283772
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": null
+    },
+    {
+      "runId": "L3-ADMISSION-B-P2-S200-r3b",
+      "arm": "b",
+      "failed": false,
+      "offeredTotal": 3258,
+      "fourLevel": {
+        "planned": 3258,
+        "actuallySent": 3258,
+        "gotResponse": 3258,
+        "gotCorrectSessionOrTerminal": {
+          "loginSessionsIssued": 200,
+          "loginSessionsValidOnProtectedCall": 200
+        }
+      },
+      "t6": "PASS",
+      "login": {
+        "offered": 200,
+        "ok": 200,
+        "indepDb": 200,
+        "indepDriver": 200,
+        "p50": 58,
+        "p95": 82,
+        "p99": 99,
+        "max": 107,
+        "n": 200,
+        "status503": 0,
+        "status401": 0,
+        "status429": 0,
+        "netFail": 0
+      },
+      "capacityRejectionRate": 0.0,
+      "qos": {
+        "saveP99": 79,
+        "hbP99": 26,
+        "startP99": 106,
+        "saveN": 371,
+        "hbN": 171
+      },
+      "resources": {
+        "procCpuMsWindow": 34880,
+        "cpuPerSuccessMs": 174.4,
+        "vmHwmKb": 502280,
+        "busyThreadsMax": 7,
+        "eventLoopMaxMs": 26.49,
+        "elP90MaxMs": 1.44
+      },
+      "completion": {
+        "lastLoginOkAfterWindowStartMs": 240007,
+        "lastSubmitOkAfterWindowStartMs": 283617,
+        "lastVerifiedOpAfterWindowStartMs": 283774
+      },
+      "rejections": {
+        "http429": 0,
+        "http401": 0,
+        "http503": 0,
+        "httpOther4xx5xx": {},
+        "networkTimeout": 0,
+        "networkOther": {},
+        "noResponse": 0,
+        "cancelledDepFailed": 0,
+        "driverDropped": 0,
+        "designedAbortReplay": 29
+      },
+      "admission": {
+        "counters": {
+          "acquireEntered": 204,
+          "admitted": 204,
+          "queueFull": 0,
+          "timeout": 0,
+          "disconnected": 0,
+          "released": 204,
+          "verifyStarts": 204,
+          "verifyEnds": 204
+        },
+        "peaks": {
+          "waiting": 0,
+          "permits": 4
+        },
+        "live": {
+          "waiting": 0,
+          "permits": 0,
+          "activeTimers": 0,
+          "activeDisconnectWatchers": 0
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "loginSuccessAll": 202,
+  "loginSuccessCandidates": 200,
+  "loginSuccessDistinctCandidates": 200,
+  "loginSuccessDistinctCandidateIps": 200,
+  "loginFailure": 0,
+  "loginFailureReasons": null,
+  "auditTotal": 463,
+  "attemptsByStatus": {
+    "graded": 200
+  },
+  "inProgressAttempts": 0
+}

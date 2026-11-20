@@ -1,0 +1,26 @@
+{"ev":"run-start","base":"http://127.0.0.1:8080","db":"exam_550_e2e","pgNow":"2026-11-20 15:41:35.667217+08","monoAt":108.478,"wallAt":"2026-11-20T07:41:35.681Z"}
+{"ev":"pool","examId":"e74c4025-b004-4a30-9058-889b5ecd6bfe","candidates":["cap9same-c0038-083356","cap9same-c0039-d93dd2","cap9same-c0040-9e7e57","cap9same-c0041-824fa7","cap9same-c0042-5d9bb6"],"monoAt":1206.07,"wallAt":"2026-11-20T07:41:36.779Z"}
+{"ev":"login","username":"cap9same-c0038-083356","status":200,"latencyMs":57.664999999999964,"monoAt":1264.109,"wallAt":"2026-11-20T07:41:36.837Z"}
+{"ev":"start","attemptId":"90b1e358-c128-42b6-8061-dd36ab50133d","status":201,"takeStatus":200,"questions":12,"monoAt":1331.596,"wallAt":"2026-11-20T07:41:36.904Z"}
+{"ev":"case1-saves","s1":{"status":200,"body":"{\"accepted\":true,\"serverVersion\":1,\"savedAt\":\"2026-11-20T07:41:36.913Z\"}"},"s2":{"status":200,"body":"{\"accepted\":true,\"serverVersion\":2,\"savedAt\":\"2026-11-20T07:41:36.945Z\"}"},"monoAt":1391.74,"wallAt":"2026-11-20T07:41:36.964Z"}
+{"ev":"case1-submit","status":200,"latencyMs":51.89599999999996,"body":"{\"id\":\"90b1e358-c128-42b6-8061-dd36ab50133d\",\"organizationId\":\"33f1ae24-2d96-4f02-9167-ce02b286293b\",\"examId\":\"e74c4025-b004-4a30-9058-889b5ecd6bfe\",\"enrollmentId\":\"4a50f8e7-c5ee-4af3-8812-7743da318c71\",\"candidateId\":\"083356ff-7ce7-43fb-afad-46c231bd3e7f\",\"attemptNo\":1,\"status\":\"graded\",\"questionSna","sendWall":"2026-11-20T07:41:36.965Z","monoAt":1443.767,"wallAt":"2026-11-20T07:41:37.016Z"}
+{"ev":"login","username":"cap9same-c0039-d93dd2","status":200,"latencyMs":51.363999999999805,"monoAt":1724.34,"wallAt":"2026-11-20T07:41:37.297Z"}
+{"ev":"start","attemptId":"224dcf10-369d-4f4b-91e0-df760d20843c","status":201,"takeStatus":200,"questions":12,"monoAt":1779.31,"wallAt":"2026-11-20T07:41:37.352Z"}
+{"ev":"barrier-held","user":"cap9same-c0039-d93dd2","monoAt":1893.981,"wallAt":"2026-11-20T07:41:37.467Z"}
+{"ev":"both-fired-save-then-submit","user":"cap9same-c0039-d93dd2","monoAt":2195.217,"wallAt":"2026-11-20T07:41:37.768Z"}
+{"ev":"barrier-released","enrollmentId":"8c228ab6-9a14-446f-8335-c3aee0f353de","monoAt":2695.645,"wallAt":"2026-11-20T07:41:38.268Z"}
+{"ev":"case1b-done","save":{"status":200,"body":"{\"accepted\":true,\"serverVersion\":2,\"savedAt\":\"2026-11-20T07:41:37.477Z\"}"},"submit":{"status":200},"monoAt":2777.948,"wallAt":"2026-11-20T07:41:38.351Z"}
+{"ev":"login","username":"cap9same-c0040-9e7e57","status":200,"latencyMs":53.64300000000003,"monoAt":3025.735,"wallAt":"2026-11-20T07:41:38.598Z"}
+{"ev":"start","attemptId":"433fa2fd-8244-4fed-b456-07be476dd706","status":201,"takeStatus":200,"questions":12,"monoAt":3078.953,"wallAt":"2026-11-20T07:41:38.652Z"}
+{"ev":"barrier-released","enrollmentId":"e21833fc-8967-4a7d-afc0-31d976fbabfb","monoAt":3988.265,"wallAt":"2026-11-20T07:41:39.561Z"}
+{"ev":"case1b2-done","submit":{"status":200},"save":{"status":200,"body":"{\"accepted\":false,\"reason\":\"ATTEMPT_ALREADY_SUBMITTED\",\"message\":\"考试已提交，不能继续保存答案\",\"serverVersion\":0,\"savedAt\":\"2026-11-20T07:41:39.071Z\"}"},"monoAt":4063.689,"wallAt":"2026-11-20T07:41:39.636Z"}
+{"ev":"login","username":"cap9same-c0041-824fa7","status":200,"latencyMs":51.01499999999942,"monoAt":4302.658,"wallAt":"2026-11-20T07:41:39.875Z"}
+{"ev":"start","attemptId":"13d36e4d-58a7-40bf-b5be-bd07210f3af9","status":201,"takeStatus":200,"questions":12,"monoAt":4350.434,"wallAt":"2026-11-20T07:41:39.923Z"}
+{"ev":"barrier-released","enrollmentId":"08330f0e-3e82-4405-bb2f-500a76959397","monoAt":5108.258,"wallAt":"2026-11-20T07:41:40.681Z"}
+{"ev":"case3a-done","first":{"status":200},"second":{"status":200},"monoAt":5178.78,"wallAt":"2026-11-20T07:41:40.751Z"}
+{"ev":"case3a-outcomes","outcomes":["graded","replay_no_change"],"monoAt":5578.399,"wallAt":"2026-11-20T07:41:41.151Z"}
+{"ev":"login","username":"cap9same-c0042-5d9bb6","status":200,"latencyMs":73.5609999999997,"monoAt":5652.2,"wallAt":"2026-11-20T07:41:41.225Z"}
+{"ev":"start","attemptId":"557191a0-c3a3-48f2-95d8-0e5b0e6ef7f7","status":201,"takeStatus":200,"questions":12,"monoAt":5708.553,"wallAt":"2026-11-20T07:41:41.281Z"}
+{"ev":"case3b-response-captured","captured":{"rule":"swallow-557191a0","ev":"response-captured","statusLine":"HTTP/1.1 200 OK","bytes":3994,"monoAt":5882.552,"wallAt":"2026-11-20T07:41:41.358Z"},"monoAt":7242.952,"wallAt":"2026-11-20T07:41:42.816Z"}
+{"ev":"case3b-client-view","status":0,"errorClass":"UND_ERR_SOCKET","monoAt":7247.386,"wallAt":"2026-11-20T07:41:42.820Z"}
+{"ev":"run-end","pgNow":"2026-11-20 15:41:43.330357+08","monoAt":7766.506,"wallAt":"2026-11-20T07:41:43.339Z"}

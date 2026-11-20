@@ -1,0 +1,182 @@
+{
+  "runId": "S2-BROWSER-r4",
+  "total": 25,
+  "failed": 0,
+  "results": [
+    {
+      "case": "③-c browser double-click",
+      "assertion": "lands on result page",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "③-c browser double-click",
+      "assertion": "exactly ONE submit POST despite two same-tick clicks (submittingRef)",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "③-c browser double-click",
+      "assertion": "graded once, audit 1, entries 12",
+      "expected": "graded|1|12",
+      "actual": "graded|1|12",
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "save was held in flight at the proxy",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "dialog shows flushing while save pending (确认交卷 dialog + 保存中...)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "confirm button disabled while flushing",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "released save accepted",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "confirm enabled after flush, submit reaches result",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "frozen submitted answer = the in-flight save (true)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b-browser save-in-flight-submit",
+      "assertion": "graded / reason manual / audit 1",
+      "expected": "graded|manual|1",
+      "actual": "graded|manual|1",
+      "pass": true
+    },
+    {
+      "case": "③-d browser response-lost-retry",
+      "assertion": "submit response captured at proxy (server committed)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "③-d browser response-lost-retry",
+      "assertion": "browser shows 提交失败，请重试 and stays on take page",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "③-d browser response-lost-retry",
+      "assertion": "DB already committed before retry (graded/manual/audit 1)",
+      "expected": "graded|manual|1",
+      "actual": "graded|manual|1",
+      "pass": true
+    },
+    {
+      "case": "③-d browser response-lost-retry",
+      "assertion": "retry reaches result page with graded score",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "③-d browser response-lost-retry",
+      "assertion": "retry is idempotent: audit still 1, entries 12, submittedAt unchanged",
+      "expected": "1|12|same",
+      "actual": "1|12|true",
+      "pass": true
+    },
+    {
+      "case": "④-A restart-before-tx",
+      "assertion": "submit parked pre-transaction (proxy held)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "④-A restart-before-tx",
+      "assertion": "PG after restart & before forwarding: still in_progress (nothing persisted)",
+      "expected": "in_progress",
+      "actual": "in_progress",
+      "pass": true
+    },
+    {
+      "case": "④-A restart-before-tx",
+      "assertion": "no audit/grading side effect from the restart window",
+      "expected": "0|0",
+      "actual": "0|0",
+      "pass": true
+    },
+    {
+      "case": "④-A restart-before-tx",
+      "assertion": "fresh submit after restart: graded exactly once, audit 1",
+      "expected": "graded|manual|1",
+      "actual": "graded|manual|1",
+      "pass": true
+    },
+    {
+      "case": "④-B restart-after-commit-response-lost",
+      "assertion": "commit happened before restart (proxy captured response)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "④-B restart-after-commit-response-lost",
+      "assertion": "PG after restart: graded / manual / submittedAt set",
+      "expected": "graded|manual|set",
+      "actual": "graded|manual|set",
+      "pass": true
+    },
+    {
+      "case": "④-B restart-after-commit-response-lost",
+      "assertion": "audit 1 / grading 12 / finalScore written (已提交已评分独立核对)",
+      "expected": "1|12|non-empty",
+      "actual": "1|12|non-empty",
+      "pass": true
+    },
+    {
+      "case": "④-B restart-after-commit-response-lost",
+      "assertion": "browser saw lost response (提交失败，请重试)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "④-B restart-after-commit-response-lost",
+      "assertion": "recovered result page shows the graded attempt",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "④-B restart-after-commit-response-lost",
+      "assertion": "no duplicate effects after recovery",
+      "expected": "1|12",
+      "actual": "1|12",
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "instrument": "真实 Chromium（repo Playwright @playwright/test）经真实 nginx:8080；故障注入代理插在 nginx 之后（nginx→3300 proxy→API 3301, topology.sh api-restart CAPACITY_API_PORT=3301）；重启用 topology.sh api-restart",
+  "cmd": "pnpm -C /home/hoo/Source/exam/.wt-capacity --filter @exam/e2e exec tsx .wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/s2-browser.ts --run-id=S2-BROWSER-r4",
+  "covers": "①-b-browser 保存在途交卷（对话框 flush 等待）；③-c 双击（submittingRef 单 POST）；③-d 响应丢失+重试；④-A 重启在入事务前；④-B 已提交响应未送达+重启",
+  "db": "exam_550_e2e",
+  "dbLifecycle": "campaign harness 世代",
+  "archivedAt": "2026-11-20T11:55:25.397807+00:00",
+  "expectedTable": "expected.md (sha256 022d61831997c1fc48e9ae7b2973a1c8f762215c8fb7c4c6727864ba4e43a8e5, pre-registered before any S2 measurement)",
+  "assertions": {
+    "total": 25,
+    "failed": 0
+  }
+}

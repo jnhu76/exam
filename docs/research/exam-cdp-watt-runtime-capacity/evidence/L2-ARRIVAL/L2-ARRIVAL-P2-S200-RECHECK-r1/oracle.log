@@ -1,0 +1,5 @@
+[oracle] connected to exam_550_e2e (name-guarded exam_550_e2e)
+[oracle] login.success rows=200 distinctIPs=200
+[oracle] attempts: {"graded":200} terminalOk=200 incomplete=0
+[oracle] invariants: dupActive=0 dupTerminal=0 mismatchCount=0
+[oracle] written: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/driver/runs/L2-ARRIVAL-P2-S200-RECHECK-r1/oracle.json

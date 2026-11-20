@@ -1,0 +1,11 @@
+[s2-gate] ingress health 200
+[s2-gate] live cases → run-id S2-GATE-OWNER-RERUN-r1-live
+[S2-GATE-OWNER-RERUN-r1-live] {"ev":"run-start","base":"http://127.0.0.1:8080","db":"exam_550_e2e","pgNow":"2026-11-20 17:56:07.988976+08","monoAt":109.802,"wallAt":"2026-11-20T09:56:08.002Z"}
+[S2-GATE-OWNER-RERUN-r1-live] FATAL Error: need 5 unused candidates, got 0 (from=0)
+    at pickCandidates (file:///home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/s2-live.mjs:197:32)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async main (file:///home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/s2-live.mjs:216:46)
+[s2-gate] FATAL Error: ENOENT: no such file or directory, open '/home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/S2-GATE-OWNER-RERUN-r1-live/assertions.json'
+    at readFileSync (node:fs:441:20)
+    at main (file:///home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/s2-gate.mjs:74:32)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

@@ -1,0 +1,296 @@
+{
+  "summary": {
+    "runId": "S2-GATE-OWNER-RERUN-r2-live",
+    "base": "http://127.0.0.1:8080",
+    "db": "exam_550_e2e",
+    "total": 38,
+    "failed": 0,
+    "cases": 5
+  },
+  "results": [
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "saves accepted v1/v2",
+      "expected": "accepted x2",
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "receipts [1,2]",
+      "expected": "1,2",
+      "actual": "1,2",
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "submit 200",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "status graded",
+      "expected": "graded",
+      "actual": "graded",
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "reason manual",
+      "expected": "manual",
+      "actual": "manual",
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "submittedAt in [send,recv] (route-entry now)",
+      "expected": "send<=submittedAt<=recv",
+      "actual": "send=2026-11-20T09:57:19.876Z db=2026-11-20 17:57:19.884+08 recv=2026-11-20T09:57:19.925Z",
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "frozen answer = v2(false)",
+      "expected": false,
+      "actual": false,
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "grading entries 12",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "submit audit exactly 1",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "①-a save-ok-then-submit",
+      "assertion": "finalScore written (已评分)",
+      "expected": "non-empty",
+      "actual": "0",
+      "pass": true
+    },
+    {
+      "case": "①-b save-first-lock",
+      "assertion": "save accepted v2 after barrier",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b save-first-lock",
+      "assertion": "submit 200",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "①-b save-first-lock",
+      "assertion": "frozen answer = in-flight v2(false)",
+      "expected": false,
+      "actual": false,
+      "pass": true
+    },
+    {
+      "case": "①-b save-first-lock",
+      "assertion": "receipts [1,2]",
+      "expected": "1,2",
+      "actual": "1,2",
+      "pass": true
+    },
+    {
+      "case": "①-b save-first-lock",
+      "assertion": "status graded / reason manual",
+      "expected": "graded|manual",
+      "actual": "graded|manual",
+      "pass": true
+    },
+    {
+      "case": "①-b save-first-lock",
+      "assertion": "audit exactly 1",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "submit 200 first",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "late save = HTTP 200 + accepted:false (200≠已保存)",
+      "expected": {
+        "status": 200,
+        "accepted": false
+      },
+      "actual": {
+        "status": 200,
+        "accepted": false
+      },
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "late save reason ATTEMPT_ALREADY_SUBMITTED",
+      "expected": "ATTEMPT_ALREADY_SUBMITTED",
+      "actual": "ATTEMPT_ALREADY_SUBMITTED",
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "serverVersion 0 on status-guard rejection (answerProtocol.ts:160)",
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "frozen answer stays v1(true)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "receipts [1] only (v2 never saved)",
+      "expected": "1",
+      "actual": "1",
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "status graded / reason manual",
+      "expected": "graded|manual",
+      "actual": "graded|manual",
+      "pass": true
+    },
+    {
+      "case": "①-b' submit-first-lock",
+      "assertion": "audit exactly 1",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "③-a double-submit-POST",
+      "assertion": "both POSTs → 200",
+      "expected": [
+        200,
+        200
+      ],
+      "actual": [
+        200,
+        200
+      ],
+      "pass": true
+    },
+    {
+      "case": "③-a double-submit-POST",
+      "assertion": "audit exactly 1 (unique business effect)",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "③-a double-submit-POST",
+      "assertion": "grading entries 12 (single scoring)",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "③-a double-submit-POST",
+      "assertion": "status graded / reason manual",
+      "expected": "graded|manual",
+      "actual": "graded|manual",
+      "pass": true
+    },
+    {
+      "case": "③-a double-submit-POST",
+      "assertion": "log outcomes {graded, replay_no_change}",
+      "expected": [
+        "graded",
+        "replay_no_change"
+      ],
+      "actual": [
+        "graded",
+        "replay_no_change"
+      ],
+      "pass": true
+    },
+    {
+      "case": "③-a double-submit-POST",
+      "assertion": "submittedAt single value",
+      "expected": "one ts",
+      "actual": "2026-11-20 17:57:22.991+08",
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "client saw connection loss (status 0 / reset)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "response was captured at proxy (server committed)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "captured status line 200",
+      "expected": "HTTP/1.1 200",
+      "actual": "HTTP/1.1 200 OK",
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "authoritative read shows graded",
+      "expected": "graded",
+      "actual": "graded",
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "retry POST 200 idempotent",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "audit still exactly 1 after retry",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "grading entries 12 single scoring",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "③-b response-lost-recovery",
+      "assertion": "submittedAt unchanged by retry",
+      "expected": "2026-11-20 17:57:24.309+08",
+      "actual": "2026-11-20 17:57:24.309+08",
+      "pass": true
+    }
+  ]
+}
