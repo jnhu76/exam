@@ -1,0 +1,4912 @@
+{
+  "perRun": {
+    "isolated": {
+      "1": [
+        {
+          "runId": "L1-VERIFY-iso-c1-r1",
+          "C": 1,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 24563,
+          "wallMsRespan": 24562.3,
+          "throughputRunner": 24.43,
+          "throughputRespan": 24.43,
+          "durP50": 40.654,
+          "durP95": 44.379,
+          "durP99": 46.114,
+          "durMax": 50.171,
+          "cpuTotalMs": 33290,
+          "cpuPerOpMs": 55.483,
+          "avgBusyThreads": 1.355,
+          "maxInFlight": 1,
+          "vmHwmKb": 331492,
+          "elMaxMsMaxOfTicks": 3.78,
+          "elP99MaxOfTicks": 1.83
+        },
+        {
+          "runId": "L1-VERIFY-iso-c1-r2",
+          "C": 1,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 24413,
+          "wallMsRespan": 24412.8,
+          "throughputRunner": 24.58,
+          "throughputRespan": 24.58,
+          "durP50": 40.28,
+          "durP95": 44.052,
+          "durP99": 48.229,
+          "durMax": 57.605,
+          "cpuTotalMs": 32970,
+          "cpuPerOpMs": 54.95,
+          "avgBusyThreads": 1.35,
+          "maxInFlight": 1,
+          "vmHwmKb": 330504,
+          "elMaxMsMaxOfTicks": 4.36,
+          "elP99MaxOfTicks": 1.88
+        },
+        {
+          "runId": "L1-VERIFY-iso-c1-r3",
+          "C": 1,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 24643,
+          "wallMsRespan": 24642.4,
+          "throughputRunner": 24.35,
+          "throughputRespan": 24.35,
+          "durP50": 40.699,
+          "durP95": 44.202,
+          "durP99": 48.369,
+          "durMax": 50.175,
+          "cpuTotalMs": 33200,
+          "cpuPerOpMs": 55.333,
+          "avgBusyThreads": 1.347,
+          "maxInFlight": 1,
+          "vmHwmKb": 340752,
+          "elMaxMsMaxOfTicks": 4.75,
+          "elP99MaxOfTicks": 2.04
+        },
+        {
+          "runId": "L1-VERIFY-iso-c1-r4",
+          "C": 1,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 24799,
+          "wallMsRespan": 24798.6,
+          "throughputRunner": 24.19,
+          "throughputRespan": 24.19,
+          "durP50": 40.959,
+          "durP95": 44.309,
+          "durP99": 50.206,
+          "durMax": 57.578,
+          "cpuTotalMs": 33980,
+          "cpuPerOpMs": 56.633,
+          "avgBusyThreads": 1.37,
+          "maxInFlight": 1,
+          "vmHwmKb": 341884,
+          "elMaxMsMaxOfTicks": 3.55,
+          "elP99MaxOfTicks": 1.84
+        },
+        {
+          "runId": "L1-VERIFY-iso-c1-r5",
+          "C": 1,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 24438,
+          "wallMsRespan": 24437.8,
+          "throughputRunner": 24.55,
+          "throughputRespan": 24.55,
+          "durP50": 40.372,
+          "durP95": 43.404,
+          "durP99": 51.48,
+          "durMax": 56.125,
+          "cpuTotalMs": 33460,
+          "cpuPerOpMs": 55.767,
+          "avgBusyThreads": 1.369,
+          "maxInFlight": 1,
+          "vmHwmKb": 327444,
+          "elMaxMsMaxOfTicks": 3.54,
+          "elP99MaxOfTicks": 1.85
+        }
+      ],
+      "16": [
+        {
+          "runId": "L1-VERIFY-iso-c16-r1",
+          "C": 16,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14483,
+          "wallMsRespan": 14482.7,
+          "throughputRunner": 41.43,
+          "throughputRespan": 41.43,
+          "durP50": 385.485,
+          "durP95": 405.322,
+          "durP99": 422.075,
+          "durMax": 428.4,
+          "cpuTotalMs": 123330,
+          "cpuPerOpMs": 205.55,
+          "avgBusyThreads": 8.515,
+          "maxInFlight": 16,
+          "vmHwmKb": 477600,
+          "elMaxMsMaxOfTicks": 6.32,
+          "elP99MaxOfTicks": 2.03
+        },
+        {
+          "runId": "L1-VERIFY-iso-c16-r2",
+          "C": 16,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14744,
+          "wallMsRespan": 14743.1,
+          "throughputRunner": 40.69,
+          "throughputRespan": 40.7,
+          "durP50": 390.843,
+          "durP95": 429.05,
+          "durP99": 447.009,
+          "durMax": 457.187,
+          "cpuTotalMs": 126170,
+          "cpuPerOpMs": 210.283,
+          "avgBusyThreads": 8.557,
+          "maxInFlight": 16,
+          "vmHwmKb": 475688,
+          "elMaxMsMaxOfTicks": 6.51,
+          "elP99MaxOfTicks": 3.46
+        },
+        {
+          "runId": "L1-VERIFY-iso-c16-r3",
+          "C": 16,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14810,
+          "wallMsRespan": 14809.2,
+          "throughputRunner": 40.51,
+          "throughputRespan": 40.52,
+          "durP50": 394.4,
+          "durP95": 412.303,
+          "durP99": 424.408,
+          "durMax": 429.008,
+          "cpuTotalMs": 127480,
+          "cpuPerOpMs": 212.467,
+          "avgBusyThreads": 8.608,
+          "maxInFlight": 16,
+          "vmHwmKb": 477404,
+          "elMaxMsMaxOfTicks": 4.32,
+          "elP99MaxOfTicks": 2.15
+        },
+        {
+          "runId": "L1-VERIFY-iso-c16-r4",
+          "C": 16,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14703,
+          "wallMsRespan": 14702.7,
+          "throughputRunner": 40.81,
+          "throughputRespan": 40.81,
+          "durP50": 391.022,
+          "durP95": 416.711,
+          "durP99": 428.321,
+          "durMax": 439.148,
+          "cpuTotalMs": 125400,
+          "cpuPerOpMs": 209,
+          "avgBusyThreads": 8.529,
+          "maxInFlight": 16,
+          "vmHwmKb": 475936,
+          "elMaxMsMaxOfTicks": 5.92,
+          "elP99MaxOfTicks": 1.86
+        },
+        {
+          "runId": "L1-VERIFY-iso-c16-r5",
+          "C": 16,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14683,
+          "wallMsRespan": 14682.4,
+          "throughputRunner": 40.86,
+          "throughputRespan": 40.87,
+          "durP50": 390.854,
+          "durP95": 412.14,
+          "durP99": 418.836,
+          "durMax": 424.122,
+          "cpuTotalMs": 125540,
+          "cpuPerOpMs": 209.233,
+          "avgBusyThreads": 8.55,
+          "maxInFlight": 16,
+          "vmHwmKb": 476328,
+          "elMaxMsMaxOfTicks": 5.83,
+          "elP99MaxOfTicks": 2.91
+        }
+      ],
+      "2": [
+        {
+          "runId": "L1-VERIFY-iso-c2-r1",
+          "C": 2,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 16905,
+          "wallMsRespan": 16904.4,
+          "throughputRunner": 35.49,
+          "throughputRespan": 35.49,
+          "durP50": 55.848,
+          "durP95": 62.121,
+          "durP99": 65.453,
+          "durMax": 75.324,
+          "cpuTotalMs": 51580,
+          "cpuPerOpMs": 85.967,
+          "avgBusyThreads": 3.051,
+          "maxInFlight": 2,
+          "vmHwmKb": 349088,
+          "elMaxMsMaxOfTicks": 4.33,
+          "elP99MaxOfTicks": 1.88
+        },
+        {
+          "runId": "L1-VERIFY-iso-c2-r2",
+          "C": 2,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 17281,
+          "wallMsRespan": 17280.9,
+          "throughputRunner": 34.72,
+          "throughputRespan": 34.72,
+          "durP50": 57.141,
+          "durP95": 64.995,
+          "durP99": 69.146,
+          "durMax": 70.884,
+          "cpuTotalMs": 53190,
+          "cpuPerOpMs": 88.65,
+          "avgBusyThreads": 3.078,
+          "maxInFlight": 2,
+          "vmHwmKb": 345304,
+          "elMaxMsMaxOfTicks": 3.4,
+          "elP99MaxOfTicks": 1.87
+        },
+        {
+          "runId": "L1-VERIFY-iso-c2-r3",
+          "C": 2,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 17118,
+          "wallMsRespan": 17117.3,
+          "throughputRunner": 35.05,
+          "throughputRespan": 35.05,
+          "durP50": 56.778,
+          "durP95": 63.643,
+          "durP99": 67.054,
+          "durMax": 72.8,
+          "cpuTotalMs": 52660,
+          "cpuPerOpMs": 87.767,
+          "avgBusyThreads": 3.076,
+          "maxInFlight": 2,
+          "vmHwmKb": 346364,
+          "elMaxMsMaxOfTicks": 4.07,
+          "elP99MaxOfTicks": 1.73
+        },
+        {
+          "runId": "L1-VERIFY-iso-c2-r4",
+          "C": 2,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 17125,
+          "wallMsRespan": 17124.7,
+          "throughputRunner": 35.04,
+          "throughputRespan": 35.04,
+          "durP50": 56.684,
+          "durP95": 63.797,
+          "durP99": 71.618,
+          "durMax": 79.469,
+          "cpuTotalMs": 52210,
+          "cpuPerOpMs": 87.017,
+          "avgBusyThreads": 3.049,
+          "maxInFlight": 2,
+          "vmHwmKb": 344988,
+          "elMaxMsMaxOfTicks": 4.94,
+          "elP99MaxOfTicks": 1.81
+        },
+        {
+          "runId": "L1-VERIFY-iso-c2-r5",
+          "C": 2,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 17089,
+          "wallMsRespan": 17088.0,
+          "throughputRunner": 35.11,
+          "throughputRespan": 35.11,
+          "durP50": 56.523,
+          "durP95": 64.601,
+          "durP99": 67.553,
+          "durMax": 72.523,
+          "cpuTotalMs": 52290,
+          "cpuPerOpMs": 87.15,
+          "avgBusyThreads": 3.06,
+          "maxInFlight": 2,
+          "vmHwmKb": 346356,
+          "elMaxMsMaxOfTicks": 3.67,
+          "elP99MaxOfTicks": 1.79
+        }
+      ],
+      "3": [
+        {
+          "runId": "L1-VERIFY-iso-c3-r1",
+          "C": 3,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 15454,
+          "wallMsRespan": 15453.0,
+          "throughputRunner": 38.83,
+          "throughputRespan": 38.83,
+          "durP50": 76.515,
+          "durP95": 85.646,
+          "durP99": 92.196,
+          "durMax": 95.083,
+          "cpuTotalMs": 88690,
+          "cpuPerOpMs": 147.817,
+          "avgBusyThreads": 5.739,
+          "maxInFlight": 3,
+          "vmHwmKb": 411424,
+          "elMaxMsMaxOfTicks": 5.79,
+          "elP99MaxOfTicks": 1.92
+        },
+        {
+          "runId": "L1-VERIFY-iso-c3-r2",
+          "C": 3,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 15563,
+          "wallMsRespan": 15562.4,
+          "throughputRunner": 38.55,
+          "throughputRespan": 38.55,
+          "durP50": 77.407,
+          "durP95": 85.026,
+          "durP99": 87.786,
+          "durMax": 94.755,
+          "cpuTotalMs": 89150,
+          "cpuPerOpMs": 148.583,
+          "avgBusyThreads": 5.728,
+          "maxInFlight": 3,
+          "vmHwmKb": 410416,
+          "elMaxMsMaxOfTicks": 5.01,
+          "elP99MaxOfTicks": 1.81
+        },
+        {
+          "runId": "L1-VERIFY-iso-c3-r3",
+          "C": 3,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 15463,
+          "wallMsRespan": 15462.2,
+          "throughputRunner": 38.8,
+          "throughputRespan": 38.8,
+          "durP50": 77.167,
+          "durP95": 84.064,
+          "durP99": 87.935,
+          "durMax": 94.238,
+          "cpuTotalMs": 87990,
+          "cpuPerOpMs": 146.65,
+          "avgBusyThreads": 5.69,
+          "maxInFlight": 3,
+          "vmHwmKb": 413808,
+          "elMaxMsMaxOfTicks": 5.5,
+          "elP99MaxOfTicks": 2.34
+        },
+        {
+          "runId": "L1-VERIFY-iso-c3-r4",
+          "C": 3,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 15555,
+          "wallMsRespan": 15554.2,
+          "throughputRunner": 38.57,
+          "throughputRespan": 38.57,
+          "durP50": 77.551,
+          "durP95": 84.796,
+          "durP99": 89.482,
+          "durMax": 92.007,
+          "cpuTotalMs": 88880,
+          "cpuPerOpMs": 148.133,
+          "avgBusyThreads": 5.714,
+          "maxInFlight": 3,
+          "vmHwmKb": 412628,
+          "elMaxMsMaxOfTicks": 5.68,
+          "elP99MaxOfTicks": 1.94
+        },
+        {
+          "runId": "L1-VERIFY-iso-c3-r5",
+          "C": 3,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 15552,
+          "wallMsRespan": 15551.0,
+          "throughputRunner": 38.58,
+          "throughputRespan": 38.58,
+          "durP50": 77.667,
+          "durP95": 84.308,
+          "durP99": 90.163,
+          "durMax": 94.905,
+          "cpuTotalMs": 88830,
+          "cpuPerOpMs": 148.05,
+          "avgBusyThreads": 5.712,
+          "maxInFlight": 3,
+          "vmHwmKb": 411388,
+          "elMaxMsMaxOfTicks": 5.24,
+          "elP99MaxOfTicks": 1.85
+        }
+      ],
+      "32": [
+        {
+          "runId": "L1-VERIFY-iso-c32-r1",
+          "C": 32,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14838,
+          "wallMsRespan": 14836.8,
+          "throughputRunner": 40.44,
+          "throughputRespan": 40.44,
+          "durP50": 790.93,
+          "durP95": 816.667,
+          "durP99": 828.241,
+          "durMax": 841.237,
+          "cpuTotalMs": 126990,
+          "cpuPerOpMs": 211.65,
+          "avgBusyThreads": 8.559,
+          "maxInFlight": 32,
+          "vmHwmKb": 476972,
+          "elMaxMsMaxOfTicks": 8.33,
+          "elP99MaxOfTicks": 2.22
+        },
+        {
+          "runId": "L1-VERIFY-iso-c32-r2",
+          "C": 32,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14755,
+          "wallMsRespan": 14754.5,
+          "throughputRunner": 40.66,
+          "throughputRespan": 40.67,
+          "durP50": 784.235,
+          "durP95": 864.229,
+          "durP99": 909.597,
+          "durMax": 930.56,
+          "cpuTotalMs": 126800,
+          "cpuPerOpMs": 211.333,
+          "avgBusyThreads": 8.594,
+          "maxInFlight": 32,
+          "vmHwmKb": 475540,
+          "elMaxMsMaxOfTicks": 6.34,
+          "elP99MaxOfTicks": 2.34
+        },
+        {
+          "runId": "L1-VERIFY-iso-c32-r3",
+          "C": 32,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14869,
+          "wallMsRespan": 14868.4,
+          "throughputRunner": 40.35,
+          "throughputRespan": 40.35,
+          "durP50": 794.381,
+          "durP95": 817.667,
+          "durP99": 827.696,
+          "durMax": 835.716,
+          "cpuTotalMs": 126860,
+          "cpuPerOpMs": 211.433,
+          "avgBusyThreads": 8.532,
+          "maxInFlight": 32,
+          "vmHwmKb": 477968,
+          "elMaxMsMaxOfTicks": 6.04,
+          "elP99MaxOfTicks": 3.16
+        },
+        {
+          "runId": "L1-VERIFY-iso-c32-r4",
+          "C": 32,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14832,
+          "wallMsRespan": 14831.4,
+          "throughputRunner": 40.45,
+          "throughputRespan": 40.45,
+          "durP50": 789.554,
+          "durP95": 815.838,
+          "durP99": 824.575,
+          "durMax": 831.988,
+          "cpuTotalMs": 127420,
+          "cpuPerOpMs": 212.367,
+          "avgBusyThreads": 8.591,
+          "maxInFlight": 32,
+          "vmHwmKb": 476248,
+          "elMaxMsMaxOfTicks": 6.5,
+          "elP99MaxOfTicks": 2.3
+        },
+        {
+          "runId": "L1-VERIFY-iso-c32-r5",
+          "C": 32,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14930,
+          "wallMsRespan": 14929.4,
+          "throughputRunner": 40.19,
+          "throughputRespan": 40.19,
+          "durP50": 793.261,
+          "durP95": 847.647,
+          "durP99": 864.224,
+          "durMax": 887.783,
+          "cpuTotalMs": 127930,
+          "cpuPerOpMs": 213.217,
+          "avgBusyThreads": 8.569,
+          "maxInFlight": 32,
+          "vmHwmKb": 476072,
+          "elMaxMsMaxOfTicks": 5.88,
+          "elP99MaxOfTicks": 2.89
+        }
+      ],
+      "4": [
+        {
+          "runId": "L1-VERIFY-iso-c4-r1",
+          "C": 4,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14417,
+          "wallMsRespan": 14416.0,
+          "throughputRunner": 41.62,
+          "throughputRespan": 41.62,
+          "durP50": 95.66,
+          "durP95": 105.917,
+          "durP99": 111.594,
+          "durMax": 116.5,
+          "cpuTotalMs": 122370,
+          "cpuPerOpMs": 203.95,
+          "avgBusyThreads": 8.488,
+          "maxInFlight": 4,
+          "vmHwmKb": 477040,
+          "elMaxMsMaxOfTicks": 5.83,
+          "elP99MaxOfTicks": 5.14
+        },
+        {
+          "runId": "L1-VERIFY-iso-c4-r2",
+          "C": 4,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14341,
+          "wallMsRespan": 14340.6,
+          "throughputRunner": 41.84,
+          "throughputRespan": 41.84,
+          "durP50": 94.819,
+          "durP95": 106.567,
+          "durP99": 111.838,
+          "durMax": 116.085,
+          "cpuTotalMs": 121430,
+          "cpuPerOpMs": 202.383,
+          "avgBusyThreads": 8.467,
+          "maxInFlight": 4,
+          "vmHwmKb": 477636,
+          "elMaxMsMaxOfTicks": 6.18,
+          "elP99MaxOfTicks": 2.23
+        },
+        {
+          "runId": "L1-VERIFY-iso-c4-r3",
+          "C": 4,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14393,
+          "wallMsRespan": 14392.4,
+          "throughputRunner": 41.69,
+          "throughputRespan": 41.69,
+          "durP50": 95.731,
+          "durP95": 105.328,
+          "durP99": 112.085,
+          "durMax": 115.022,
+          "cpuTotalMs": 122390,
+          "cpuPerOpMs": 203.983,
+          "avgBusyThreads": 8.503,
+          "maxInFlight": 4,
+          "vmHwmKb": 476048,
+          "elMaxMsMaxOfTicks": 5.71,
+          "elP99MaxOfTicks": 1.95
+        },
+        {
+          "runId": "L1-VERIFY-iso-c4-r4",
+          "C": 4,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14305,
+          "wallMsRespan": 14304.2,
+          "throughputRunner": 41.94,
+          "throughputRespan": 41.95,
+          "durP50": 95.122,
+          "durP95": 104.499,
+          "durP99": 109.046,
+          "durMax": 111.454,
+          "cpuTotalMs": 121310,
+          "cpuPerOpMs": 202.183,
+          "avgBusyThreads": 8.48,
+          "maxInFlight": 4,
+          "vmHwmKb": 475256,
+          "elMaxMsMaxOfTicks": 6.59,
+          "elP99MaxOfTicks": 2.37
+        },
+        {
+          "runId": "L1-VERIFY-iso-c4-r5",
+          "C": 4,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14327,
+          "wallMsRespan": 14326.2,
+          "throughputRunner": 41.88,
+          "throughputRespan": 41.88,
+          "durP50": 95.594,
+          "durP95": 107.424,
+          "durP99": 112.265,
+          "durMax": 117.71,
+          "cpuTotalMs": 120040,
+          "cpuPerOpMs": 200.067,
+          "avgBusyThreads": 8.379,
+          "maxInFlight": 4,
+          "vmHwmKb": 476272,
+          "elMaxMsMaxOfTicks": 6.01,
+          "elP99MaxOfTicks": 2
+        }
+      ],
+      "8": [
+        {
+          "runId": "L1-VERIFY-iso-c8-r1",
+          "C": 8,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14441,
+          "wallMsRespan": 14440.3,
+          "throughputRunner": 41.55,
+          "throughputRespan": 41.55,
+          "durP50": 192.415,
+          "durP95": 206.641,
+          "durP99": 213.257,
+          "durMax": 220.367,
+          "cpuTotalMs": 122380,
+          "cpuPerOpMs": 203.967,
+          "avgBusyThreads": 8.474,
+          "maxInFlight": 8,
+          "vmHwmKb": 478184,
+          "elMaxMsMaxOfTicks": 6.09,
+          "elP99MaxOfTicks": 1.95
+        },
+        {
+          "runId": "L1-VERIFY-iso-c8-r2",
+          "C": 8,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14472,
+          "wallMsRespan": 14471.5,
+          "throughputRunner": 41.46,
+          "throughputRespan": 41.46,
+          "durP50": 193.129,
+          "durP95": 206.836,
+          "durP99": 214.841,
+          "durMax": 223.692,
+          "cpuTotalMs": 122220,
+          "cpuPerOpMs": 203.7,
+          "avgBusyThreads": 8.445,
+          "maxInFlight": 8,
+          "vmHwmKb": 486012,
+          "elMaxMsMaxOfTicks": 8.27,
+          "elP99MaxOfTicks": 2.69
+        },
+        {
+          "runId": "L1-VERIFY-iso-c8-r3",
+          "C": 8,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14389,
+          "wallMsRespan": 14387.8,
+          "throughputRunner": 41.7,
+          "throughputRespan": 41.7,
+          "durP50": 191.364,
+          "durP95": 204.982,
+          "durP99": 212.59,
+          "durMax": 221.575,
+          "cpuTotalMs": 122310,
+          "cpuPerOpMs": 203.85,
+          "avgBusyThreads": 8.501,
+          "maxInFlight": 8,
+          "vmHwmKb": 475704,
+          "elMaxMsMaxOfTicks": 5.41,
+          "elP99MaxOfTicks": 4.23
+        },
+        {
+          "runId": "L1-VERIFY-iso-c8-r4",
+          "C": 8,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14590,
+          "wallMsRespan": 14589.6,
+          "throughputRunner": 41.12,
+          "throughputRespan": 41.13,
+          "durP50": 194.151,
+          "durP95": 207.994,
+          "durP99": 215.035,
+          "durMax": 220.49,
+          "cpuTotalMs": 124100,
+          "cpuPerOpMs": 206.833,
+          "avgBusyThreads": 8.506,
+          "maxInFlight": 8,
+          "vmHwmKb": 488156,
+          "elMaxMsMaxOfTicks": 7.54,
+          "elP99MaxOfTicks": 4.11
+        },
+        {
+          "runId": "L1-VERIFY-iso-c8-r5",
+          "C": 8,
+          "N": 600,
+          "ok": 600,
+          "wallMsRunner": 14538,
+          "wallMsRespan": 14537.4,
+          "throughputRunner": 41.27,
+          "throughputRespan": 41.27,
+          "durP50": 192.916,
+          "durP95": 208.564,
+          "durP99": 214.344,
+          "durMax": 226.487,
+          "cpuTotalMs": 123170,
+          "cpuPerOpMs": 205.283,
+          "avgBusyThreads": 8.472,
+          "maxInFlight": 8,
+          "vmHwmKb": 476772,
+          "elMaxMsMaxOfTicks": 6.16,
+          "elP99MaxOfTicks": 4.44
+        }
+      ]
+    },
+    "http": {
+      "1": [
+        {
+          "runId": "L1-VERIFY-http-c1-r1",
+          "C": 1,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10608,
+          "throughputDriverVerified": 18.85,
+          "latP50": 52,
+          "latP95": 61,
+          "latP99": 80,
+          "latMax": 85,
+          "driverCpuMaxPct": 1.9,
+          "api": {
+            "vmHwmKb": 342412,
+            "vmRssKbMax": 331148,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 10856,
+            "activeCpuMs": 12140,
+            "activeMainThreadMs": 910,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              2520,
+              13376
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 60.65,
+            "snapshotP90MedianMs": 1.26,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 643,
+            "sqlTotalLast": 1481
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r10",
+          "C": 1,
+          "envMode": "fast",
+          "envProbePre": 24.64,
+          "envProbePost": 24.13,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10629,
+          "throughputDriverVerified": 18.82,
+          "latP50": 52,
+          "latP95": 57,
+          "latP99": 79,
+          "latMax": 81,
+          "driverCpuMaxPct": 1.9,
+          "api": {
+            "vmHwmKb": 344152,
+            "vmRssKbMax": 331632,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 10858,
+            "activeCpuMs": 12360,
+            "activeMainThreadMs": 890,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              2520,
+              13378
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 78.32,
+            "snapshotP90MedianMs": 1.25,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1484
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r2",
+          "C": 1,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10655,
+          "throughputDriverVerified": 18.77,
+          "latP50": 52,
+          "latP95": 59,
+          "latP99": 78,
+          "latMax": 80,
+          "driverCpuMaxPct": 1.9,
+          "api": {
+            "vmHwmKb": 329368,
+            "vmRssKbMax": 330952,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 10853,
+            "activeCpuMs": 12310,
+            "activeMainThreadMs": 900,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              2520,
+              13373
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 62.06,
+            "snapshotP90MedianMs": 1.25,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 643,
+            "sqlTotalLast": 1481
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r3",
+          "C": 1,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 15503,
+          "throughputDriverVerified": 12.9,
+          "latP50": 78,
+          "latP95": 92,
+          "latP99": 106,
+          "latMax": 110,
+          "driverCpuMaxPct": 2.8,
+          "api": {
+            "vmHwmKb": 328812,
+            "vmRssKbMax": 330524,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 15471,
+            "activeCpuMs": 24440,
+            "activeMainThreadMs": 1780,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              3041,
+              18512
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 66.62,
+            "snapshotP90MedianMs": 1.33,
+            "snapshotCount": 20
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1494
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r4",
+          "C": 1,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 16092,
+          "throughputDriverVerified": 12.43,
+          "latP50": 80,
+          "latP95": 90,
+          "latP99": 103,
+          "latMax": 124,
+          "driverCpuMaxPct": 2.9,
+          "api": {
+            "vmHwmKb": 328724,
+            "vmRssKbMax": 330460,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 16235,
+            "activeCpuMs": 25870,
+            "activeMainThreadMs": 1830,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              3043,
+              19278
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 107.94,
+            "snapshotP90MedianMs": 1.37,
+            "snapshotCount": 21
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1499
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r5",
+          "C": 1,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 15837,
+          "throughputDriverVerified": 12.63,
+          "latP50": 79,
+          "latP95": 90,
+          "latP99": 109,
+          "latMax": 124,
+          "driverCpuMaxPct": 2.8,
+          "api": {
+            "vmHwmKb": 329140,
+            "vmRssKbMax": 330744,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 15992,
+            "activeCpuMs": 25060,
+            "activeMainThreadMs": 1790,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              3043,
+              19035
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 95.55,
+            "snapshotP90MedianMs": 1.37,
+            "snapshotCount": 20
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1497
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r6",
+          "C": 1,
+          "envMode": "fast",
+          "envProbePre": 24.15,
+          "envProbePost": 24.39,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10764,
+          "throughputDriverVerified": 18.58,
+          "latP50": 53,
+          "latP95": 62,
+          "latP99": 74,
+          "latMax": 80,
+          "driverCpuMaxPct": 1.8,
+          "api": {
+            "vmHwmKb": 330156,
+            "vmRssKbMax": 331704,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 5,
+            "busyNonMainMaxWindow": 4
+          },
+          "activeWindow": {
+            "activeWallMs": 10851,
+            "activeCpuMs": 12180,
+            "activeMainThreadMs": 890,
+            "busyThreadsMax": 5,
+            "busyThreadsNonMainMax": 4,
+            "activeTickSpan": [
+              2521,
+              13372
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 65.83,
+            "snapshotP90MedianMs": 1.25,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1484
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r7",
+          "C": 1,
+          "envMode": "fast",
+          "envProbePre": 24.12,
+          "envProbePost": 24.48,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10764,
+          "throughputDriverVerified": 18.58,
+          "latP50": 53,
+          "latP95": 58,
+          "latP99": 74,
+          "latMax": 99,
+          "driverCpuMaxPct": 1.9,
+          "api": {
+            "vmHwmKb": 328108,
+            "vmRssKbMax": 329612,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 10604,
+            "activeCpuMs": 12360,
+            "activeMainThreadMs": 890,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              2772,
+              13376
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.5,
+            "snapshotP90MedianMs": 1.27,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 649,
+            "sqlTotalLast": 1487
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r8",
+          "C": 1,
+          "envMode": "fast",
+          "envProbePre": 24.66,
+          "envProbePost": 24.92,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10775,
+          "throughputDriverVerified": 18.56,
+          "latP50": 53,
+          "latP95": 59,
+          "latP99": 79,
+          "latMax": 84,
+          "driverCpuMaxPct": 1.9,
+          "api": {
+            "vmHwmKb": 329620,
+            "vmRssKbMax": 331356,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 6,
+            "busyNonMainMaxWindow": 5
+          },
+          "activeWindow": {
+            "activeWallMs": 10857,
+            "activeCpuMs": 12060,
+            "activeMainThreadMs": 920,
+            "busyThreadsMax": 6,
+            "busyThreadsNonMainMax": 5,
+            "activeTickSpan": [
+              2771,
+              13628
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 60.88,
+            "snapshotP90MedianMs": 1.27,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 649,
+            "sqlTotalLast": 1487
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c1-r9",
+          "C": 1,
+          "envMode": "fast",
+          "envProbePre": 24.29,
+          "envProbePost": 24.69,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10652,
+          "throughputDriverVerified": 18.78,
+          "latP50": 52,
+          "latP95": 58,
+          "latP99": 84,
+          "latMax": 97,
+          "driverCpuMaxPct": 1.9,
+          "api": {
+            "vmHwmKb": 328588,
+            "vmRssKbMax": 330208,
+            "threadsTotalMax": 15,
+            "busyThreadsMaxWindow": 5,
+            "busyNonMainMaxWindow": 4
+          },
+          "activeWindow": {
+            "activeWallMs": 10853,
+            "activeCpuMs": 12270,
+            "activeMainThreadMs": 900,
+            "busyThreadsMax": 5,
+            "busyThreadsNonMainMax": 4,
+            "activeTickSpan": [
+              2519,
+              13372
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 65.6,
+            "snapshotP90MedianMs": 1.27,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1484
+          }
+        }
+      ],
+      "16": [
+        {
+          "runId": "L1-VERIFY-http-c16-r1",
+          "C": 16,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 8846,
+          "throughputDriverVerified": 22.61,
+          "latP50": 701,
+          "latP95": 739,
+          "latP99": 780,
+          "latMax": 800,
+          "driverCpuMaxPct": 8.4,
+          "api": {
+            "vmHwmKb": 526476,
+            "vmRssKbMax": 528256,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 8852,
+            "activeCpuMs": 91020,
+            "activeMainThreadMs": 3510,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3035,
+              11887
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 83.62,
+            "snapshotP90MedianMs": 2.1,
+            "snapshotCount": 13
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1477
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r10",
+          "C": 16,
+          "envMode": "fast",
+          "envProbePre": 24.08,
+          "envProbePost": 24.04,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4870,
+          "throughputDriverVerified": 41.06,
+          "latP50": 377,
+          "latP95": 426,
+          "latP99": 440,
+          "latMax": 441,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 524988,
+            "vmRssKbMax": 526356,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 7,
+            "busyNonMainMaxWindow": 6
+          },
+          "activeWindow": {
+            "activeWallMs": 5106,
+            "activeCpuMs": 41870,
+            "activeMainThreadMs": 1700,
+            "busyThreadsMax": 7,
+            "busyThreadsNonMainMax": 6,
+            "activeTickSpan": [
+              2523,
+              7629
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 58.59,
+            "snapshotP90MedianMs": 1.55,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r2",
+          "C": 16,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 9042,
+          "throughputDriverVerified": 22.12,
+          "latP50": 717,
+          "latP95": 773,
+          "latP99": 834,
+          "latMax": 858,
+          "driverCpuMaxPct": 9.1,
+          "api": {
+            "vmHwmKb": 525396,
+            "vmRssKbMax": 527092,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 9079,
+            "activeCpuMs": 91730,
+            "activeMainThreadMs": 3940,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              3048,
+              12127
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 87.49,
+            "snapshotP90MedianMs": 1.96,
+            "snapshotCount": 14
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1479
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r3",
+          "C": 16,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6735,
+          "throughputDriverVerified": 29.7,
+          "latP50": 532,
+          "latP95": 577,
+          "latP99": 593,
+          "latMax": 597,
+          "driverCpuMaxPct": 7.3,
+          "api": {
+            "vmHwmKb": 527652,
+            "vmRssKbMax": 528916,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6931,
+            "activeCpuMs": 64130,
+            "activeMainThreadMs": 2600,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3043,
+              9974
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 85.13,
+            "snapshotP90MedianMs": 1.94,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r4",
+          "C": 16,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 8857,
+          "throughputDriverVerified": 22.58,
+          "latP50": 697,
+          "latP95": 748,
+          "latP99": 829,
+          "latMax": 842,
+          "driverCpuMaxPct": 8.4,
+          "api": {
+            "vmHwmKb": 525264,
+            "vmRssKbMax": 527456,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 8868,
+            "activeCpuMs": 89680,
+            "activeMainThreadMs": 3850,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3042,
+              11910
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 82.44,
+            "snapshotP90MedianMs": 2.27,
+            "snapshotCount": 13
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1477
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r5",
+          "C": 16,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4923,
+          "throughputDriverVerified": 40.63,
+          "latP50": 389,
+          "latP95": 427,
+          "latP99": 443,
+          "latMax": 445,
+          "driverCpuMaxPct": 6,
+          "api": {
+            "vmHwmKb": 525244,
+            "vmRssKbMax": 527100,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5112,
+            "activeCpuMs": 42800,
+            "activeMainThreadMs": 1860,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2522,
+              7634
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 75.37,
+            "snapshotP90MedianMs": 1.48,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1465
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r6",
+          "C": 16,
+          "envMode": "fast",
+          "envProbePre": 23.82,
+          "envProbePost": 24.21,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4827,
+          "throughputDriverVerified": 41.44,
+          "latP50": 372,
+          "latP95": 421,
+          "latP99": 447,
+          "latMax": 465,
+          "driverCpuMaxPct": 5.9,
+          "api": {
+            "vmHwmKb": 525952,
+            "vmRssKbMax": 527344,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5104,
+            "activeCpuMs": 41600,
+            "activeMainThreadMs": 1740,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2523,
+              7627
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.6,
+            "snapshotP90MedianMs": 1.36,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r7",
+          "C": 16,
+          "envMode": "fast",
+          "envProbePre": 23.98,
+          "envProbePost": 24.11,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4954,
+          "throughputDriverVerified": 40.37,
+          "latP50": 383,
+          "latP95": 431,
+          "latP99": 478,
+          "latMax": 486,
+          "driverCpuMaxPct": 5.8,
+          "api": {
+            "vmHwmKb": 526584,
+            "vmRssKbMax": 528028,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5104,
+            "activeCpuMs": 42370,
+            "activeMainThreadMs": 1710,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2523,
+              7627
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 68.75,
+            "snapshotP90MedianMs": 1.47,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r8",
+          "C": 16,
+          "envMode": "fast",
+          "envProbePre": 24.83,
+          "envProbePost": 24.49,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4840,
+          "throughputDriverVerified": 41.32,
+          "latP50": 378,
+          "latP95": 418,
+          "latP99": 429,
+          "latMax": 443,
+          "driverCpuMaxPct": 6,
+          "api": {
+            "vmHwmKb": 527060,
+            "vmRssKbMax": 528712,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 7,
+            "busyNonMainMaxWindow": 6
+          },
+          "activeWindow": {
+            "activeWallMs": 5098,
+            "activeCpuMs": 41850,
+            "activeMainThreadMs": 1760,
+            "busyThreadsMax": 7,
+            "busyThreadsNonMainMax": 6,
+            "activeTickSpan": [
+              2522,
+              7620
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 64,
+            "snapshotP90MedianMs": 1.46,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c16-r9",
+          "C": 16,
+          "envMode": "fast",
+          "envProbePre": 24.63,
+          "envProbePost": 24.27,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4867,
+          "throughputDriverVerified": 41.09,
+          "latP50": 380,
+          "latP95": 423,
+          "latP99": 436,
+          "latMax": 441,
+          "driverCpuMaxPct": 5.6,
+          "api": {
+            "vmHwmKb": 526864,
+            "vmRssKbMax": 528888,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5104,
+            "activeCpuMs": 42080,
+            "activeMainThreadMs": 1790,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              7624
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 77.33,
+            "snapshotP90MedianMs": 1.6,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        }
+      ],
+      "2": [
+        {
+          "runId": "L1-VERIFY-http-c2-r1",
+          "C": 2,
+          "envMode": "fast",
+          "envProbePre": 24.22,
+          "envProbePost": 24.4,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6852,
+          "throughputDriverVerified": 29.19,
+          "latP50": 68,
+          "latP95": 77,
+          "latP99": 94,
+          "latMax": 102,
+          "driverCpuMaxPct": 2.6,
+          "api": {
+            "vmHwmKb": 394540,
+            "vmRssKbMax": 396352,
+            "threadsTotalMax": 19,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 7094,
+            "activeCpuMs": 17780,
+            "activeMainThreadMs": 910,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2522,
+              9616
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.73,
+            "snapshotP90MedianMs": 1.26,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c2-r2",
+          "C": 2,
+          "envMode": "fast",
+          "envProbePre": 24.04,
+          "envProbePost": 24.57,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6717,
+          "throughputDriverVerified": 29.77,
+          "latP50": 66,
+          "latP95": 74,
+          "latP99": 99,
+          "latMax": 100,
+          "driverCpuMaxPct": 2.5,
+          "api": {
+            "vmHwmKb": 395388,
+            "vmRssKbMax": 396920,
+            "threadsTotalMax": 19,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 6849,
+            "activeCpuMs": 16960,
+            "activeMainThreadMs": 910,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2522,
+              9371
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 61.24,
+            "snapshotP90MedianMs": 1.27,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c2-r3",
+          "C": 2,
+          "envMode": "fast",
+          "envProbePre": 24.51,
+          "envProbePost": 24.56,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6849,
+          "throughputDriverVerified": 29.2,
+          "latP50": 67,
+          "latP95": 79,
+          "latP99": 101,
+          "latMax": 103,
+          "driverCpuMaxPct": 2.5,
+          "api": {
+            "vmHwmKb": 396176,
+            "vmRssKbMax": 397584,
+            "threadsTotalMax": 19,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 7088,
+            "activeCpuMs": 17660,
+            "activeMainThreadMs": 900,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2520,
+              9608
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 75.63,
+            "snapshotP90MedianMs": 1.27,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c2-r4",
+          "C": 2,
+          "envMode": "fast",
+          "envProbePre": 24.81,
+          "envProbePost": 24.68,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6648,
+          "throughputDriverVerified": 30.08,
+          "latP50": 66,
+          "latP95": 75,
+          "latP99": 80,
+          "latMax": 105,
+          "driverCpuMaxPct": 2.7,
+          "api": {
+            "vmHwmKb": 395652,
+            "vmRssKbMax": 397172,
+            "threadsTotalMax": 19,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 6831,
+            "activeCpuMs": 16670,
+            "activeMainThreadMs": 960,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2520,
+              9351
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 78.58,
+            "snapshotP90MedianMs": 1.31,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 649,
+            "sqlTotalLast": 1476
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c2-r5",
+          "C": 2,
+          "envMode": "fast",
+          "envProbePre": 24.7,
+          "envProbePost": 24.67,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6697,
+          "throughputDriverVerified": 29.87,
+          "latP50": 66,
+          "latP95": 73,
+          "latP99": 102,
+          "latMax": 110,
+          "driverCpuMaxPct": 2.6,
+          "api": {
+            "vmHwmKb": 394852,
+            "vmRssKbMax": 396512,
+            "threadsTotalMax": 19,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6842,
+            "activeCpuMs": 16680,
+            "activeMainThreadMs": 950,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2527,
+              9369
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 62.85,
+            "snapshotP90MedianMs": 1.28,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 649,
+            "sqlTotalLast": 1476
+          }
+        }
+      ],
+      "3": [
+        {
+          "runId": "L1-VERIFY-http-c3-r1",
+          "C": 3,
+          "envMode": "fast",
+          "envProbePre": 24.83,
+          "envProbePost": 24.29,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5734,
+          "throughputDriverVerified": 34.88,
+          "latP50": 85,
+          "latP95": 98,
+          "latP99": 106,
+          "latMax": 108,
+          "driverCpuMaxPct": 3.8,
+          "api": {
+            "vmHwmKb": 459056,
+            "vmRssKbMax": 455488,
+            "threadsTotalMax": 23,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5841,
+            "activeCpuMs": 25920,
+            "activeMainThreadMs": 1200,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              8361
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 61.51,
+            "snapshotP90MedianMs": 1.39,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c3-r2",
+          "C": 3,
+          "envMode": "fast",
+          "envProbePre": 23.7,
+          "envProbePost": 24.34,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5685,
+          "throughputDriverVerified": 35.18,
+          "latP50": 84,
+          "latP95": 93,
+          "latP99": 107,
+          "latMax": 110,
+          "driverCpuMaxPct": 3.5,
+          "api": {
+            "vmHwmKb": 460292,
+            "vmRssKbMax": 461580,
+            "threadsTotalMax": 23,
+            "busyThreadsMaxWindow": 7,
+            "busyNonMainMaxWindow": 6
+          },
+          "activeWindow": {
+            "activeWallMs": 5848,
+            "activeCpuMs": 26220,
+            "activeMainThreadMs": 1120,
+            "busyThreadsMax": 7,
+            "busyThreadsNonMainMax": 6,
+            "activeTickSpan": [
+              2521,
+              8369
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.5,
+            "snapshotP90MedianMs": 1.3,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c3-r3",
+          "C": 3,
+          "envMode": "fast",
+          "envProbePre": 24.22,
+          "envProbePost": 24.15,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5764,
+          "throughputDriverVerified": 34.7,
+          "latP50": 86,
+          "latP95": 95,
+          "latP99": 103,
+          "latMax": 130,
+          "driverCpuMaxPct": 3.4,
+          "api": {
+            "vmHwmKb": 461008,
+            "vmRssKbMax": 462564,
+            "threadsTotalMax": 23,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6117,
+            "activeCpuMs": 27560,
+            "activeMainThreadMs": 1060,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              8637
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 68.49,
+            "snapshotP90MedianMs": 1.3,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c3-r4",
+          "C": 3,
+          "envMode": "fast",
+          "envProbePre": 23.99,
+          "envProbePost": 24.18,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5723,
+          "throughputDriverVerified": 34.95,
+          "latP50": 86,
+          "latP95": 95,
+          "latP99": 107,
+          "latMax": 108,
+          "driverCpuMaxPct": 3.4,
+          "api": {
+            "vmHwmKb": 461376,
+            "vmRssKbMax": 463360,
+            "threadsTotalMax": 23,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5855,
+            "activeCpuMs": 26610,
+            "activeMainThreadMs": 1110,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2519,
+              8374
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 62.42,
+            "snapshotP90MedianMs": 1.33,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c3-r5",
+          "C": 3,
+          "envMode": "fast",
+          "envProbePre": 24.76,
+          "envProbePost": 23.73,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5731,
+          "throughputDriverVerified": 34.9,
+          "latP50": 85,
+          "latP95": 96,
+          "latP99": 131,
+          "latMax": 133,
+          "driverCpuMaxPct": 3.9,
+          "api": {
+            "vmHwmKb": 460540,
+            "vmRssKbMax": 439648,
+            "threadsTotalMax": 23,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5837,
+            "activeCpuMs": 25000,
+            "activeMainThreadMs": 1300,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              8357
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.93,
+            "snapshotP90MedianMs": 1.4,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        }
+      ],
+      "32": [
+        {
+          "runId": "L1-VERIFY-http-c32-r1",
+          "C": 32,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4994,
+          "throughputDriverVerified": 40.05,
+          "latP50": 765,
+          "latP95": 849,
+          "latP99": 858,
+          "latMax": 860,
+          "driverCpuMaxPct": 5.4,
+          "api": {
+            "vmHwmKb": 526344,
+            "vmRssKbMax": 527856,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5107,
+            "activeCpuMs": 42440,
+            "activeMainThreadMs": 1660,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2521,
+              7628
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 60.49,
+            "snapshotP90MedianMs": 1.36,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1465
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r10",
+          "C": 32,
+          "envMode": "fast",
+          "envProbePre": 24.46,
+          "envProbePost": 24.07,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4900,
+          "throughputDriverVerified": 40.81,
+          "latP50": 763,
+          "latP95": 830,
+          "latP99": 838,
+          "latMax": 845,
+          "driverCpuMaxPct": 5.3,
+          "api": {
+            "vmHwmKb": 525988,
+            "vmRssKbMax": 527484,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5125,
+            "activeCpuMs": 41890,
+            "activeMainThreadMs": 1660,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2523,
+              7648
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 64.85,
+            "snapshotP90MedianMs": 1.35,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r2",
+          "C": 32,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4981,
+          "throughputDriverVerified": 40.15,
+          "latP50": 764,
+          "latP95": 838,
+          "latP99": 878,
+          "latMax": 892,
+          "driverCpuMaxPct": 5.6,
+          "api": {
+            "vmHwmKb": 526884,
+            "vmRssKbMax": 528172,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5110,
+            "activeCpuMs": 42460,
+            "activeMainThreadMs": 1760,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2523,
+              7633
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 77.07,
+            "snapshotP90MedianMs": 1.42,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r3",
+          "C": 32,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4815,
+          "throughputDriverVerified": 41.53,
+          "latP50": 745,
+          "latP95": 825,
+          "latP99": 837,
+          "latMax": 838,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 526812,
+            "vmRssKbMax": 528284,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5107,
+            "activeCpuMs": 41400,
+            "activeMainThreadMs": 1760,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              7627
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.73,
+            "snapshotP90MedianMs": 1.37,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 643,
+            "sqlTotalLast": 1465
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r4",
+          "C": 32,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5061,
+          "throughputDriverVerified": 39.52,
+          "latP50": 782,
+          "latP95": 861,
+          "latP99": 879,
+          "latMax": 890,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 526808,
+            "vmRssKbMax": 528140,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5414,
+            "activeCpuMs": 44560,
+            "activeMainThreadMs": 1810,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              7934
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 69.01,
+            "snapshotP90MedianMs": 1.41,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 643,
+            "sqlTotalLast": 1465
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r5",
+          "C": 32,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4943,
+          "throughputDriverVerified": 40.46,
+          "latP50": 770,
+          "latP95": 847,
+          "latP99": 872,
+          "latMax": 873,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 526792,
+            "vmRssKbMax": 527844,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5127,
+            "activeCpuMs": 43220,
+            "activeMainThreadMs": 1820,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2523,
+              7650
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.77,
+            "snapshotP90MedianMs": 1.43,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 643,
+            "sqlTotalLast": 1465
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r6",
+          "C": 32,
+          "envMode": "fast",
+          "envProbePre": 24.12,
+          "envProbePost": 24.31,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4870,
+          "throughputDriverVerified": 41.07,
+          "latP50": 759,
+          "latP95": 819,
+          "latP99": 858,
+          "latMax": 863,
+          "driverCpuMaxPct": 5.4,
+          "api": {
+            "vmHwmKb": 527688,
+            "vmRssKbMax": 529336,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 7,
+            "busyNonMainMaxWindow": 6
+          },
+          "activeWindow": {
+            "activeWallMs": 5118,
+            "activeCpuMs": 41620,
+            "activeMainThreadMs": 1640,
+            "busyThreadsMax": 7,
+            "busyThreadsNonMainMax": 6,
+            "activeTickSpan": [
+              2520,
+              7638
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 62.55,
+            "snapshotP90MedianMs": 1.39,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r7",
+          "C": 32,
+          "envMode": "fast",
+          "envProbePre": 24.22,
+          "envProbePost": 24.37,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4852,
+          "throughputDriverVerified": 41.22,
+          "latP50": 752,
+          "latP95": 821,
+          "latP99": 835,
+          "latMax": 838,
+          "driverCpuMaxPct": 5.6,
+          "api": {
+            "vmHwmKb": 525820,
+            "vmRssKbMax": 527868,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 7,
+            "busyNonMainMaxWindow": 6
+          },
+          "activeWindow": {
+            "activeWallMs": 5109,
+            "activeCpuMs": 41340,
+            "activeMainThreadMs": 1700,
+            "busyThreadsMax": 7,
+            "busyThreadsNonMainMax": 6,
+            "activeTickSpan": [
+              2521,
+              7630
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 61.93,
+            "snapshotP90MedianMs": 1.43,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r8",
+          "C": 32,
+          "envMode": "fast",
+          "envProbePre": 24.81,
+          "envProbePost": 24.22,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4912,
+          "throughputDriverVerified": 40.72,
+          "latP50": 759,
+          "latP95": 830,
+          "latP99": 837,
+          "latMax": 838,
+          "driverCpuMaxPct": 5.5,
+          "api": {
+            "vmHwmKb": 525512,
+            "vmRssKbMax": 527184,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5148,
+            "activeCpuMs": 41760,
+            "activeMainThreadMs": 1690,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2521,
+              7669
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 64.55,
+            "snapshotP90MedianMs": 1.32,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c32-r9",
+          "C": 32,
+          "envMode": "fast",
+          "envProbePre": 25.11,
+          "envProbePost": 24.48,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4863,
+          "throughputDriverVerified": 41.12,
+          "latP50": 744,
+          "latP95": 847,
+          "latP99": 863,
+          "latMax": 866,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 525980,
+            "vmRssKbMax": 527600,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5106,
+            "activeCpuMs": 41920,
+            "activeMainThreadMs": 1800,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              7626
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 78.71,
+            "snapshotP90MedianMs": 1.43,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        }
+      ],
+      "4": [
+        {
+          "runId": "L1-VERIFY-http-c4-r1",
+          "C": 4,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6985,
+          "throughputDriverVerified": 28.63,
+          "latP50": 138,
+          "latP95": 156,
+          "latP99": 172,
+          "latMax": 174,
+          "driverCpuMaxPct": 5.6,
+          "api": {
+            "vmHwmKb": 526260,
+            "vmRssKbMax": 527328,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 7189,
+            "activeCpuMs": 53640,
+            "activeMainThreadMs": 2120,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3039,
+              10228
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 97.58,
+            "snapshotP90MedianMs": 1.5,
+            "snapshotCount": 12
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1475
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r10",
+          "C": 4,
+          "envMode": "fast",
+          "envProbePre": 24.73,
+          "envProbePost": 24.39,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5202,
+          "throughputDriverVerified": 38.45,
+          "latP50": 103,
+          "latP95": 117,
+          "latP99": 133,
+          "latMax": 137,
+          "driverCpuMaxPct": 4.6,
+          "api": {
+            "vmHwmKb": 526236,
+            "vmRssKbMax": 527784,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5343,
+            "activeCpuMs": 35280,
+            "activeMainThreadMs": 1420,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2521,
+              7864
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 65.11,
+            "snapshotP90MedianMs": 1.42,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r2",
+          "C": 4,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6830,
+          "throughputDriverVerified": 29.28,
+          "latP50": 135,
+          "latP95": 152,
+          "latP99": 167,
+          "latMax": 176,
+          "driverCpuMaxPct": 5.4,
+          "api": {
+            "vmHwmKb": 525608,
+            "vmRssKbMax": 527356,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6917,
+            "activeCpuMs": 52670,
+            "activeMainThreadMs": 1860,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3038,
+              9955
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 88.6,
+            "snapshotP90MedianMs": 1.49,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r3",
+          "C": 4,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6776,
+          "throughputDriverVerified": 29.52,
+          "latP50": 134,
+          "latP95": 148,
+          "latP99": 151,
+          "latMax": 152,
+          "driverCpuMaxPct": 5.8,
+          "api": {
+            "vmHwmKb": 526408,
+            "vmRssKbMax": 528060,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6917,
+            "activeCpuMs": 51700,
+            "activeMainThreadMs": 2050,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3038,
+              9955
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 80.35,
+            "snapshotP90MedianMs": 1.55,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r4",
+          "C": 4,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 8967,
+          "throughputDriverVerified": 22.3,
+          "latP50": 177,
+          "latP95": 201,
+          "latP99": 227,
+          "latMax": 228,
+          "driverCpuMaxPct": 6.3,
+          "api": {
+            "vmHwmKb": 526492,
+            "vmRssKbMax": 528428,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 9017,
+            "activeCpuMs": 75600,
+            "activeMainThreadMs": 2690,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3040,
+              12057
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 83.17,
+            "snapshotP90MedianMs": 1.6,
+            "snapshotCount": 14
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1479
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r5",
+          "C": 4,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6903,
+          "throughputDriverVerified": 28.97,
+          "latP50": 137,
+          "latP95": 154,
+          "latP99": 162,
+          "latMax": 174,
+          "driverCpuMaxPct": 5.5,
+          "api": {
+            "vmHwmKb": 525772,
+            "vmRssKbMax": 527168,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6911,
+            "activeCpuMs": 53670,
+            "activeMainThreadMs": 1920,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3039,
+              9950
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 81.85,
+            "snapshotP90MedianMs": 1.47,
+            "snapshotCount": 12
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1475
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r6",
+          "C": 4,
+          "envMode": "fast",
+          "envProbePre": 24.72,
+          "envProbePost": 23.92,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5156,
+          "throughputDriverVerified": 38.79,
+          "latP50": 101,
+          "latP95": 117,
+          "latP99": 126,
+          "latMax": 127,
+          "driverCpuMaxPct": 4.3,
+          "api": {
+            "vmHwmKb": 525584,
+            "vmRssKbMax": 527572,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5353,
+            "activeCpuMs": 35170,
+            "activeMainThreadMs": 1330,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2524,
+              7877
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 60.13,
+            "snapshotP90MedianMs": 1.44,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r7",
+          "C": 4,
+          "envMode": "fast",
+          "envProbePre": 24.81,
+          "envProbePost": 24.64,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5201,
+          "throughputDriverVerified": 38.46,
+          "latP50": 103,
+          "latP95": 118,
+          "latP99": 124,
+          "latMax": 126,
+          "driverCpuMaxPct": 4.6,
+          "api": {
+            "vmHwmKb": 525724,
+            "vmRssKbMax": 527572,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 7,
+            "busyNonMainMaxWindow": 6
+          },
+          "activeWindow": {
+            "activeWallMs": 5346,
+            "activeCpuMs": 35420,
+            "activeMainThreadMs": 1370,
+            "busyThreadsMax": 7,
+            "busyThreadsNonMainMax": 6,
+            "activeTickSpan": [
+              2521,
+              7867
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 62.78,
+            "snapshotP90MedianMs": 1.46,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r8",
+          "C": 4,
+          "envMode": "fast",
+          "envProbePre": 24.1,
+          "envProbePost": 24.41,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5267,
+          "throughputDriverVerified": 37.97,
+          "latP50": 103,
+          "latP95": 119,
+          "latP99": 126,
+          "latMax": 128,
+          "driverCpuMaxPct": 4.6,
+          "api": {
+            "vmHwmKb": 525696,
+            "vmRssKbMax": 527152,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 8,
+            "busyNonMainMaxWindow": 7
+          },
+          "activeWindow": {
+            "activeWallMs": 5350,
+            "activeCpuMs": 36220,
+            "activeMainThreadMs": 1440,
+            "busyThreadsMax": 8,
+            "busyThreadsNonMainMax": 7,
+            "activeTickSpan": [
+              2523,
+              7873
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 64.72,
+            "snapshotP90MedianMs": 1.51,
+            "snapshotCount": 10
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1471
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c4-r9",
+          "C": 4,
+          "envMode": "fast",
+          "envProbePre": 24.17,
+          "envProbePost": 24.55,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 5130,
+          "throughputDriverVerified": 38.99,
+          "latP50": 101,
+          "latP95": 116,
+          "latP99": 124,
+          "latMax": 139,
+          "driverCpuMaxPct": 4.5,
+          "api": {
+            "vmHwmKb": 526540,
+            "vmRssKbMax": 528032,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5335,
+            "activeCpuMs": 34820,
+            "activeMainThreadMs": 1340,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2522,
+              7857
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 63.9,
+            "snapshotP90MedianMs": 1.46,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        }
+      ],
+      "8": [
+        {
+          "runId": "L1-VERIFY-http-c8-r1",
+          "C": 8,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6654,
+          "throughputDriverVerified": 30.06,
+          "latP50": 262,
+          "latP95": 314,
+          "latP99": 325,
+          "latMax": 327,
+          "driverCpuMaxPct": 7.7,
+          "api": {
+            "vmHwmKb": 526484,
+            "vmRssKbMax": 527852,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6695,
+            "activeCpuMs": 63150,
+            "activeMainThreadMs": 2770,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3040,
+              9735
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 110.62,
+            "snapshotP90MedianMs": 1.74,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r10",
+          "C": 8,
+          "envMode": "fast",
+          "envProbePre": 23.95,
+          "envProbePost": 24.37,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4896,
+          "throughputDriverVerified": 40.85,
+          "latP50": 193,
+          "latP95": 218,
+          "latP99": 228,
+          "latMax": 235,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 525804,
+            "vmRssKbMax": 527920,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5116,
+            "activeCpuMs": 42390,
+            "activeMainThreadMs": 1670,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2518,
+              7634
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 62.03,
+            "snapshotP90MedianMs": 1.46,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r2",
+          "C": 8,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 10149,
+          "throughputDriverVerified": 19.71,
+          "latP50": 398,
+          "latP95": 467,
+          "latP99": 488,
+          "latMax": 511,
+          "driverCpuMaxPct": 9.2,
+          "api": {
+            "vmHwmKb": 526020,
+            "vmRssKbMax": 527488,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 10179,
+            "activeCpuMs": 103580,
+            "activeMainThreadMs": 4680,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3036,
+              13215
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 92.27,
+            "snapshotP90MedianMs": 2.74,
+            "snapshotCount": 15
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1484
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r3",
+          "C": 8,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6701,
+          "throughputDriverVerified": 29.85,
+          "latP50": 266,
+          "latP95": 294,
+          "latP99": 305,
+          "latMax": 309,
+          "driverCpuMaxPct": 6.9,
+          "api": {
+            "vmHwmKb": 526284,
+            "vmRssKbMax": 528148,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6956,
+            "activeCpuMs": 62890,
+            "activeMainThreadMs": 2470,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3034,
+              9990
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 84.34,
+            "snapshotP90MedianMs": 1.84,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r4",
+          "C": 8,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 6820,
+          "throughputDriverVerified": 29.32,
+          "latP50": 267,
+          "latP95": 307,
+          "latP99": 323,
+          "latMax": 336,
+          "driverCpuMaxPct": 7.8,
+          "api": {
+            "vmHwmKb": 525572,
+            "vmRssKbMax": 522716,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 6939,
+            "activeCpuMs": 64670,
+            "activeMainThreadMs": 2780,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3035,
+              9974
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 92.54,
+            "snapshotP90MedianMs": 2.27,
+            "snapshotCount": 11
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1473
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r5",
+          "C": 8,
+          "envMode": "unprobed",
+          "envProbePre": null,
+          "envProbePost": null,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 8882,
+          "throughputDriverVerified": 22.52,
+          "latP50": 353,
+          "latP95": 393,
+          "latP99": 409,
+          "latMax": 430,
+          "driverCpuMaxPct": 8.4,
+          "api": {
+            "vmHwmKb": 525444,
+            "vmRssKbMax": 527316,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 8869,
+            "activeCpuMs": 90640,
+            "activeMainThreadMs": 3790,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              3043,
+              11912
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 102.43,
+            "snapshotP90MedianMs": 2.11,
+            "snapshotCount": 13
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1477
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r6",
+          "C": 8,
+          "envMode": "fast",
+          "envProbePre": 24.61,
+          "envProbePost": 24.03,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4909,
+          "throughputDriverVerified": 40.74,
+          "latP50": 195,
+          "latP95": 219,
+          "latP99": 235,
+          "latMax": 236,
+          "driverCpuMaxPct": 5.7,
+          "api": {
+            "vmHwmKb": 524684,
+            "vmRssKbMax": 526308,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5102,
+            "activeCpuMs": 42240,
+            "activeMainThreadMs": 1680,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2523,
+              7625
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 59.11,
+            "snapshotP90MedianMs": 1.65,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r7",
+          "C": 8,
+          "envMode": "fast",
+          "envProbePre": 24.65,
+          "envProbePost": 24.09,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4866,
+          "throughputDriverVerified": 41.1,
+          "latP50": 192,
+          "latP95": 217,
+          "latP99": 226,
+          "latMax": 233,
+          "driverCpuMaxPct": 6,
+          "api": {
+            "vmHwmKb": 526376,
+            "vmRssKbMax": 527652,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5100,
+            "activeCpuMs": 42430,
+            "activeMainThreadMs": 1840,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2522,
+              7622
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 76.22,
+            "snapshotP90MedianMs": 1.69,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r8",
+          "C": 8,
+          "envMode": "fast",
+          "envProbePre": 24.45,
+          "envProbePost": 24.34,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4963,
+          "throughputDriverVerified": 40.3,
+          "latP50": 192,
+          "latP95": 226,
+          "latP99": 240,
+          "latMax": 246,
+          "driverCpuMaxPct": 5.9,
+          "api": {
+            "vmHwmKb": 526136,
+            "vmRssKbMax": 527484,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5126,
+            "activeCpuMs": 42540,
+            "activeMainThreadMs": 1800,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2520,
+              7646
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 65.96,
+            "snapshotP90MedianMs": 1.74,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        },
+        {
+          "runId": "L1-VERIFY-http-c8-r9",
+          "C": 8,
+          "envMode": "fast",
+          "envProbePre": 24.83,
+          "envProbePost": 24.28,
+          "N": 200,
+          "offered": 200,
+          "sent": 200,
+          "dropped": 0,
+          "statusTally": {
+            "200": 200
+          },
+          "verifiedDriver": 200,
+          "dbSuccess": 200,
+          "dbDistinct": 200,
+          "wallMs": 4884,
+          "throughputDriverVerified": 40.95,
+          "latP50": 191,
+          "latP95": 218,
+          "latP99": 225,
+          "latMax": 246,
+          "driverCpuMaxPct": 5.5,
+          "api": {
+            "vmHwmKb": 525276,
+            "vmRssKbMax": 526796,
+            "threadsTotalMax": 27,
+            "busyThreadsMaxWindow": 9,
+            "busyNonMainMaxWindow": 8
+          },
+          "activeWindow": {
+            "activeWallMs": 5106,
+            "activeCpuMs": 41050,
+            "activeMainThreadMs": 1570,
+            "busyThreadsMax": 9,
+            "busyThreadsNonMainMax": 8,
+            "activeTickSpan": [
+              2523,
+              7629
+            ]
+          },
+          "el": {
+            "snapshotMaxMs": 61.37,
+            "snapshotP90MedianMs": 1.47,
+            "snapshotCount": 9
+          },
+          "pool": {
+            "note": "postgres.js 3.4.9 \u672a\u66b4\u9732 reserved/available/pending\uff08observedFields=[]\uff09\u2192 \u6c60\u7b49\u5f85 NOT_DIRECTLY_OBSERVABLE\uff08\u8fdb\u7a0b\u5185\uff09\uff1bL1 \u672a\u8dd1 pg_stat_activity \u91c7\u6837\u5668\u3002\u95f4\u63a5\u8bc1\u636e\uff1aargon2 \u5728\u4e24\u6b21\u67e5\u8be2\u4e4b\u95f4\u4e0d\u5360\u8fde\u63a5\u3001RTT \u589e\u957f\u53ef\u5168\u7531\u539f\u751f\u69fd\u4f4d\u6392\u961f\u89e3\u91ca\uff0c\u4f46\u6c60\u7b49\u5f85\u672c\u8eab\u672a\u76f4\u63a5\u89c2\u6d4b\u3002",
+            "sqlTotalFirst": 646,
+            "sqlTotalLast": 1469
+          }
+        }
+      ]
+    }
+  },
+  "perPoint": {
+    "isolated": {
+      "1": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 24.43,
+            "min": 24.19,
+            "max": 24.58,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 55.483,
+            "min": 54.95,
+            "max": 56.633,
+            "n": 5
+          },
+          "durP50": {
+            "median": 40.654,
+            "min": 40.28,
+            "max": 40.959,
+            "n": 5
+          },
+          "durP95": {
+            "median": 44.202,
+            "min": 43.404,
+            "max": 44.379,
+            "n": 5
+          },
+          "durP99": {
+            "median": 48.369,
+            "min": 46.114,
+            "max": 51.48,
+            "n": 5
+          },
+          "durMax": {
+            "median": 56.125,
+            "min": 50.171,
+            "max": 57.605,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 1.355,
+            "min": 1.347,
+            "max": 1.37,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 331492,
+            "min": 327444,
+            "max": 341884,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 3.78,
+            "min": 3.54,
+            "max": 4.75,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.0061,
+          "cpuPerOpMs": 0.0097,
+          "durP50": 0.0092,
+          "durP95": 0.0074,
+          "durP99": 0.0448,
+          "durMax": 0.138,
+          "avgBusyThreads": 0.0037,
+          "vmHwmKb": 0.003,
+          "elMaxMsMaxOfTicks": 0.1425
+        }
+      },
+      "2": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 35.05,
+            "min": 34.72,
+            "max": 35.49,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 87.15,
+            "min": 85.967,
+            "max": 88.65,
+            "n": 5
+          },
+          "durP50": {
+            "median": 56.684,
+            "min": 55.848,
+            "max": 57.141,
+            "n": 5
+          },
+          "durP95": {
+            "median": 63.797,
+            "min": 62.121,
+            "max": 64.995,
+            "n": 5
+          },
+          "durP99": {
+            "median": 67.553,
+            "min": 65.453,
+            "max": 71.618,
+            "n": 5
+          },
+          "durMax": {
+            "median": 72.8,
+            "min": 70.884,
+            "max": 79.469,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 3.06,
+            "min": 3.049,
+            "max": 3.078,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 346356,
+            "min": 344988,
+            "max": 349088,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 4.07,
+            "min": 3.4,
+            "max": 4.94,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.0219,
+          "cpuPerOpMs": 0.0307,
+          "durP50": 0.0229,
+          "durP95": 0.0452,
+          "durP99": 0.0549,
+          "durMax": 0.0607,
+          "avgBusyThreads": 0.0088,
+          "vmHwmKb": 0.0109,
+          "elMaxMsMaxOfTicks": 0.2406
+        }
+      },
+      "3": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 38.58,
+            "min": 38.55,
+            "max": 38.83,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 148.05,
+            "min": 146.65,
+            "max": 148.583,
+            "n": 5
+          },
+          "durP50": {
+            "median": 77.407,
+            "min": 76.515,
+            "max": 77.667,
+            "n": 5
+          },
+          "durP95": {
+            "median": 84.796,
+            "min": 84.064,
+            "max": 85.646,
+            "n": 5
+          },
+          "durP99": {
+            "median": 89.482,
+            "min": 87.786,
+            "max": 92.196,
+            "n": 5
+          },
+          "durMax": {
+            "median": 94.755,
+            "min": 92.007,
+            "max": 95.083,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 5.714,
+            "min": 5.69,
+            "max": 5.739,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 411424,
+            "min": 410416,
+            "max": 413808,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 5.5,
+            "min": 5.01,
+            "max": 5.79,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.0072,
+          "cpuPerOpMs": 0.0052,
+          "durP50": 0.0116,
+          "durP95": 0.0073,
+          "durP99": 0.049,
+          "durMax": 0.0035,
+          "avgBusyThreads": 0.0019,
+          "vmHwmKb": 0.0025,
+          "elMaxMsMaxOfTicks": 0.1444
+        }
+      },
+      "4": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 41.84,
+            "min": 41.62,
+            "max": 41.94,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 202.383,
+            "min": 200.067,
+            "max": 203.983,
+            "n": 5
+          },
+          "durP50": {
+            "median": 95.594,
+            "min": 94.819,
+            "max": 95.731,
+            "n": 5
+          },
+          "durP95": {
+            "median": 105.917,
+            "min": 104.499,
+            "max": 107.424,
+            "n": 5
+          },
+          "durP99": {
+            "median": 111.838,
+            "min": 109.046,
+            "max": 112.265,
+            "n": 5
+          },
+          "durMax": {
+            "median": 116.085,
+            "min": 111.454,
+            "max": 117.71,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 8.48,
+            "min": 8.379,
+            "max": 8.503,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 476272,
+            "min": 475256,
+            "max": 477636,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 6.01,
+            "min": 5.71,
+            "max": 6.59,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.0053,
+          "cpuPerOpMs": 0.0077,
+          "durP50": 0.0088,
+          "durP95": 0.0061,
+          "durP99": 0.0022,
+          "durMax": 0.0036,
+          "avgBusyThreads": 0.0025,
+          "vmHwmKb": 0.0012,
+          "elMaxMsMaxOfTicks": 0.0583
+        }
+      },
+      "8": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 41.46,
+            "min": 41.12,
+            "max": 41.7,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 203.967,
+            "min": 203.7,
+            "max": 206.833,
+            "n": 5
+          },
+          "durP50": {
+            "median": 192.916,
+            "min": 191.364,
+            "max": 194.151,
+            "n": 5
+          },
+          "durP95": {
+            "median": 206.836,
+            "min": 204.982,
+            "max": 208.564,
+            "n": 5
+          },
+          "durP99": {
+            "median": 214.344,
+            "min": 212.59,
+            "max": 215.035,
+            "n": 5
+          },
+          "durMax": {
+            "median": 221.575,
+            "min": 220.367,
+            "max": 226.487,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 8.474,
+            "min": 8.445,
+            "max": 8.506,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 478184,
+            "min": 475704,
+            "max": 488156,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 6.16,
+            "min": 5.41,
+            "max": 8.27,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.0022,
+          "cpuPerOpMs": 0.0013,
+          "durP50": 0.0037,
+          "durP95": 0.0009,
+          "durP99": 0.0074,
+          "durMax": 0.015,
+          "avgBusyThreads": 0.0034,
+          "vmHwmKb": 0.0162,
+          "elMaxMsMaxOfTicks": 0.3036
+        }
+      },
+      "16": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 40.81,
+            "min": 40.51,
+            "max": 41.43,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 209.233,
+            "min": 205.55,
+            "max": 212.467,
+            "n": 5
+          },
+          "durP50": {
+            "median": 390.854,
+            "min": 385.485,
+            "max": 394.4,
+            "n": 5
+          },
+          "durP95": {
+            "median": 412.303,
+            "min": 405.322,
+            "max": 429.05,
+            "n": 5
+          },
+          "durP99": {
+            "median": 424.408,
+            "min": 418.836,
+            "max": 447.009,
+            "n": 5
+          },
+          "durMax": {
+            "median": 429.008,
+            "min": 424.122,
+            "max": 457.187,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 8.55,
+            "min": 8.515,
+            "max": 8.608,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 476328,
+            "min": 475688,
+            "max": 477600,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 5.92,
+            "min": 4.32,
+            "max": 6.51,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.018,
+          "cpuPerOpMs": 0.0228,
+          "durP50": 0.0138,
+          "durP95": 0.0569,
+          "durP99": 0.0574,
+          "durMax": 0.065,
+          "avgBusyThreads": 0.0049,
+          "vmHwmKb": 0.004,
+          "elMaxMsMaxOfTicks": 0.0296
+        }
+      },
+      "32": {
+        "runs": 5,
+        "stats": {
+          "throughputRunner": {
+            "median": 40.44,
+            "min": 40.19,
+            "max": 40.66,
+            "n": 5
+          },
+          "cpuPerOpMs": {
+            "median": 211.65,
+            "min": 211.333,
+            "max": 213.217,
+            "n": 5
+          },
+          "durP50": {
+            "median": 790.93,
+            "min": 784.235,
+            "max": 794.381,
+            "n": 5
+          },
+          "durP95": {
+            "median": 817.667,
+            "min": 815.838,
+            "max": 864.229,
+            "n": 5
+          },
+          "durP99": {
+            "median": 828.241,
+            "min": 824.575,
+            "max": 909.597,
+            "n": 5
+          },
+          "durMax": {
+            "median": 841.237,
+            "min": 831.988,
+            "max": 930.56,
+            "n": 5
+          },
+          "avgBusyThreads": {
+            "median": 8.569,
+            "min": 8.532,
+            "max": 8.594,
+            "n": 5
+          },
+          "vmHwmKb": {
+            "median": 476248,
+            "min": 475540,
+            "max": 477968,
+            "n": 5
+          },
+          "elMaxMsMaxOfTicks": {
+            "median": 6.34,
+            "min": 5.88,
+            "max": 8.33,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputRunner": 0.0054,
+          "cpuPerOpMs": 0.0015,
+          "durP50": 0.0085,
+          "durP95": 0.0566,
+          "durP99": 0.0936,
+          "durMax": 0.1008,
+          "avgBusyThreads": 0.0041,
+          "vmHwmKb": 0.003,
+          "elMaxMsMaxOfTicks": 0.2713
+        }
+      }
+    },
+    "http": {
+      "1": {
+        "runs": 10,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 18.58,
+            "min": 12.43,
+            "max": 18.85,
+            "n": 10
+          },
+          "latP50": {
+            "median": 53.0,
+            "min": 52,
+            "max": 80,
+            "n": 10
+          },
+          "latP95": {
+            "median": 60.0,
+            "min": 57,
+            "max": 92,
+            "n": 10
+          },
+          "latP99": {
+            "median": 79.5,
+            "min": 74,
+            "max": 109,
+            "n": 10
+          },
+          "latMax": {
+            "median": 91.0,
+            "min": 80,
+            "max": 124,
+            "n": 10
+          },
+          "envModeCounts": {
+            "unprobed": 5,
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 18.58,
+            "min": 18.56,
+            "max": 18.82,
+            "n": 5
+          },
+          "thr_mode_unprobed": {
+            "median": 12.9,
+            "min": 12.43,
+            "max": 18.85,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 61.67,
+            "min": 60.3,
+            "max": 129.35,
+            "n": 10
+          },
+          "apiVmHwmKb": {
+            "median": 329254.0,
+            "min": 328108,
+            "max": 344152,
+            "n": 10
+          },
+          "apiBusyNonMainMax": {
+            "median": 5.0,
+            "min": 4,
+            "max": 5,
+            "n": 10
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.0016,
+          "latP50": 0.0,
+          "latP95": 0.0678,
+          "latP99": 0.0126,
+          "latMax": 0.0482
+        }
+      },
+      "2": {
+        "runs": 5,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 29.77,
+            "min": 29.19,
+            "max": 30.08,
+            "n": 5
+          },
+          "latP50": {
+            "median": 66,
+            "min": 66,
+            "max": 68,
+            "n": 5
+          },
+          "latP95": {
+            "median": 75,
+            "min": 73,
+            "max": 79,
+            "n": 5
+          },
+          "latP99": {
+            "median": 99,
+            "min": 80,
+            "max": 102,
+            "n": 5
+          },
+          "latMax": {
+            "median": 103,
+            "min": 100,
+            "max": 110,
+            "n": 5
+          },
+          "envModeCounts": {
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 29.77,
+            "min": 29.19,
+            "max": 30.08,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 84.8,
+            "min": 83.35,
+            "max": 88.9,
+            "n": 5
+          },
+          "apiVmHwmKb": {
+            "median": 395388,
+            "min": 394540,
+            "max": 396176,
+            "n": 5
+          },
+          "apiBusyNonMainMax": {
+            "median": 7,
+            "min": 7,
+            "max": 8,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.0197,
+          "latP50": 0.0299,
+          "latP95": 0.0397,
+          "latP99": 0.0518,
+          "latMax": 0.0198
+        }
+      },
+      "3": {
+        "runs": 5,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 34.9,
+            "min": 34.7,
+            "max": 35.18,
+            "n": 5
+          },
+          "latP50": {
+            "median": 85,
+            "min": 84,
+            "max": 86,
+            "n": 5
+          },
+          "latP95": {
+            "median": 95,
+            "min": 93,
+            "max": 98,
+            "n": 5
+          },
+          "latP99": {
+            "median": 107,
+            "min": 103,
+            "max": 131,
+            "n": 5
+          },
+          "latMax": {
+            "median": 110,
+            "min": 108,
+            "max": 133,
+            "n": 5
+          },
+          "envModeCounts": {
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 34.9,
+            "min": 34.7,
+            "max": 35.18,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 131.1,
+            "min": 125.0,
+            "max": 137.8,
+            "n": 5
+          },
+          "apiVmHwmKb": {
+            "median": 460540,
+            "min": 459056,
+            "max": 461376,
+            "n": 5
+          },
+          "apiBusyNonMainMax": {
+            "median": 8,
+            "min": 6,
+            "max": 8,
+            "n": 5
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.0086,
+          "latP50": 0.0118,
+          "latP95": 0.0524,
+          "latP99": 0.0094,
+          "latMax": 0.0183
+        }
+      },
+      "4": {
+        "runs": 10,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 33.745,
+            "min": 22.3,
+            "max": 38.99,
+            "n": 10
+          },
+          "latP50": {
+            "median": 118.5,
+            "min": 101,
+            "max": 177,
+            "n": 10
+          },
+          "latP95": {
+            "median": 133.5,
+            "min": 116,
+            "max": 201,
+            "n": 10
+          },
+          "latP99": {
+            "median": 142.0,
+            "min": 124,
+            "max": 227,
+            "n": 10
+          },
+          "latMax": {
+            "median": 145.5,
+            "min": 126,
+            "max": 228,
+            "n": 10
+          },
+          "envModeCounts": {
+            "unprobed": 5,
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 38.46,
+            "min": 37.97,
+            "max": 38.99,
+            "n": 5
+          },
+          "thr_mode_unprobed": {
+            "median": 28.97,
+            "min": 22.3,
+            "max": 29.52,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 219.8,
+            "min": 174.1,
+            "max": 378.0,
+            "n": 10
+          },
+          "apiVmHwmKb": {
+            "median": 526004.0,
+            "min": 525584,
+            "max": 526540,
+            "n": 10
+          },
+          "apiBusyNonMainMax": {
+            "median": 8.0,
+            "min": 6,
+            "max": 8,
+            "n": 10
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.2928,
+          "latP50": 0.2905,
+          "latP95": 0.2857,
+          "latP99": 0.2557,
+          "latMax": 0.2379
+        }
+      },
+      "8": {
+        "runs": 10,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 35.18,
+            "min": 19.71,
+            "max": 41.1,
+            "n": 10
+          },
+          "latP50": {
+            "median": 228.5,
+            "min": 191,
+            "max": 398,
+            "n": 10
+          },
+          "latP95": {
+            "median": 260.0,
+            "min": 217,
+            "max": 467,
+            "n": 10
+          },
+          "latP99": {
+            "median": 272.5,
+            "min": 225,
+            "max": 488,
+            "n": 10
+          },
+          "latMax": {
+            "median": 277.5,
+            "min": 233,
+            "max": 511,
+            "n": 10
+          },
+          "envModeCounts": {
+            "unprobed": 5,
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 40.85,
+            "min": 40.3,
+            "max": 41.1,
+            "n": 5
+          },
+          "thr_mode_unprobed": {
+            "median": 29.32,
+            "min": 19.71,
+            "max": 30.06,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 263.57,
+            "min": 205.25,
+            "max": 517.9,
+            "n": 10
+          },
+          "apiVmHwmKb": {
+            "median": 525912.0,
+            "min": 524684,
+            "max": 526484,
+            "n": 10
+          },
+          "apiBusyNonMainMax": {
+            "median": 8.0,
+            "min": 8,
+            "max": 8,
+            "n": 10
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.3043,
+          "latP50": 0.3033,
+          "latP95": 0.3609,
+          "latP99": 0.3508,
+          "latMax": 0.3274
+        }
+      },
+      "16": {
+        "runs": 10,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 40.5,
+            "min": 22.12,
+            "max": 41.44,
+            "n": 10
+          },
+          "latP50": {
+            "median": 386.0,
+            "min": 372,
+            "max": 717,
+            "n": 10
+          },
+          "latP95": {
+            "median": 429.0,
+            "min": 418,
+            "max": 773,
+            "n": 10
+          },
+          "latP99": {
+            "median": 462.5,
+            "min": 429,
+            "max": 834,
+            "n": 10
+          },
+          "latMax": {
+            "median": 475.5,
+            "min": 441,
+            "max": 858,
+            "n": 10
+          },
+          "envModeCounts": {
+            "unprobed": 5,
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 41.09,
+            "min": 40.37,
+            "max": 41.44,
+            "n": 5
+          },
+          "thr_mode_unprobed": {
+            "median": 22.61,
+            "min": 22.12,
+            "max": 40.63,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 212.93,
+            "min": 208.0,
+            "max": 458.65,
+            "n": 10
+          },
+          "apiVmHwmKb": {
+            "median": 526214.0,
+            "min": 524988,
+            "max": 527652,
+            "n": 10
+          },
+          "apiBusyNonMainMax": {
+            "median": 7.5,
+            "min": 6,
+            "max": 8,
+            "n": 10
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.5796,
+          "latP50": 0.6011,
+          "latP95": 0.5373,
+          "latP99": 0.5574,
+          "latMax": 0.5786
+        }
+      },
+      "32": {
+        "runs": 10,
+        "stats": {
+          "throughputDriverVerified": {
+            "median": 40.765,
+            "min": 39.52,
+            "max": 41.53,
+            "n": 10
+          },
+          "latP50": {
+            "median": 761.0,
+            "min": 744,
+            "max": 782,
+            "n": 10
+          },
+          "latP95": {
+            "median": 834.0,
+            "min": 819,
+            "max": 861,
+            "n": 10
+          },
+          "latP99": {
+            "median": 858.0,
+            "min": 835,
+            "max": 879,
+            "n": 10
+          },
+          "latMax": {
+            "median": 861.5,
+            "min": 838,
+            "max": 892,
+            "n": 10
+          },
+          "envModeCounts": {
+            "unprobed": 5,
+            "fast": 5
+          },
+          "thr_mode_fast": {
+            "median": 41.07,
+            "min": 40.72,
+            "max": 41.22,
+            "n": 5
+          },
+          "thr_mode_unprobed": {
+            "median": 40.15,
+            "min": 39.52,
+            "max": 41.53,
+            "n": 5
+          },
+          "activeCpuMs": null,
+          "cpuPerSuccessActiveMs": {
+            "median": 209.52,
+            "min": 206.7,
+            "max": 222.8,
+            "n": 10
+          },
+          "apiVmHwmKb": {
+            "median": 526568.0,
+            "min": 525512,
+            "max": 527688,
+            "n": 10
+          },
+          "apiBusyNonMainMax": {
+            "median": 7.0,
+            "min": 6,
+            "max": 8,
+            "n": 10
+          }
+        },
+        "aaFirst2": {
+          "throughputDriverVerified": 0.0188,
+          "latP50": 0.0026,
+          "latP95": 0.0226,
+          "latP99": 0.0236,
+          "latMax": 0.0176
+        }
+      }
+    }
+  }
+}

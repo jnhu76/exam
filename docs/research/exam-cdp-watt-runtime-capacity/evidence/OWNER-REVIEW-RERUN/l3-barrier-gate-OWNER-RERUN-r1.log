@@ -1,0 +1,164 @@
+
+[l3-barrier-gate] phase: vitest in-process barrier (gate + route)
+/home/hoo/.local/share/fnm/node-versions/v24.15.0/installation/bin/node /home/hoo/Source/exam/.wt-capacity/apps/api/node_modules/vitest/vitest.mjs run --root /home/hoo/Source/exam/.wt-capacity/apps/api --config /home/hoo/Source/exam/.wt-capacity/apps/api/vitest.config.ts src/lib/loginAdmission.gate.test.ts src/routes/auth.loginAdmission.test.ts
+
+
+ RUN  v4.1.7 /home/hoo/Source/exam/.wt-capacity/apps/api
+
+stdout | src/routes/auth.loginAdmission.test.ts > POST /api/auth/login + L3 admission gate (barrier)
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '42P06',
+  message: 'schema "test_api_3124506_1_azcmjd" already exists, skipping',
+  file: 'schemacmds.c',
+  line: '132',
+  routine: 'CreateSchemaCommand'
+}
+
+stdout | src/routes/auth.loginAdmission.test.ts > POST /api/auth/login + L3 admission gate (barrier) > position: validation rejects before the gate; the rate limiter rejects before the gate
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '42P06',
+  message: 'schema "test_api_3124506_2_d97eml" already exists, skipping',
+  file: 'schemacmds.c',
+  line: '132',
+  routine: 'CreateSchemaCommand'
+}
+
+stdout | src/routes/auth.loginAdmission.test.ts > POST /api/auth/login + L3 admission gate (barrier) > position: validation rejects before the gate; the rate limiter rejects before the gate
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'drop cascades to 37 other objects',
+  detail: 'drop cascades to table test_api_3124506_2_d97eml.__drizzle_migrations\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.audit_logs\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.candidate_fields\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.candidate_profiles\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.courses\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_attempts\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_enrollments\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exams\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.organization_settings\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.organizations\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.questions\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.users\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.import_job_logs\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.client_events\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.email_outbox\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.user_role_assignments\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.attempt_grading_entries\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.worker_heartbeats\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.notifications\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.attempt_interruptions\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.attempt_time_adjustments\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.attempt_interruption_events\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_incidents\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_incident_events\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_incident_actions\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_incident_attempts\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_incident_interruption_links\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_proctor_assignments\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_proctor_assignment_events\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.attempt_command_receipts\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_policy_profiles\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.teacher_course_assignments\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.grader_exam_assignments\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.staff_invitations\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.password_reset_tokens\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_admissions\n' +
+    'drop cascades to table test_api_3124506_2_d97eml.exam_answer_save_receipts',
+  file: 'dependency.c',
+  line: '1165',
+  routine: 'reportDependentObjects'
+}
+
+stdout | src/routes/auth.loginAdmission.test.ts > POST /api/auth/login + L3 admission gate (barrier)
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'drop cascades to 37 other objects',
+  detail: 'drop cascades to table test_api_3124506_1_azcmjd.__drizzle_migrations\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.audit_logs\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.candidate_fields\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.candidate_profiles\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.courses\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_attempts\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_enrollments\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exams\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.organization_settings\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.organizations\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.questions\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.users\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.import_job_logs\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.client_events\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.email_outbox\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.user_role_assignments\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.attempt_grading_entries\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.worker_heartbeats\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.notifications\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.attempt_interruptions\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.attempt_time_adjustments\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.attempt_interruption_events\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_incidents\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_incident_events\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_incident_actions\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_incident_attempts\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_incident_interruption_links\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_proctor_assignments\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_proctor_assignment_events\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.attempt_command_receipts\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_policy_profiles\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.teacher_course_assignments\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.grader_exam_assignments\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.staff_invitations\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.password_reset_tokens\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_admissions\n' +
+    'drop cascades to table test_api_3124506_1_azcmjd.exam_answer_save_receipts',
+  file: 'dependency.c',
+  line: '1165',
+  routine: 'reportDependentObjects'
+}
+
+ ✓ src/routes/auth.loginAdmission.test.ts (8 tests) 3405ms
+     ✓ disconnect after verification started releases the permit only when the native promise settles  351ms
+     ✓ wait expiry rejects the queued request with 503 LOGIN_BUSY (monotonic W)  317ms
+     ✓ credential semantics under the gate: correct, wrong password, unknown user, disabled user, unknown tenant  314ms
+     ✓ position: validation rejects before the gate; the rate limiter rejects before the gate  1144ms
+ ✓ src/lib/loginAdmission.gate.test.ts (9 tests) 7ms
+
+ Test Files  2 passed (2)
+      Tests  17 passed (17)
+   Start at  17:57:50
+   Duration  5.12s (transform 611ms, setup 0ms, import 1.09s, tests 3.41s, environment 0ms)
+
+[l3-barrier-gate] phase ok: vitest in-process barrier (gate + route)
+
+[l3-barrier-gate] phase: real-nginx barrier runner (A/B/C ×5 reps)
+/home/hoo/.local/share/fnm/node-versions/v24.15.0/installation/bin/node /home/hoo/Source/exam/.wt-capacity/apps/api/node_modules/tsx/dist/cli.mjs /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/harness/l3-barrier-nginx.ts
+
+[l3-barrier] A-isolation witness (before): nginx=[exam-cap-nginx Up 42 seconds] api3300=http 200
+[l3-barrier] rebuilding name-guarded research DB exam_550_l3_barrier
+[l3-barrier] confirmed target database: exam_550_l3_barrier
+[l3-barrier] case A rep 1/5 ok (185ms, sqlΔ=20)
+[l3-barrier] case A rep 2/5 ok (177ms, sqlΔ=20)
+[l3-barrier] case A rep 3/5 ok (175ms, sqlΔ=20)
+[l3-barrier] case A rep 4/5 ok (170ms, sqlΔ=20)
+[l3-barrier] case A rep 5/5 ok (59752ms, sqlΔ=20)
+[l3-barrier] case B rep 1/5 ok (204ms, over=503 LOGIN_BUSY retry-after=15)
+[l3-barrier] case B rep 2/5 ok (206ms, over=503 LOGIN_BUSY retry-after=15)
+[l3-barrier] case B rep 3/5 ok (212ms, over=503 LOGIN_BUSY retry-after=15)
+[l3-barrier] case B rep 4/5 ok (226ms, over=503 LOGIN_BUSY retry-after=15)
+[l3-barrier] case B rep 5/5 ok (219ms, over=503 LOGIN_BUSY retry-after=15)
+[l3-barrier] case C rep 1/5 ok (991ms, statuses=[503,503,503])
+[l3-barrier] case C rep 2/5 ok (980ms, statuses=[503,503,503])
+[l3-barrier] case C rep 3/5 ok (990ms, statuses=[503,503,503])
+[l3-barrier] case C rep 4/5 ok (970ms, statuses=[503,503,503])
+[l3-barrier] case C rep 5/5 ok (977ms, statuses=[503,503,503])
+[l3-barrier] A-isolation witness (after): nginx=[exam-cap-nginx Up 8 minutes] api3300=http 200
+[l3-barrier] PASS: 15/15 barrier reps green; evidence → /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3/L3-BARRIER-NGINX-20261120T095755/l3-barrier-nginx.json
+[l3-barrier-gate] phase ok: real-nginx barrier runner (A/B/C ×5 reps)
+[l3-barrier-gate] ALL BARRIER TESTS GREEN (17 vitest + 15 nginx reps)

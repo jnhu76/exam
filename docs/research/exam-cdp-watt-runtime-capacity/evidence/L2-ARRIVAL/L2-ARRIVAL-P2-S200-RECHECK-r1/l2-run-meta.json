@@ -1,0 +1,21 @@
+{
+  "runId": "L2-ARRIVAL-P2-S200-RECHECK-r1",
+  "experiment": "L2-ARRIVAL",
+  "profile": "p2",
+  "n": 200,
+  "topology": "direct",
+  "scenario": "full",
+  "reset": 1,
+  "pairIndex": 9,
+  "windowMs": 240000,
+  "tailMs": 30000,
+  "seed": 9001021,
+  "flow": "mix",
+  "bShare": 0.1,
+  "headSha": "21276e0ea2da0f553ec487cf0bc9b68cdb2cf340",
+  "db": "exam_550_e2e",
+  "apiPid": 3109965,
+  "fromCandidate": 0,
+  "topologyChain": "driver-container --(unique src IPs 172.28.10.10+k | shared egress)--> nginx 172.28.10.2:80 --> host API :3300 --> PG exam_550_e2e",
+  "instrumentation": "l1-api-sampler 250ms /proc + ~1/s /api/research/capacity (admin, API-direct, not via nginx)"
+}

@@ -1,0 +1,132 @@
+[s2-gate] ingress health 200
+[s2-gate] live cases → run-id S2-GATE-OWNER-RERUN-r2-live
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"run-start","base":"http://127.0.0.1:8080","db":"exam_550_e2e","pgNow":"2026-11-20 17:57:18.515705+08","monoAt":94.013,"wallAt":"2026-11-20T09:57:18.526Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"pool","examId":"9fca8f08-4961-4b2a-82d4-56e481162a4f","candidates":["cap9same-c0000-30ca27","cap9same-c0001-c98e07","cap9same-c0002-603f2c","cap9same-c0003-ac0182","cap9same-c0004-005bfc"],"monoAt":1251.99,"wallAt":"2026-11-20T09:57:19.684Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"login","username":"cap9same-c0000-30ca27","status":200,"latencyMs":57.52099999999996,"monoAt":1309.855,"wallAt":"2026-11-20T09:57:19.742Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"start","attemptId":"1c8b2846-6791-4dc6-83fe-984705d8bcf8","status":201,"takeStatus":200,"questions":12,"monoAt":1386.903,"wallAt":"2026-11-20T09:57:19.819Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case1-saves","s1":{"status":200,"body":"{\"accepted\":true,\"serverVersion\":1,\"savedAt\":\"2026-11-20T09:57:19.828Z\"}"},"s2":{"status":200,"body":"{\"accepted\":true,\"serverVersion\":2,\"savedAt\":\"2026-11-20T09:57:19.857Z\"}"},"monoAt":1443.271,"wallAt":"2026-11-20T09:57:19.876Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case1-submit","status":200,"latencyMs":49.36200000000008,"body":"{\"id\":\"1c8b2846-6791-4dc6-83fe-984705d8bcf8\",\"organizationId\":\"8f67a5ca-8dbd-47f0-9366-0383b507deef\",\"examId\":\"9fca8f08-4961-4b2a-82d4-56e481162a4f\",\"enrollmentId\":\"edb2ddf5-b352-4c90-9f56-df660b93d49a\",\"candidateId\":\"30ca27df-2366-4ef7-8f4d-5b6a27ba256b\",\"attemptNo\":1,\"status\":\"graded\",\"questionSna","sendWall":"2026-11-20T09:57:19.876Z","monoAt":1492.759,"wallAt":"2026-11-20T09:57:19.925Z"}
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·saves accepted v1/v2: expected="accepted x2" actual=true
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·receipts [1,2]: expected="1,2" actual="1,2"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·submit 200: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·status graded: expected="graded" actual="graded"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·reason manual: expected="manual" actual="manual"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·submittedAt in [send,recv] (route-entry now): expected="send<=submittedAt<=recv" actual="send=2026-11-20T09:57:19.876Z db=2026-11-20 17:57:19.884+08 recv=2026-11-20T09:57:19.925Z"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·frozen answer = v2(false): expected=false actual=false
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·grading entries 12: expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·submit audit exactly 1: expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-a save-ok-then-submit·finalScore written (已评分): expected="non-empty" actual="0"
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"login","username":"cap9same-c0001-c98e07","status":200,"latencyMs":61.144000000000005,"monoAt":1743.873,"wallAt":"2026-11-20T09:57:20.176Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"start","attemptId":"7648cf0e-3597-4816-a40e-3be9ac1817fc","status":201,"takeStatus":200,"questions":12,"monoAt":1795.4,"wallAt":"2026-11-20T09:57:20.228Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"barrier-held","user":"cap9same-c0001-c98e07","monoAt":1905.455,"wallAt":"2026-11-20T09:57:20.338Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"both-fired-save-then-submit","user":"cap9same-c0001-c98e07","monoAt":2205.968,"wallAt":"2026-11-20T09:57:20.638Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"barrier-released","enrollmentId":"f9c50623-d4ab-4b3e-add6-4b10e31b6438","monoAt":2707.535,"wallAt":"2026-11-20T09:57:21.140Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case1b-done","save":{"status":200,"body":"{\"accepted\":true,\"serverVersion\":2,\"savedAt\":\"2026-11-20T09:57:20.347Z\"}"},"submit":{"status":200},"monoAt":2806.609,"wallAt":"2026-11-20T09:57:21.239Z"}
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b save-first-lock·save accepted v2 after barrier: expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b save-first-lock·submit 200: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b save-first-lock·frozen answer = in-flight v2(false): expected=false actual=false
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b save-first-lock·receipts [1,2]: expected="1,2" actual="1,2"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b save-first-lock·status graded / reason manual: expected="graded|manual" actual="graded|manual"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b save-first-lock·audit exactly 1: expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"login","username":"cap9same-c0002-603f2c","status":200,"latencyMs":58.05699999999979,"monoAt":3091.454,"wallAt":"2026-11-20T09:57:21.524Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"start","attemptId":"da81e949-3763-4f72-8bae-a6893ecf3e06","status":201,"takeStatus":200,"questions":12,"monoAt":3150.147,"wallAt":"2026-11-20T09:57:21.583Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"barrier-released","enrollmentId":"a80614eb-9cc6-4612-925b-b9b06bbc9df0","monoAt":4067.791,"wallAt":"2026-11-20T09:57:22.500Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case1b2-done","submit":{"status":200},"save":{"status":200,"body":"{\"accepted\":false,\"reason\":\"ATTEMPT_ALREADY_SUBMITTED\",\"message\":\"考试已提交，不能继续保存答案\",\"serverVersion\":0,\"savedAt\":\"2026-11-20T09:57:22.010Z\"}"},"monoAt":4141.065,"wallAt":"2026-11-20T09:57:22.573Z"}
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·submit 200 first: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·late save = HTTP 200 + accepted:false (200≠已保存): expected={"status":200,"accepted":false} actual={"status":200,"accepted":false}
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·late save reason ATTEMPT_ALREADY_SUBMITTED: expected="ATTEMPT_ALREADY_SUBMITTED" actual="ATTEMPT_ALREADY_SUBMITTED"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·serverVersion 0 on status-guard rejection (answerProtocol.ts:160): expected=0 actual=0
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·frozen answer stays v1(true): expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·receipts [1] only (v2 never saved): expected="1" actual="1"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·status graded / reason manual: expected="graded|manual" actual="graded|manual"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ①-b' submit-first-lock·audit exactly 1: expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"login","username":"cap9same-c0003-ac0182","status":200,"latencyMs":56.590000000000146,"monoAt":4382.482,"wallAt":"2026-11-20T09:57:22.815Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"start","attemptId":"8d7e0fb8-84d2-4424-a774-4fa74ec090f2","status":201,"takeStatus":200,"questions":12,"monoAt":4432.634,"wallAt":"2026-11-20T09:57:22.865Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"barrier-released","enrollmentId":"43bc7e32-51eb-48cb-823b-da5e725d4bab","monoAt":5196.908,"wallAt":"2026-11-20T09:57:23.629Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case3a-done","first":{"status":200},"second":{"status":200},"monoAt":5269.721,"wallAt":"2026-11-20T09:57:23.702Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case3a-outcomes","outcomes":["graded","replay_no_change"],"monoAt":5726.264,"wallAt":"2026-11-20T09:57:24.159Z"}
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-a double-submit-POST·both POSTs → 200: expected=[200,200] actual=[200,200]
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-a double-submit-POST·audit exactly 1 (unique business effect): expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-a double-submit-POST·grading entries 12 (single scoring): expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-a double-submit-POST·status graded / reason manual: expected="graded|manual" actual="graded|manual"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-a double-submit-POST·log outcomes {graded, replay_no_change}: expected=["graded","replay_no_change"] actual=["graded","replay_no_change"]
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-a double-submit-POST·submittedAt single value: expected="one ts" actual="2026-11-20 17:57:22.991+08"
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"login","username":"cap9same-c0004-005bfc","status":200,"latencyMs":51.935999999999694,"monoAt":5778.434,"wallAt":"2026-11-20T09:57:24.211Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"start","attemptId":"29a84c6f-1278-4e36-b62d-e7ce7afca934","status":201,"takeStatus":200,"questions":12,"monoAt":5834.414,"wallAt":"2026-11-20T09:57:24.267Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case3b-response-captured","captured":{"rule":"swallow-29a84c6f","ev":"response-captured","statusLine":"HTTP/1.1 200 OK","bytes":3994,"monoAt":5992.891,"wallAt":"2026-11-20T09:57:24.347Z"},"monoAt":7367.659,"wallAt":"2026-11-20T09:57:25.800Z"}
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"case3b-client-view","status":0,"errorClass":"UND_ERR_SOCKET","monoAt":7371.936,"wallAt":"2026-11-20T09:57:25.804Z"}
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·client saw connection loss (status 0 / reset): expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·response was captured at proxy (server committed): expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·captured status line 200: expected="HTTP/1.1 200" actual="HTTP/1.1 200 OK"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·authoritative read shows graded: expected="graded" actual="graded"
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·retry POST 200 idempotent: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·audit still exactly 1 after retry: expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·grading entries 12 single scoring: expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-live] PASS ③-b response-lost-recovery·submittedAt unchanged by retry: expected="2026-11-20 17:57:24.309+08" actual="2026-11-20 17:57:24.309+08"
+[S2-GATE-OWNER-RERUN-r2-live] {"ev":"run-end","pgNow":"2026-11-20 17:57:26.290329+08","monoAt":7871.403,"wallAt":"2026-11-20T09:57:26.304Z"}
+[S2-GATE-OWNER-RERUN-r2-live] SUMMARY {"runId":"S2-GATE-OWNER-RERUN-r2-live","base":"http://127.0.0.1:8080","db":"exam_550_e2e","total":38,"failed":0,"cases":5}
+[s2-gate] in-process cases → run-id S2-GATE-OWNER-RERUN-r2-inproc
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'database "exam_test_s2" does not exist, skipping',
+  file: 'dbcommands.c',
+  line: '1710',
+  routine: 'dropdb'
+}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"db-rebuilt","db":"exam_test_s2","monoAt":353.21,"wallAt":"2026-11-20T09:57:27.083Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"fixture-ready","examId":"e39fcf17-d7c9-4426-aced-6b2bad8cd230","candidates":["s2c0-mwot29xr-1","s2c1-mwot2a16-2","s2c2-mwot2a3l-3","s2c3-mwot2a61-4","s2c4-mwot2a8k-5","s2c5-mwot2ab1-6"],"questions":12,"monoAt":1936.466,"wallAt":"2026-11-20T09:57:28.666Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"barrier-held","enrollmentId":"9b396206-7f99-47e7-ada4-4d9367633263","monoAt":1972.661,"wallAt":"2026-11-20T09:57:28.702Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2a-deadline-crossed","realNow":"2026-11-20T09:57:33.696Z","deadlineMs":1795168652691,"monoAt":6966.547,"wallAt":"2026-11-20T09:57:33.696Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"barrier-released","enrollmentId":"9b396206-7f99-47e7-ada4-4d9367633263","monoAt":6968.685,"wallAt":"2026-11-20T09:57:33.698Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2a-done","http":{"status":200,"bodySubmittedAt":"2026-11-20T09:57:30.691Z"},"db":{"status":"graded","reason":"manual","submittedMs":1795168650691,"entries":12,"audits":1,"finalScore":"10","saved":"1"},"monoAt":7008.458,"wallAt":"2026-11-20T09:57:33.738Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·save v1 accepted before schedule: expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·submit 200 after barrier release: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·submissionReason manual (pre-deadline route sample governs): expected="manual" actual="manual"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·submittedAt == route-entry sample (T-2s) not wall clock: expected=1795168650691 actual=1795168650691
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·status graded: expected="graded" actual="graded"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·grading entries 12: expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·attempt.submit audit exactly 1: expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-a manual-first-cross-deadline·finalScore written (已评分): expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2b-scanner-ran","changed":true,"db":{"status":"graded","reason":"deadline","submittedMs":1795168655762,"entries":12,"audits":0,"finalScore":"10","saved":"1"},"monoAt":10065.695,"wallAt":"2026-11-20T09:57:36.795Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2b-done","http":{"status":200,"bodyStatus":"graded"},"db":{"status":"graded","reason":"deadline","submittedMs":1795168655762,"entries":12,"audits":0,"finalScore":"10","saved":"1"},"monoAt":10080.324,"wallAt":"2026-11-20T09:57:36.810Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·scanner stateChanged=true: expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·scanner submittedAt == effectiveDeadline T (backdated): expected=1795168655762 actual=1795168655762
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·submissionReason deadline: expected="deadline" actual="deadline"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·late manual POST → 200 (merged, no error): expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·manual merge: reason stays deadline: expected="deadline" actual="deadline"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·submittedAt unchanged (still T): expected=1795168655762 actual=1795168655762
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·attempt.submit audit stays 0 (no manual submit executed): expected=0 actual=0
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-b scanner-first·grading entries 12: expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2c-done","http":{"status":200},"db":{"status":"graded","reason":"deadline","submittedMs":1795168659831,"entries":12,"audits":0,"finalScore":"10","saved":"1"},"Tms":1795168659831,"monoAt":10143.095,"wallAt":"2026-11-20T09:57:36.872Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-c boundary now==T·submit 200: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-c boundary now==T·≥ operator: equality EXPIRED → deadline freeze: expected="deadline" actual="deadline"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-c boundary now==T·submittedAt == T (business deadline backfill): expected=1795168659831 actual=1795168659831
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-c boundary now==T·audit 0 (no manual submit ran): expected=0 actual=0
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-c boundary now==T·graded with 12 entries: expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2d-done","http":{"status":200},"db":{"status":"graded","reason":"manual","submittedMs":1795168659893,"entries":12,"audits":1,"finalScore":"10","saved":"1"},"Tms":1795168659894,"monoAt":10205.266,"wallAt":"2026-11-20T09:57:36.935Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-d boundary now==T-1ms·submit 200: expected=200 actual=200
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-d boundary now==T-1ms·manual submit at T-1ms: expected="manual" actual="manual"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-d boundary now==T-1ms·submittedAt == T-1ms (route sample): expected=1795168659893 actual=1795168659893
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-d boundary now==T-1ms·audit 1: expected=1 actual=1
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-d boundary now==T-1ms·graded with 12 entries: expected=12 actual=12
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2e1-done","e1":{"status":200,"body":{"accepted":false,"reason":"ATTEMPT_ALREADY_SUBMITTED","message":"考试已提交，不能继续保存答案","serverVersion":0,"savedAt":"2026-11-20T09:57:39.935Z"}},"db":{"status":"graded","reason":"deadline","submittedMs":1795168659935,"entries":12,"audits":0,"finalScore":"0","saved":""},"Tms":1795168659935,"monoAt":10245.119,"wallAt":"2026-11-20T09:57:36.974Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e1 save at now==T (inline reconcile freezes first)·save at now==T → 200 accepted:false: expected={"accepted":false} actual={"accepted":false}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e1 save at now==T (inline reconcile freezes first)·rejection surfaces ATTEMPT_ALREADY_SUBMITTED (inline freeze precedes pure guard): expected="ATTEMPT_ALREADY_SUBMITTED" actual="ATTEMPT_ALREADY_SUBMITTED"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e1 save at now==T (inline reconcile freezes first)·inline reconcile froze: reason=deadline: expected="deadline" actual="deadline"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e1 save at now==T (inline reconcile freezes first)·frozen submittedAt == T: expected=1795168659935 actual=1795168659935
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e1 save at now==T (inline reconcile freezes first)·graded with 12 entries / audit 0: expected="12|0" actual="12|0"
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2e2-done","e2":{"status":200,"body":{"accepted":true,"serverVersion":1,"savedAt":"2026-11-20T09:57:39.974Z"}},"db":{"status":"in_progress","reason":"","submittedMs":null,"entries":0,"audits":0,"finalScore":"","saved":"1"},"monoAt":10268.41,"wallAt":"2026-11-20T09:57:36.998Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e2 save at now==T-1ms (accepted)·save at now==T-1ms → accepted: expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e2 save at now==T-1ms (accepted)·receipt [1] written (已保存): expected="1" actual="1"
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e2 save at now==T-1ms (accepted)·attempt stays in_progress (no freeze): expected="in_progress" actual="in_progress"
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"case2e3-done","atBoundary":{"accepted":false,"reason":"DEADLINE_EXCEEDED"},"beforeBoundary":{"accepted":true},"monoAt":10270.144,"wallAt":"2026-11-20T09:57:36.999Z"}
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e3 pure save decision boundary·processSaveAnswer at now==deadline → DEADLINE_EXCEEDED (≥): expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-inproc] PASS ②-e3 pure save decision boundary·processSaveAnswer at now==deadline-1ms → accepted: expected=true actual=true
+[S2-GATE-OWNER-RERUN-r2-inproc] SUMMARY total=36 failed=0 db=exam_test_s2
+[S2-GATE-OWNER-RERUN-r2-inproc] {"ev":"db-dropped","db":"exam_test_s2","monoAt":10367.677,"wallAt":"2026-11-20T09:57:37.097Z"}
+[s2-gate] live: 38/38 pass (exit 0)
+[s2-gate] in-process: 36/36 pass (exit 0)
+[s2-gate] VERDICT: PASS (live=PASS, in-process=PASS)
+[s2-gate] evidence: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/S2-GATE-OWNER-RERUN-r2-live , /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/S2-TIMING/S2-GATE-OWNER-RERUN-r2-inproc

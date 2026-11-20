@@ -1,0 +1,23 @@
+[topology] removing nginx container exam-cap-nginx
+[topology] stopping API (pid 3109965)
+[topology] DOWN: nginx + API stopped (dev compose PG/Redis and exam_550_e2e left in place)
+[topology] 1/6 dev compose (pnpm db:up; idempotent)
+$ docker compose -f docker-compose.dev.yml up -d
+ Container exam-dev-db-1 Running 
+ Container exam-dev-redis-1 Running 
+[topology] 2/6 rebuilding research database (name-guarded exam_550_e2e)
+[seed] rebuilt exam_550_e2e (name-guarded exam_550_e2e); migrations + canonical seed applied
+[topology] 3/6 starting API
+[topology] starting host-native API (built artifact dist, port 3300, extra_env=none)
+[topology] API ready (pid 3122446) after ~1s
+[topology] 4/6 seeding synthetic fixtures
+[seed] data phase connected to exam_550_e2e
+[seed] data phase complete: 400 synthetic candidates, 11 exams (12 questions each), 2 proctors; manifest: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/fixtures/seed-manifest.json
+[topology] 5/6 nginx ingress
+[topology] starting nginx container (nginx:1.30.5-trixie, 127.0.0.1:8080 -> 80)
+[topology] 6/6 health checks
+[topology] OK   API direct health (http://127.0.0.1:3300/api/health)
+[topology] OK   nginx /healthz (http://127.0.0.1:8080/healthz)
+[topology] OK   nginx -> /api/health (http://127.0.0.1:8080/api/health)
+[topology] OK   nginx serves SPA index.html
+[topology] UP: appUrl=http://127.0.0.1:8080 (nginx ingress; API direct http://127.0.0.1:3300)

@@ -1,0 +1,59 @@
+{
+ "experiment": "S3-ADMIT",
+ "generatedAt": "2026-11-20T08:31:44.230331+00:00",
+ "sourceHeadSha": "21276e0ea2da0f553ec487cf0bc9b68cdb2cf340",
+ "sourceBranch": "research/capacity-900-1021-l3-admission",
+ "aArm": {
+  "dist": "apps/api/dist",
+  "buildProvenance": "frozen-SHA build from 87510894728ee1ca20a530fc20e29fa1f51709b7 (pre-existing 2026-11-19 21:23 build; not rebuilt)",
+  "submitAdmissionModulePresent": false
+ },
+ "s4Arm": {
+  "dist": "apps/api/dist-s3",
+  "buildCommand": "cd /home/hoo/Source/exam/.wt-capacity/apps/api && pnpm exec tsc -p tsconfig.build.json --outDir dist-s3",
+  "buildProvenance": "research build from worktree source HEAD 21276e0e (includes inert L3 login-admission module, LOGIN_ADMISSION unset) + S3 submit-admission patch",
+  "submitAdmissionModulePresent": true
+ },
+ "files": {
+  "apps/api/dist/server.js": {
+   "exists": true,
+   "sha256": "996df611b475f71470990d4cf72de5e4760127a05e7cdcd8f02d9a4cc48a0e75",
+   "mtime": "2026-11-19T21:23:21.868117"
+  },
+  "apps/api/dist/routes/attempts.candidate.js": {
+   "exists": true,
+   "sha256": "501604d53c5c6db9b5bb89f22ef4f6b83f65f9ad5518e93ed6d18001d20c264e",
+   "mtime": "2026-11-19T21:23:21.857888"
+  },
+  "apps/api/dist-s3/server.js": {
+   "exists": true,
+   "sha256": "996df611b475f71470990d4cf72de5e4760127a05e7cdcd8f02d9a4cc48a0e75",
+   "mtime": "2026-11-20T15:51:43.525151"
+  },
+  "apps/api/dist-s3/routes/attempts.candidate.js": {
+   "exists": true,
+   "sha256": "591970a131c58835dc691e71c61b098c03fea3bb7ec969a277215764927d56dc",
+   "mtime": "2026-11-20T15:51:43.445151"
+  },
+  "apps/api/dist-s3/lib/submitAdmission.js": {
+   "exists": true,
+   "sha256": "b5f4f1cb20a6244632eebf2412bf042cd093663590c4abaae516aba5edf9192f",
+   "mtime": "2026-11-20T15:51:43.309150"
+  },
+  "apps/api/src/lib/submitAdmission.ts": {
+   "exists": true,
+   "sha256": "d66f217e1d7572de49c60b54b199ecfb8ab41bcc29b648e5d509ccd5079de023",
+   "mtime": "2026-11-20T15:50:13.885173"
+  },
+  "apps/api/src/routes/attempts.candidate.ts": {
+   "exists": true,
+   "sha256": "2653f5056db3bb50fa32b04b134b34d71f7b3e2f3ddc2989b2e47126370db983",
+   "mtime": "2026-11-20T15:51:39.737151"
+  },
+  "apps/api/src/lib/capacityResearch.ts": {
+   "exists": true,
+   "sha256": "31b902bfb753d721e03f589a8370ba0f84dcbf7f96ad856606babdaa05c4a41d",
+   "mtime": "2026-11-20T15:50:39.937907"
+  }
+ }
+}

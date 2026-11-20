@@ -1,0 +1,10 @@
+[srv] body-end req.destroyed=false sock.destroyed=false rawCloseListeners=0
+[srv] SIGNAL ABORTED
+[srv] body-end req.destroyed=false sock.destroyed=false rawCloseListeners=0
+[srv] SIGNAL ABORTED
+[cli2] destroying
+[srv] SOCKET CLOSED
+[srv] after-1s-wait req.destroyed=true sock.destroyed=false rawCloseListeners=1
+[cli1] got response
+[srv] SOCKET CLOSED
+[srv] after-1s-wait req.destroyed=true sock.destroyed=true rawCloseListeners=1

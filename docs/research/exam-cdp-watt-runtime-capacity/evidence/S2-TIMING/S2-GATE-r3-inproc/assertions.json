@@ -1,0 +1,264 @@
+{
+  "runId": "S2-GATE-r3-inproc",
+  "db": "exam_test_s2",
+  "total": 36,
+  "failed": 0,
+  "results": [
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "save v1 accepted before schedule",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "submit 200 after barrier release",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "submissionReason manual (pre-deadline route sample governs)",
+      "expected": "manual",
+      "actual": "manual",
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "submittedAt == route-entry sample (T-2s) not wall clock",
+      "expected": 1795160507678,
+      "actual": 1795160507678,
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "status graded",
+      "expected": "graded",
+      "actual": "graded",
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "grading entries 12",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "attempt.submit audit exactly 1",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "②-a manual-first-cross-deadline",
+      "assertion": "finalScore written (已评分)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "scanner stateChanged=true",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "scanner submittedAt == effectiveDeadline T (backdated)",
+      "expected": 1795160512750,
+      "actual": 1795160512750,
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "submissionReason deadline",
+      "expected": "deadline",
+      "actual": "deadline",
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "late manual POST → 200 (merged, no error)",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "manual merge: reason stays deadline",
+      "expected": "deadline",
+      "actual": "deadline",
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "submittedAt unchanged (still T)",
+      "expected": 1795160512750,
+      "actual": 1795160512750,
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "attempt.submit audit stays 0 (no manual submit executed)",
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    {
+      "case": "②-b scanner-first",
+      "assertion": "grading entries 12",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "②-c boundary now==T",
+      "assertion": "submit 200",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "②-c boundary now==T",
+      "assertion": "≥ operator: equality EXPIRED → deadline freeze",
+      "expected": "deadline",
+      "actual": "deadline",
+      "pass": true
+    },
+    {
+      "case": "②-c boundary now==T",
+      "assertion": "submittedAt == T (business deadline backfill)",
+      "expected": 1795160516819,
+      "actual": 1795160516819,
+      "pass": true
+    },
+    {
+      "case": "②-c boundary now==T",
+      "assertion": "audit 0 (no manual submit ran)",
+      "expected": 0,
+      "actual": 0,
+      "pass": true
+    },
+    {
+      "case": "②-c boundary now==T",
+      "assertion": "graded with 12 entries",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "②-d boundary now==T-1ms",
+      "assertion": "submit 200",
+      "expected": 200,
+      "actual": 200,
+      "pass": true
+    },
+    {
+      "case": "②-d boundary now==T-1ms",
+      "assertion": "manual submit at T-1ms",
+      "expected": "manual",
+      "actual": "manual",
+      "pass": true
+    },
+    {
+      "case": "②-d boundary now==T-1ms",
+      "assertion": "submittedAt == T-1ms (route sample)",
+      "expected": 1795160516878,
+      "actual": 1795160516878,
+      "pass": true
+    },
+    {
+      "case": "②-d boundary now==T-1ms",
+      "assertion": "audit 1",
+      "expected": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "case": "②-d boundary now==T-1ms",
+      "assertion": "graded with 12 entries",
+      "expected": 12,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "case": "②-e1 save at now==T (inline reconcile freezes first)",
+      "assertion": "save at now==T → 200 accepted:false",
+      "expected": {
+        "accepted": false
+      },
+      "actual": {
+        "accepted": false
+      },
+      "pass": true
+    },
+    {
+      "case": "②-e1 save at now==T (inline reconcile freezes first)",
+      "assertion": "rejection surfaces ATTEMPT_ALREADY_SUBMITTED (inline freeze precedes pure guard)",
+      "expected": "ATTEMPT_ALREADY_SUBMITTED",
+      "actual": "ATTEMPT_ALREADY_SUBMITTED",
+      "pass": true
+    },
+    {
+      "case": "②-e1 save at now==T (inline reconcile freezes first)",
+      "assertion": "inline reconcile froze: reason=deadline",
+      "expected": "deadline",
+      "actual": "deadline",
+      "pass": true
+    },
+    {
+      "case": "②-e1 save at now==T (inline reconcile freezes first)",
+      "assertion": "frozen submittedAt == T",
+      "expected": 1795160516919,
+      "actual": 1795160516919,
+      "pass": true
+    },
+    {
+      "case": "②-e1 save at now==T (inline reconcile freezes first)",
+      "assertion": "graded with 12 entries / audit 0",
+      "expected": "12|0",
+      "actual": "12|0",
+      "pass": true
+    },
+    {
+      "case": "②-e2 save at now==T-1ms (accepted)",
+      "assertion": "save at now==T-1ms → accepted",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "②-e2 save at now==T-1ms (accepted)",
+      "assertion": "receipt [1] written (已保存)",
+      "expected": "1",
+      "actual": "1",
+      "pass": true
+    },
+    {
+      "case": "②-e2 save at now==T-1ms (accepted)",
+      "assertion": "attempt stays in_progress (no freeze)",
+      "expected": "in_progress",
+      "actual": "in_progress",
+      "pass": true
+    },
+    {
+      "case": "②-e3 pure save decision boundary",
+      "assertion": "processSaveAnswer at now==deadline → DEADLINE_EXCEEDED (≥)",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "case": "②-e3 pure save decision boundary",
+      "assertion": "processSaveAnswer at now==deadline-1ms → accepted",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    }
+  ]
+}

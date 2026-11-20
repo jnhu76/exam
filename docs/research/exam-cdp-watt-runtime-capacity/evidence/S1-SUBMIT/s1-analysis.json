@@ -1,0 +1,3341 @@
+{
+ "runs": {
+  "S1-SUBMIT-cross-pure-r1": {
+   "runId": "S1-SUBMIT-cross-pure-r1",
+   "arm": "cross",
+   "mode": "pure",
+   "t6": {
+    "verdict": "PASS",
+    "reasons": []
+   },
+   "submit": {
+    "offered": 200,
+    "verified": 200,
+    "dropped": 0,
+    "statusTally": {
+     "200": 200
+    },
+    "p50Ms": 2201,
+    "p95Ms": 2255,
+    "p99Ms": 2263,
+    "maxMs": 2263,
+    "n": 200,
+    "drainMs": 2275,
+    "lastConfirmMinusT0Ms": 2274,
+    "errors": []
+   },
+   "emitLag": {
+    "p99Ms": 16,
+    "maxMs": 17,
+    "widthMs": 22,
+    "over50": 0
+   },
+   "pool": {
+    "note": "postgres.js 3.4.9 不暴露 reserved/pending（capacityResearch 探测为空，L2 系列同）——池证据=sqlDelta 到达计数 + RT 分解 + pgSide 会话占用",
+    "t7Window": {
+     "samples": 44,
+     "sqlArrivalsInWindow": 1501,
+     "sqlDeltaMaxPer250ms": 636,
+     "eventLoopMaxMs": 16.33
+    },
+    "preWindow": {
+     "samples": 199,
+     "sqlArrivalsInWindow": 6647,
+     "sqlDeltaMaxPer250ms": 170,
+     "eventLoopMaxMs": 70.06
+    },
+    "snapshotCount": 269
+   },
+   "pgSide": {
+    "note": "API postgres.js 池 max=10；busy=pg_stat_activity 中 active 或 idle-in-transaction 会话数（执行侧占用，客户端排队不可见于 PG）",
+    "polls": 49,
+    "maxBusySessions": 10,
+    "pollsAtMax10": 3,
+    "pollsAtLeast8": 6,
+    "busySeries": [
+     0,
+     10,
+     7,
+     7,
+     10,
+     9,
+     9,
+     9,
+     10,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "pgTx": {
+    "t7Window": {
+     "note": "T7 窗口内 per-pid 最大 xact 年龄（250ms 采样下界，短事务可能整段错过）",
+     "distinctPids": 10,
+     "p50Ms": 116,
+     "p95Ms": 157,
+     "p99Ms": 157,
+     "maxMs": 157
+    },
+    "wholeRun": {
+     "note": "per-pid 观测到的最大 xact 年龄（ms）；250ms 采样的下界估计，短事务可能整段错过",
+     "distinctPids": 10,
+     "p50Ms": 140,
+     "p95Ms": 172,
+     "p99Ms": 172,
+     "maxMs": 172,
+     "sortedMaxAgeMs": [
+      78,
+      83,
+      85,
+      105,
+      105,
+      140,
+      145,
+      153,
+      157,
+      172
+     ]
+    }
+   },
+   "lockWaits": {
+    "t7Window": {
+     "distinctPids": 0,
+     "events": []
+    },
+    "wholeRun": {
+     "distinctPids": 10,
+     "events": [
+      {
+       "pid": 159480,
+       "firstTMs": 750,
+       "lastTMs": 9752,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159483,
+        159486
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 74
+      },
+      {
+       "pid": 159486,
+       "firstTMs": 750,
+       "lastTMs": 10503,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159483
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 57
+      },
+      {
+       "pid": 159487,
+       "firstTMs": 750,
+       "lastTMs": 10753,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159483,
+        159486,
+        159480
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 140
+      },
+      {
+       "pid": 159483,
+       "firstTMs": 750,
+       "lastTMs": 10503,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        159478
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 145
+      },
+      {
+       "pid": 159482,
+       "firstTMs": 750,
+       "lastTMs": 10003,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159483,
+        159486,
+        159480,
+        159487
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 55
+      },
+      {
+       "pid": 159484,
+       "firstTMs": 1500,
+       "lastTMs": 10753,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159480
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 71
+      },
+      {
+       "pid": 159485,
+       "firstTMs": 1500,
+       "lastTMs": 8503,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159480
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 63
+      },
+      {
+       "pid": 159477,
+       "firstTMs": 3001,
+       "lastTMs": 10503,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159486,
+        159484
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 172
+      },
+      {
+       "pid": 159481,
+       "firstTMs": 3501,
+       "lastTMs": 9502,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159477,
+        159478,
+        159482
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 90
+      },
+      {
+       "pid": 159478,
+       "firstTMs": 3501,
+       "lastTMs": 10503,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        159477
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 63
+      }
+     ]
+    }
+   },
+   "borrowWaitEstimate": {
+    "submitP99Ms": 2263,
+    "pgTxP99Ms": 157,
+    "nonBorrowUpperMs": 207,
+    "borrowP99EstMs": 2056,
+    "derivation": "submitHTTP_p99 − (pgTx_p99[T7窗] + 无事务请求RT_p99[监考读] 或 +50ms[纯臂兜底])；measurement-neutrality law 禁止进程内逐请求观测，此为保守分解（池等待为唯一剩余大头）"
+   },
+   "bg": null,
+   "cpuT7Window": {
+    "ticksInWindow": 42,
+    "apiProcCpuMs": 2580,
+    "apiMainThreadCpuMs": 2200,
+    "hostCpuTicksDelta": 24527,
+    "cpuMsPerVerifiedSubmit": 12.9,
+    "mainThreadSharePct": 85.3
+   },
+   "driverCpu": {
+    "samples": 119,
+    "cpuUsagePctMax1Core": 10.8,
+    "cpuUsagePctAvg1Core": 1.1,
+    "elDelayP99MaxMs": 22.99,
+    "rssMbMax": 81
+   },
+   "oracle": {
+    "terminalOk": 200,
+    "mismatchCount": 0,
+    "byStatus": {
+     "graded": 200
+    },
+    "receipts": 400,
+    "dupActive": 0,
+    "dupTerminal": 0,
+    "perExamTerminal": {
+     "3ed2ad98": 20,
+     "cb385e61": 20,
+     "e9366019": 20,
+     "fed9d914": 20,
+     "a8b9c9ed": 20,
+     "96767a98": 20,
+     "f17c4dc6": 20,
+     "9e856d4f": 20,
+     "e09e9cb8": 20,
+     "cb0e65bc": 20
+    },
+    "bgInProgress": null
+   },
+   "clockOffsetContainerMinusHostMs": 81,
+   "t7Window": {
+    "startHostEpoch": 1795128393556,
+    "endHostEpoch": 1795128405831
+   }
+  },
+  "S1-SUBMIT-same-pure-r1": {
+   "runId": "S1-SUBMIT-same-pure-r1",
+   "arm": "same",
+   "mode": "pure",
+   "t6": {
+    "verdict": "PASS",
+    "reasons": []
+   },
+   "submit": {
+    "offered": 200,
+    "verified": 200,
+    "dropped": 0,
+    "statusTally": {
+     "200": 200
+    },
+    "p50Ms": 2336,
+    "p95Ms": 2385,
+    "p99Ms": 2389,
+    "maxMs": 2389,
+    "n": 200,
+    "drainMs": 2414,
+    "lastConfirmMinusT0Ms": 2414,
+    "errors": []
+   },
+   "emitLag": {
+    "p99Ms": 21,
+    "maxMs": 22,
+    "widthMs": 26,
+    "over50": 0
+   },
+   "pool": {
+    "note": "postgres.js 3.4.9 不暴露 reserved/pending（capacityResearch 探测为空，L2 系列同）——池证据=sqlDelta 到达计数 + RT 分解 + pgSide 会话占用",
+    "t7Window": {
+     "samples": 43,
+     "sqlArrivalsInWindow": 1496,
+     "sqlDeltaMaxPer250ms": 620,
+     "eventLoopMaxMs": 49.84
+    },
+    "preWindow": {
+     "samples": 201,
+     "sqlArrivalsInWindow": 6651,
+     "sqlDeltaMaxPer250ms": 170,
+     "eventLoopMaxMs": 69.66
+    },
+    "snapshotCount": 270
+   },
+   "pgSide": {
+    "note": "API postgres.js 池 max=10；busy=pg_stat_activity 中 active 或 idle-in-transaction 会话数（执行侧占用，客户端排队不可见于 PG）",
+    "polls": 50,
+    "maxBusySessions": 10,
+    "pollsAtMax10": 6,
+    "pollsAtLeast8": 8,
+    "busySeries": [
+     8,
+     10,
+     10,
+     10,
+     5,
+     10,
+     10,
+     9,
+     10,
+     7,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "pgTx": {
+    "t7Window": {
+     "note": "T7 窗口内 per-pid 最大 xact 年龄（250ms 采样下界，短事务可能整段错过）",
+     "distinctPids": 10,
+     "p50Ms": 161,
+     "p95Ms": 179,
+     "p99Ms": 179,
+     "maxMs": 179
+    },
+    "wholeRun": {
+     "note": "per-pid 观测到的最大 xact 年龄（ms）；250ms 采样的下界估计，短事务可能整段错过",
+     "distinctPids": 10,
+     "p50Ms": 178,
+     "p95Ms": 219,
+     "p99Ms": 219,
+     "maxMs": 219,
+     "sortedMaxAgeMs": [
+      86,
+      103,
+      106,
+      114,
+      167,
+      178,
+      179,
+      179,
+      207,
+      219
+     ]
+    }
+   },
+   "lockWaits": {
+    "t7Window": {
+     "distinctPids": 0,
+     "events": []
+    },
+    "wholeRun": {
+     "distinctPids": 10,
+     "events": [
+      {
+       "pid": 160189,
+       "firstTMs": 749,
+       "lastTMs": 10254,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186,
+        160190,
+        160185
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 69
+      },
+      {
+       "pid": 160190,
+       "firstTMs": 749,
+       "lastTMs": 10254,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 179
+      },
+      {
+       "pid": 160184,
+       "firstTMs": 749,
+       "lastTMs": 9254,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186,
+        160190,
+        160185,
+        160189,
+        160191
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 207
+      },
+      {
+       "pid": 160188,
+       "firstTMs": 749,
+       "lastTMs": 9254,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186,
+        160190,
+        160185,
+        160189,
+        160191,
+        160184
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 99
+      },
+      {
+       "pid": 160186,
+       "firstTMs": 749,
+       "lastTMs": 8753,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        160175
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 58
+      },
+      {
+       "pid": 160191,
+       "firstTMs": 749,
+       "lastTMs": 7003,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186,
+        160190,
+        160185,
+        160189
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 69
+      },
+      {
+       "pid": 160185,
+       "firstTMs": 749,
+       "lastTMs": 10254,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186,
+        160190
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 89
+      },
+      {
+       "pid": 160187,
+       "firstTMs": 2249,
+       "lastTMs": 7503,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160186
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 68
+      },
+      {
+       "pid": 160174,
+       "firstTMs": 2500,
+       "lastTMs": 7503,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160187
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 102
+      },
+      {
+       "pid": 160175,
+       "firstTMs": 2500,
+       "lastTMs": 10754,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160174,
+        160191
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 78
+      }
+     ]
+    }
+   },
+   "borrowWaitEstimate": {
+    "submitP99Ms": 2389,
+    "pgTxP99Ms": 179,
+    "nonBorrowUpperMs": 229,
+    "borrowP99EstMs": 2160,
+    "derivation": "submitHTTP_p99 − (pgTx_p99[T7窗] + 无事务请求RT_p99[监考读] 或 +50ms[纯臂兜底])；measurement-neutrality law 禁止进程内逐请求观测，此为保守分解（池等待为唯一剩余大头）"
+   },
+   "bg": null,
+   "cpuT7Window": {
+    "ticksInWindow": 41,
+    "apiProcCpuMs": 2670,
+    "apiMainThreadCpuMs": 2220,
+    "hostCpuTicksDelta": 24258,
+    "cpuMsPerVerifiedSubmit": 13.3,
+    "mainThreadSharePct": 83.1
+   },
+   "driverCpu": {
+    "samples": 119,
+    "cpuUsagePctMax1Core": 12.2,
+    "cpuUsagePctAvg1Core": 1.2,
+    "elDelayP99MaxMs": 29.82,
+    "rssMbMax": 82
+   },
+   "oracle": {
+    "terminalOk": 200,
+    "mismatchCount": 0,
+    "byStatus": {
+     "graded": 200
+    },
+    "receipts": 400,
+    "dupActive": 0,
+    "dupTerminal": 0,
+    "perExamTerminal": {
+     "9ee2a865": 200
+    },
+    "bgInProgress": null
+   },
+   "clockOffsetContainerMinusHostMs": 69,
+   "t7Window": {
+    "startHostEpoch": 1795128540802,
+    "endHostEpoch": 1795128553216
+   }
+  },
+  "S1-SUBMIT-same-pure-r2": {
+   "runId": "S1-SUBMIT-same-pure-r2",
+   "arm": "same",
+   "mode": "pure",
+   "t6": {
+    "verdict": "PASS",
+    "reasons": []
+   },
+   "submit": {
+    "offered": 200,
+    "verified": 200,
+    "dropped": 0,
+    "statusTally": {
+     "200": 200
+    },
+    "p50Ms": 2246,
+    "p95Ms": 2290,
+    "p99Ms": 2301,
+    "maxMs": 2311,
+    "n": 200,
+    "drainMs": 2316,
+    "lastConfirmMinusT0Ms": 2316,
+    "errors": []
+   },
+   "emitLag": {
+    "p99Ms": 16,
+    "maxMs": 16,
+    "widthMs": 20,
+    "over50": 0
+   },
+   "pool": {
+    "note": "postgres.js 3.4.9 不暴露 reserved/pending（capacityResearch 探测为空，L2 系列同）——池证据=sqlDelta 到达计数 + RT 分解 + pgSide 会话占用",
+    "t7Window": {
+     "samples": 44,
+     "sqlArrivalsInWindow": 1322,
+     "sqlDeltaMaxPer250ms": 640,
+     "eventLoopMaxMs": 21.22
+    },
+    "preWindow": {
+     "samples": 202,
+     "sqlArrivalsInWindow": 7467,
+     "sqlDeltaMaxPer250ms": 640,
+     "eventLoopMaxMs": 72.16
+    },
+    "snapshotCount": 270
+   },
+   "pgSide": {
+    "note": "API postgres.js 池 max=10；busy=pg_stat_activity 中 active 或 idle-in-transaction 会话数（执行侧占用，客户端排队不可见于 PG）",
+    "polls": 49,
+    "maxBusySessions": 10,
+    "pollsAtMax10": 3,
+    "pollsAtLeast8": 5,
+    "busySeries": [
+     9,
+     10,
+     9,
+     10,
+     10,
+     2,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "pgTx": {
+    "t7Window": {
+     "note": "T7 窗口内 per-pid 最大 xact 年龄（250ms 采样下界，短事务可能整段错过）",
+     "distinctPids": 10,
+     "p50Ms": 72,
+     "p95Ms": 83,
+     "p99Ms": 83,
+     "maxMs": 83
+    },
+    "wholeRun": {
+     "note": "per-pid 观测到的最大 xact 年龄（ms）；250ms 采样的下界估计，短事务可能整段错过",
+     "distinctPids": 10,
+     "p50Ms": 138,
+     "p95Ms": 189,
+     "p99Ms": 189,
+     "maxMs": 189,
+     "sortedMaxAgeMs": [
+      74,
+      95,
+      100,
+      101,
+      111,
+      138,
+      138,
+      163,
+      178,
+      189
+     ]
+    }
+   },
+   "lockWaits": {
+    "t7Window": {
+     "distinctPids": 0,
+     "events": []
+    },
+    "wholeRun": {
+     "distinctPids": 10,
+     "events": [
+      {
+       "pid": 160737,
+       "firstTMs": 751,
+       "lastTMs": 11008,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160734,
+        160743,
+        160740,
+        160742
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 178
+      },
+      {
+       "pid": 160742,
+       "firstTMs": 751,
+       "lastTMs": 10757,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160734,
+        160743,
+        160740
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 100
+      },
+      {
+       "pid": 160734,
+       "firstTMs": 751,
+       "lastTMs": 11008,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        160735
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 71
+      },
+      {
+       "pid": 160743,
+       "firstTMs": 751,
+       "lastTMs": 10757,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160734
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 95
+      },
+      {
+       "pid": 160740,
+       "firstTMs": 751,
+       "lastTMs": 10256,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160734,
+        160743
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 65
+      },
+      {
+       "pid": 160735,
+       "firstTMs": 1250,
+       "lastTMs": 10256,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160734
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 102
+      },
+      {
+       "pid": 160744,
+       "firstTMs": 2502,
+       "lastTMs": 10757,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160735
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 94
+      },
+      {
+       "pid": 160741,
+       "firstTMs": 3006,
+       "lastTMs": 11008,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        160739
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 138
+      },
+      {
+       "pid": 160738,
+       "firstTMs": 4507,
+       "lastTMs": 10256,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160742
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 84
+      },
+      {
+       "pid": 160739,
+       "firstTMs": 5008,
+       "lastTMs": 10757,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        160734,
+        160741
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 53
+      }
+     ]
+    }
+   },
+   "borrowWaitEstimate": {
+    "submitP99Ms": 2301,
+    "pgTxP99Ms": 83,
+    "nonBorrowUpperMs": 133,
+    "borrowP99EstMs": 2168,
+    "derivation": "submitHTTP_p99 − (pgTx_p99[T7窗] + 无事务请求RT_p99[监考读] 或 +50ms[纯臂兜底])；measurement-neutrality law 禁止进程内逐请求观测，此为保守分解（池等待为唯一剩余大头）"
+   },
+   "bg": null,
+   "cpuT7Window": {
+    "ticksInWindow": 43,
+    "apiProcCpuMs": 1710,
+    "apiMainThreadCpuMs": 1500,
+    "hostCpuTicksDelta": 24266,
+    "cpuMsPerVerifiedSubmit": 8.6,
+    "mainThreadSharePct": 87.7
+   },
+   "driverCpu": {
+    "samples": 119,
+    "cpuUsagePctMax1Core": 11.3,
+    "cpuUsagePctAvg1Core": 1.2,
+    "elDelayP99MaxMs": 15.16,
+    "rssMbMax": 82
+   },
+   "oracle": {
+    "terminalOk": 200,
+    "mismatchCount": 0,
+    "byStatus": {
+     "graded": 200
+    },
+    "receipts": 400,
+    "dupActive": 0,
+    "dupTerminal": 0,
+    "perExamTerminal": {
+     "176a0476": 200
+    },
+    "bgInProgress": null
+   },
+   "clockOffsetContainerMinusHostMs": -817,
+   "t7Window": {
+    "startHostEpoch": 1795128700993,
+    "endHostEpoch": 1795128713309
+   }
+  },
+  "S1-SUBMIT-same-overlay-r1": {
+   "runId": "S1-SUBMIT-same-overlay-r1",
+   "arm": "same",
+   "mode": "overlay",
+   "t6": {
+    "verdict": "PASS",
+    "reasons": []
+   },
+   "submit": {
+    "offered": 200,
+    "verified": 200,
+    "dropped": 0,
+    "statusTally": {
+     "200": 200
+    },
+    "p50Ms": 2314,
+    "p95Ms": 2374,
+    "p99Ms": 2383,
+    "maxMs": 2387,
+    "n": 200,
+    "drainMs": 2388,
+    "lastConfirmMinusT0Ms": 2388,
+    "errors": []
+   },
+   "emitLag": {
+    "p99Ms": 10,
+    "maxMs": 10,
+    "widthMs": 15,
+    "over50": 0
+   },
+   "pool": {
+    "note": "postgres.js 3.4.9 不暴露 reserved/pending（capacityResearch 探测为空，L2 系列同）——池证据=sqlDelta 到达计数 + RT 分解 + pgSide 会话占用",
+    "t7Window": {
+     "samples": 44,
+     "sqlArrivalsInWindow": 1872,
+     "sqlDeltaMaxPer250ms": 666,
+     "eventLoopMaxMs": 40.47
+    },
+    "preWindow": {
+     "samples": 234,
+     "sqlArrivalsInWindow": 3452,
+     "sqlDeltaMaxPer250ms": 51,
+     "eventLoopMaxMs": 9.65
+    },
+    "snapshotCount": 411
+   },
+   "pgSide": {
+    "note": "API postgres.js 池 max=10；busy=pg_stat_activity 中 active 或 idle-in-transaction 会话数（执行侧占用，客户端排队不可见于 PG）",
+    "polls": 49,
+    "maxBusySessions": 10,
+    "pollsAtMax10": 4,
+    "pollsAtLeast8": 9,
+    "busySeries": [
+     9,
+     9,
+     9,
+     10,
+     10,
+     8,
+     9,
+     10,
+     10,
+     7,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "pgTx": {
+    "t7Window": {
+     "note": "T7 窗口内 per-pid 最大 xact 年龄（250ms 采样下界，短事务可能整段错过）",
+     "distinctPids": 10,
+     "p50Ms": 74,
+     "p95Ms": 90,
+     "p99Ms": 90,
+     "maxMs": 90
+    },
+    "wholeRun": {
+     "note": "per-pid 观测到的最大 xact 年龄（ms）；250ms 采样的下界估计，短事务可能整段错过",
+     "distinctPids": 10,
+     "p50Ms": 108,
+     "p95Ms": 141,
+     "p99Ms": 141,
+     "maxMs": 141,
+     "sortedMaxAgeMs": [
+      70,
+      75,
+      99,
+      100,
+      103,
+      108,
+      110,
+      113,
+      130,
+      141
+     ]
+    }
+   },
+   "lockWaits": {
+    "t7Window": {
+     "distinctPids": 0,
+     "events": []
+    },
+    "wholeRun": {
+     "distinctPids": 10,
+     "events": [
+      {
+       "pid": 161301,
+       "firstTMs": 750,
+       "lastTMs": 12008,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161298,
+        161288
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 39
+      },
+      {
+       "pid": 161297,
+       "firstTMs": 750,
+       "lastTMs": 9007,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161298,
+        161288,
+        161301,
+        161299
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 107
+      },
+      {
+       "pid": 161302,
+       "firstTMs": 750,
+       "lastTMs": 12008,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161298,
+        161288,
+        161301,
+        161299,
+        161297
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 110
+      },
+      {
+       "pid": 161288,
+       "firstTMs": 750,
+       "lastTMs": 11508,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161298
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 62
+      },
+      {
+       "pid": 161298,
+       "firstTMs": 750,
+       "lastTMs": 11008,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        161287
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 63
+      },
+      {
+       "pid": 161299,
+       "firstTMs": 750,
+       "lastTMs": 12008,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161298,
+        161288,
+        161301
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 103
+      },
+      {
+       "pid": 161287,
+       "firstTMs": 1251,
+       "lastTMs": 11758,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        161300
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 108
+      },
+      {
+       "pid": 161300,
+       "firstTMs": 1752,
+       "lastTMs": 12008,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161297,
+        161303,
+        161298,
+        161304
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 71
+      },
+      {
+       "pid": 161304,
+       "firstTMs": 1752,
+       "lastTMs": 10758,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161297,
+        161303,
+        161298
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 99
+      },
+      {
+       "pid": 161303,
+       "firstTMs": 1752,
+       "lastTMs": 11758,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        161297
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 100
+      }
+     ]
+    }
+   },
+   "borrowWaitEstimate": {
+    "submitP99Ms": 2383,
+    "pgTxP99Ms": 90,
+    "nonBorrowUpperMs": 129,
+    "borrowP99EstMs": 2254,
+    "derivation": "submitHTTP_p99 − (pgTx_p99[T7窗] + 无事务请求RT_p99[监考读] 或 +50ms[纯臂兜底])；measurement-neutrality law 禁止进程内逐请求观测，此为保守分解（池等待为唯一剩余大头）"
+   },
+   "bg": {
+    "window": {
+     "pre": [
+      1795128883624,
+      1795128943624
+     ],
+     "t7": [
+      1795128943624,
+      1795128956012
+     ]
+    },
+    "savePre": {
+     "n": 237,
+     "p50Ms": 30,
+     "p95Ms": 39,
+     "p99Ms": 46,
+     "maxMs": 51,
+     "sortedMs": [
+      25,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      34,
+      34,
+      34,
+      34,
+      35,
+      35,
+      35,
+      35,
+      35,
+      35,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      37,
+      37,
+      38,
+      39,
+      39,
+      39,
+      39,
+      40,
+      40,
+      41,
+      42,
+      42,
+      44,
+      46,
+      46,
+      47,
+      51
+     ],
+     "rejectedOrFailed": 0
+    },
+    "saveT7": {
+     "n": 47,
+     "p50Ms": 30,
+     "p95Ms": 981,
+     "p99Ms": 1560,
+     "maxMs": 1560,
+     "sortedMs": [
+      26,
+      26,
+      27,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      32,
+      34,
+      34,
+      44,
+      360,
+      455,
+      486,
+      527,
+      622,
+      896,
+      981,
+      1095,
+      1560
+     ],
+     "rejectedOrFailed": 0
+    },
+    "hbPre": {
+     "n": 284,
+     "p50Ms": 17,
+     "p95Ms": 23,
+     "p99Ms": 31,
+     "maxMs": 35,
+     "sortedMs": [
+      13,
+      13,
+      13,
+      13,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      21,
+      21,
+      21,
+      21,
+      22,
+      22,
+      22,
+      23,
+      23,
+      25,
+      25,
+      25,
+      26,
+      26,
+      27,
+      28,
+      28,
+      29,
+      29,
+      30,
+      31,
+      31,
+      35
+     ],
+     "rejectedOrFailed": 0
+    },
+    "hbT7": {
+     "n": 15,
+     "p50Ms": 16,
+     "p95Ms": 300,
+     "p99Ms": 300,
+     "maxMs": 300,
+     "sortedMs": [
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      16,
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      250,
+      300
+     ],
+     "rejectedOrFailed": 0
+    },
+    "proctorPre": {
+     "n": 40,
+     "p50Ms": 27,
+     "p95Ms": 38,
+     "p99Ms": 39,
+     "maxMs": 39,
+     "sortedMs": [
+      15,
+      17,
+      17,
+      17,
+      17,
+      17,
+      18,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      19,
+      19,
+      20,
+      20,
+      21,
+      23,
+      23,
+      27,
+      28,
+      30,
+      30,
+      30,
+      33,
+      33,
+      34,
+      34,
+      34,
+      34,
+      34,
+      35,
+      35,
+      35,
+      35,
+      36,
+      36,
+      38,
+      39
+     ],
+     "rejectedOrFailed": 0
+    },
+    "proctorT7": {
+     "n": 8,
+     "p50Ms": 28,
+     "p95Ms": 1929,
+     "p99Ms": 1929,
+     "maxMs": 1929,
+     "sortedMs": [
+      18,
+      18,
+      25,
+      26,
+      28,
+      29,
+      73,
+      1929
+     ],
+     "rejectedOrFailed": 0
+    }
+   },
+   "cpuT7Window": {
+    "ticksInWindow": 42,
+    "apiProcCpuMs": 3220,
+    "apiMainThreadCpuMs": 2760,
+    "hostCpuTicksDelta": 24816,
+    "cpuMsPerVerifiedSubmit": 16.1,
+    "mainThreadSharePct": 85.7
+   },
+   "driverCpu": {
+    "samples": 189,
+    "cpuUsagePctMax1Core": 11.6,
+    "cpuUsagePctAvg1Core": 1.5,
+    "elDelayP99MaxMs": 14.6,
+    "rssMbMax": 82
+   },
+   "oracle": {
+    "terminalOk": 200,
+    "mismatchCount": 0,
+    "byStatus": {
+     "graded": 200
+    },
+    "receipts": 400,
+    "dupActive": 0,
+    "dupTerminal": 0,
+    "perExamTerminal": {
+     "69c0e73e": 200
+    },
+    "bgInProgress": 20
+   },
+   "clockOffsetContainerMinusHostMs": 64,
+   "t7Window": {
+    "startHostEpoch": 1795128943624,
+    "endHostEpoch": 1795128956012
+   }
+  },
+  "S1-SUBMIT-cross-overlay-r1": {
+   "runId": "S1-SUBMIT-cross-overlay-r1",
+   "arm": "cross",
+   "mode": "overlay",
+   "t6": {
+    "verdict": "PASS",
+    "reasons": []
+   },
+   "submit": {
+    "offered": 200,
+    "verified": 200,
+    "dropped": 0,
+    "statusTally": {
+     "200": 200
+    },
+    "p50Ms": 2266,
+    "p95Ms": 2324,
+    "p99Ms": 2331,
+    "maxMs": 2337,
+    "n": 200,
+    "drainMs": 2350,
+    "lastConfirmMinusT0Ms": 2350,
+    "errors": []
+   },
+   "emitLag": {
+    "p99Ms": 15,
+    "maxMs": 15,
+    "widthMs": 19,
+    "over50": 0
+   },
+   "pool": {
+    "note": "postgres.js 3.4.9 不暴露 reserved/pending（capacityResearch 探测为空，L2 系列同）——池证据=sqlDelta 到达计数 + RT 分解 + pgSide 会话占用",
+    "t7Window": {
+     "samples": 44,
+     "sqlArrivalsInWindow": 1841,
+     "sqlDeltaMaxPer250ms": 718,
+     "eventLoopMaxMs": 23.2
+    },
+    "preWindow": {
+     "samples": 234,
+     "sqlArrivalsInWindow": 3426,
+     "sqlDeltaMaxPer250ms": 41,
+     "eventLoopMaxMs": 4.51
+    },
+    "snapshotCount": 411
+   },
+   "pgSide": {
+    "note": "API postgres.js 池 max=10；busy=pg_stat_activity 中 active 或 idle-in-transaction 会话数（执行侧占用，客户端排队不可见于 PG）",
+    "polls": 50,
+    "maxBusySessions": 10,
+    "pollsAtMax10": 5,
+    "pollsAtLeast8": 6,
+    "busySeries": [
+     1,
+     10,
+     8,
+     7,
+     10,
+     7,
+     10,
+     10,
+     10,
+     7,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "pgTx": {
+    "t7Window": {
+     "note": "T7 窗口内 per-pid 最大 xact 年龄（250ms 采样下界，短事务可能整段错过）",
+     "distinctPids": 10,
+     "p50Ms": 124,
+     "p95Ms": 135,
+     "p99Ms": 135,
+     "maxMs": 135
+    },
+    "wholeRun": {
+     "note": "per-pid 观测到的最大 xact 年龄（ms）；250ms 采样的下界估计，短事务可能整段错过",
+     "distinctPids": 10,
+     "p50Ms": 133,
+     "p95Ms": 140,
+     "p99Ms": 140,
+     "maxMs": 140,
+     "sortedMaxAgeMs": [
+      87,
+      115,
+      121,
+      124,
+      133,
+      133,
+      134,
+      135,
+      140,
+      140
+     ]
+    }
+   },
+   "lockWaits": {
+    "t7Window": {
+     "distinctPids": 0,
+     "events": []
+    },
+    "wholeRun": {
+     "distinctPids": 10,
+     "events": [
+      {
+       "pid": 162182,
+       "firstTMs": 750,
+       "lastTMs": 11750,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171,
+        162175,
+        162179,
+        162176,
+        162180,
+        162177
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 130
+      },
+      {
+       "pid": 162177,
+       "firstTMs": 750,
+       "lastTMs": 12251,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171,
+        162175,
+        162179,
+        162176,
+        162180
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 85
+      },
+      {
+       "pid": 162171,
+       "firstTMs": 750,
+       "lastTMs": 12251,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        162178
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 62
+      },
+      {
+       "pid": 162180,
+       "firstTMs": 750,
+       "lastTMs": 9001,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171,
+        162175,
+        162179,
+        162176
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 69
+      },
+      {
+       "pid": 162176,
+       "firstTMs": 750,
+       "lastTMs": 9751,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171,
+        162175,
+        162179
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 134
+      },
+      {
+       "pid": 162175,
+       "firstTMs": 750,
+       "lastTMs": 12251,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 124
+      },
+      {
+       "pid": 162170,
+       "firstTMs": 750,
+       "lastTMs": 12000,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171,
+        162179,
+        162176,
+        162180,
+        162177,
+        162182
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 140
+      },
+      {
+       "pid": 162179,
+       "firstTMs": 750,
+       "lastTMs": 11750,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162171,
+        162175
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 67
+      },
+      {
+       "pid": 162181,
+       "firstTMs": 2001,
+       "lastTMs": 11750,
+       "waitEvent": "Lock:tuple",
+       "blockers": [
+        162175
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 74
+      },
+      {
+       "pid": 162178,
+       "firstTMs": 2502,
+       "lastTMs": 9751,
+       "waitEvent": "Lock:transactionid",
+       "blockers": [
+        162170
+       ],
+       "q": "select \"id\", \"organization_id\", \"title\", \"description\", \"course_id\", \"status\", \"timing_mode\", \"duration_minutes\", \"open_at\", \"close_at\", \"sync_started_at\", \"passing_score\", \"total_score\", \"question_se",
+       "maxAgeMs": 63
+      }
+     ]
+    }
+   },
+   "borrowWaitEstimate": {
+    "submitP99Ms": 2331,
+    "pgTxP99Ms": 135,
+    "nonBorrowUpperMs": 174,
+    "borrowP99EstMs": 2157,
+    "derivation": "submitHTTP_p99 − (pgTx_p99[T7窗] + 无事务请求RT_p99[监考读] 或 +50ms[纯臂兜底])；measurement-neutrality law 禁止进程内逐请求观测，此为保守分解（池等待为唯一剩余大头）"
+   },
+   "bg": {
+    "window": {
+     "pre": [
+      1795129098684,
+      1795129158684
+     ],
+     "t7": [
+      1795129158684,
+      1795129171034
+     ]
+    },
+    "savePre": {
+     "n": 238,
+     "p50Ms": 29,
+     "p95Ms": 34,
+     "p99Ms": 41,
+     "maxMs": 52,
+     "sortedMs": [
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      26,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      27,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      28,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      30,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      31,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      32,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      33,
+      34,
+      34,
+      34,
+      34,
+      34,
+      34,
+      34,
+      34,
+      34,
+      35,
+      35,
+      35,
+      36,
+      36,
+      39,
+      39,
+      41,
+      41,
+      42,
+      52
+     ],
+     "rejectedOrFailed": 0
+    },
+    "saveT7": {
+     "n": 47,
+     "p50Ms": 30,
+     "p95Ms": 1381,
+     "p99Ms": 1582,
+     "maxMs": 1582,
+     "sortedMs": [
+      27,
+      27,
+      27,
+      27,
+      28,
+      28,
+      28,
+      28,
+      28,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      29,
+      30,
+      30,
+      30,
+      30,
+      30,
+      31,
+      31,
+      31,
+      31,
+      31,
+      32,
+      32,
+      33,
+      35,
+      35,
+      36,
+      466,
+      527,
+      663,
+      716,
+      897,
+      923,
+      1006,
+      1381,
+      1524,
+      1582
+     ],
+     "rejectedOrFailed": 0
+    },
+    "hbPre": {
+     "n": 281,
+     "p50Ms": 17,
+     "p95Ms": 22,
+     "p99Ms": 31,
+     "maxMs": 34,
+     "sortedMs": [
+      13,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      19,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      21,
+      21,
+      21,
+      21,
+      21,
+      21,
+      22,
+      22,
+      23,
+      23,
+      23,
+      24,
+      25,
+      26,
+      26,
+      26,
+      27,
+      27,
+      28,
+      31,
+      31,
+      34
+     ],
+     "rejectedOrFailed": 0
+    },
+    "hbT7": {
+     "n": 14,
+     "p50Ms": 17,
+     "p95Ms": 964,
+     "p99Ms": 964,
+     "maxMs": 964,
+     "sortedMs": [
+      15,
+      16,
+      16,
+      17,
+      17,
+      17,
+      17,
+      17,
+      18,
+      23,
+      221,
+      347,
+      745,
+      964
+     ],
+     "rejectedOrFailed": 0
+    },
+    "proctorPre": {
+     "n": 40,
+     "p50Ms": 18,
+     "p95Ms": 31,
+     "p99Ms": 39,
+     "maxMs": 39,
+     "sortedMs": [
+      16,
+      16,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      17,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      19,
+      20,
+      20,
+      20,
+      20,
+      21,
+      21,
+      22,
+      22,
+      26,
+      31,
+      39
+     ],
+     "rejectedOrFailed": 0
+    },
+    "proctorT7": {
+     "n": 8,
+     "p50Ms": 18,
+     "p95Ms": 1777,
+     "p99Ms": 1777,
+     "maxMs": 1777,
+     "sortedMs": [
+      16,
+      16,
+      17,
+      18,
+      18,
+      21,
+      414,
+      1777
+     ],
+     "rejectedOrFailed": 0
+    }
+   },
+   "cpuT7Window": {
+    "ticksInWindow": 42,
+    "apiProcCpuMs": 3120,
+    "apiMainThreadCpuMs": 2710,
+    "hostCpuTicksDelta": 24803,
+    "cpuMsPerVerifiedSubmit": 15.6,
+    "mainThreadSharePct": 86.9
+   },
+   "driverCpu": {
+    "samples": 189,
+    "cpuUsagePctMax1Core": 15.3,
+    "cpuUsagePctAvg1Core": 1.5,
+    "elDelayP99MaxMs": 19.43,
+    "rssMbMax": 83
+   },
+   "oracle": {
+    "terminalOk": 200,
+    "mismatchCount": 0,
+    "byStatus": {
+     "graded": 200
+    },
+    "receipts": 400,
+    "dupActive": 0,
+    "dupTerminal": 0,
+    "perExamTerminal": {
+     "c2d55a00": 20,
+     "2fc86a9d": 20,
+     "cdb71378": 20,
+     "89b14526": 20,
+     "16bb899a": 20,
+     "a1321285": 20,
+     "9433f6ef": 20,
+     "41aea0f8": 20,
+     "3b891da0": 20,
+     "046861c9": 20
+    },
+    "bgInProgress": 20
+   },
+   "clockOffsetContainerMinusHostMs": 71,
+   "t7Window": {
+    "startHostEpoch": 1795129158684,
+    "endHostEpoch": 1795129171034
+   }
+  }
+ },
+ "differentials": {
+  "sameVsCross_pure(cross→same)": {
+   "a": "S1-SUBMIT-cross-pure-r1",
+   "b": "S1-SUBMIT-same-pure-r1",
+   "relDiffPct": {
+    "submit.p99Ms": 5.6,
+    "submit.p50Ms": 6.1,
+    "submit.maxMs": 5.6,
+    "submit.drainMs": 6.1,
+    "submit.lastConfirmMinusT0Ms": 6.2,
+    "pgTx.t7Window.p99Ms": 14.0,
+    "pgTx.t7Window.maxMs": 14.0,
+    "pool.t7Window.sqlArrivalsInWindow": -0.3,
+    "pgSide.maxBusySessions": 0.0
+   },
+   "raw": {
+    "submit.p99Ms": [
+     2263,
+     2389
+    ],
+    "submit.p50Ms": [
+     2201,
+     2336
+    ],
+    "submit.maxMs": [
+     2263,
+     2389
+    ],
+    "submit.drainMs": [
+     2275,
+     2414
+    ],
+    "submit.lastConfirmMinusT0Ms": [
+     2274,
+     2414
+    ],
+    "pgTx.t7Window.p99Ms": [
+     157,
+     179
+    ],
+    "pgTx.t7Window.maxMs": [
+     157,
+     179
+    ],
+    "pool.t7Window.sqlArrivalsInWindow": [
+     1501,
+     1496
+    ],
+    "pgSide.maxBusySessions": [
+     10,
+     10
+    ]
+   }
+  },
+  "sameVsCross_overlay(cross→same)": {
+   "a": "S1-SUBMIT-cross-overlay-r1",
+   "b": "S1-SUBMIT-same-overlay-r1",
+   "relDiffPct": {
+    "submit.p99Ms": 2.2,
+    "submit.p50Ms": 2.1,
+    "submit.maxMs": 2.1,
+    "submit.drainMs": 1.6,
+    "submit.lastConfirmMinusT0Ms": 1.6,
+    "pgTx.t7Window.p99Ms": -33.3,
+    "pgTx.t7Window.maxMs": -33.3,
+    "pool.t7Window.sqlArrivalsInWindow": 1.7,
+    "pgSide.maxBusySessions": 0.0,
+    "bg.saveT7.p99Ms": -1.4,
+    "bg.hbT7.p99Ms": -68.9,
+    "bg.proctorT7.p99Ms": 8.6
+   },
+   "raw": {
+    "submit.p99Ms": [
+     2331,
+     2383
+    ],
+    "submit.p50Ms": [
+     2266,
+     2314
+    ],
+    "submit.maxMs": [
+     2337,
+     2387
+    ],
+    "submit.drainMs": [
+     2350,
+     2388
+    ],
+    "submit.lastConfirmMinusT0Ms": [
+     2350,
+     2388
+    ],
+    "pgTx.t7Window.p99Ms": [
+     135,
+     90
+    ],
+    "pgTx.t7Window.maxMs": [
+     135,
+     90
+    ],
+    "pool.t7Window.sqlArrivalsInWindow": [
+     1841,
+     1872
+    ],
+    "pgSide.maxBusySessions": [
+     10,
+     10
+    ],
+    "bg.saveT7.p99Ms": [
+     1582,
+     1560
+    ],
+    "bg.hbT7.p99Ms": [
+     964,
+     300
+    ],
+    "bg.proctorT7.p99Ms": [
+     1777,
+     1929
+    ]
+   }
+  },
+  "overlaySpill_same(pure→overlay)": {
+   "a": "S1-SUBMIT-same-pure-r1",
+   "b": "S1-SUBMIT-same-overlay-r1",
+   "relDiffPct": {
+    "submit.p99Ms": -0.3,
+    "submit.p50Ms": -0.9,
+    "submit.maxMs": -0.1,
+    "submit.drainMs": -1.1,
+    "submit.lastConfirmMinusT0Ms": -1.1,
+    "pgTx.t7Window.p99Ms": -49.7,
+    "pgTx.t7Window.maxMs": -49.7,
+    "pool.t7Window.sqlArrivalsInWindow": 25.1,
+    "pgSide.maxBusySessions": 0.0,
+    "bg.saveT7.p99Ms": null,
+    "bg.hbT7.p99Ms": null,
+    "bg.proctorT7.p99Ms": null
+   },
+   "raw": {
+    "submit.p99Ms": [
+     2389,
+     2383
+    ],
+    "submit.p50Ms": [
+     2336,
+     2314
+    ],
+    "submit.maxMs": [
+     2389,
+     2387
+    ],
+    "submit.drainMs": [
+     2414,
+     2388
+    ],
+    "submit.lastConfirmMinusT0Ms": [
+     2414,
+     2388
+    ],
+    "pgTx.t7Window.p99Ms": [
+     179,
+     90
+    ],
+    "pgTx.t7Window.maxMs": [
+     179,
+     90
+    ],
+    "pool.t7Window.sqlArrivalsInWindow": [
+     1496,
+     1872
+    ],
+    "pgSide.maxBusySessions": [
+     10,
+     10
+    ],
+    "bg.saveT7.p99Ms": [
+     null,
+     1560
+    ],
+    "bg.hbT7.p99Ms": [
+     null,
+     300
+    ],
+    "bg.proctorT7.p99Ms": [
+     null,
+     1929
+    ]
+   }
+  },
+  "overlaySpill_cross(pure→overlay)": {
+   "a": "S1-SUBMIT-cross-pure-r1",
+   "b": "S1-SUBMIT-cross-overlay-r1",
+   "relDiffPct": {
+    "submit.p99Ms": 3.0,
+    "submit.p50Ms": 3.0,
+    "submit.maxMs": 3.3,
+    "submit.drainMs": 3.3,
+    "submit.lastConfirmMinusT0Ms": 3.3,
+    "pgTx.t7Window.p99Ms": -14.0,
+    "pgTx.t7Window.maxMs": -14.0,
+    "pool.t7Window.sqlArrivalsInWindow": 22.7,
+    "pgSide.maxBusySessions": 0.0,
+    "bg.saveT7.p99Ms": null,
+    "bg.hbT7.p99Ms": null,
+    "bg.proctorT7.p99Ms": null
+   },
+   "raw": {
+    "submit.p99Ms": [
+     2263,
+     2331
+    ],
+    "submit.p50Ms": [
+     2201,
+     2266
+    ],
+    "submit.maxMs": [
+     2263,
+     2337
+    ],
+    "submit.drainMs": [
+     2275,
+     2350
+    ],
+    "submit.lastConfirmMinusT0Ms": [
+     2274,
+     2350
+    ],
+    "pgTx.t7Window.p99Ms": [
+     157,
+     135
+    ],
+    "pgTx.t7Window.maxMs": [
+     157,
+     135
+    ],
+    "pool.t7Window.sqlArrivalsInWindow": [
+     1501,
+     1841
+    ],
+    "pgSide.maxBusySessions": [
+     10,
+     10
+    ],
+    "bg.saveT7.p99Ms": [
+     null,
+     1582
+    ],
+    "bg.hbT7.p99Ms": [
+     null,
+     964
+    ],
+    "bg.proctorT7.p99Ms": [
+     null,
+     1777
+    ]
+   }
+  },
+  "aaNoiseFloor_samePure(|r2-r1|/r1)": {
+   "a": "S1-SUBMIT-same-pure-r1",
+   "b": "S1-SUBMIT-same-pure-r2",
+   "relDiffPct": {
+    "submit.p99Ms": -3.7,
+    "submit.p50Ms": -3.9,
+    "submit.maxMs": -3.3,
+    "submit.drainMs": -4.1,
+    "submit.lastConfirmMinusT0Ms": -4.1,
+    "pgTx.t7Window.p99Ms": -53.6,
+    "pgTx.t7Window.maxMs": -53.6,
+    "pool.t7Window.sqlArrivalsInWindow": -11.6,
+    "pgSide.maxBusySessions": 0.0
+   }
+  }
+ },
+ "t7": {
+  "a_poolWaitSustained": {
+   "same-pure-r1": {
+    "borrowP99EstMs": 2160,
+    "pgMaxBusySessions": 10,
+    "pollsAtMax10": 6,
+    "satisfied": true
+   },
+   "same-pure-r2": {
+    "borrowP99EstMs": 2168,
+    "pgMaxBusySessions": 10,
+    "pollsAtMax10": 3,
+    "satisfied": true
+   },
+   "cross-pure-r1": {
+    "borrowP99EstMs": 2056,
+    "pgMaxBusySessions": 10,
+    "pollsAtMax10": 3,
+    "satisfied": true
+   },
+   "same-overlay-r1": {
+    "borrowP99EstMs": 2254,
+    "pgMaxBusySessions": 10,
+    "pollsAtMax10": 4,
+    "satisfied": true
+   },
+   "cross-overlay-r1": {
+    "borrowP99EstMs": 2157,
+    "pgMaxBusySessions": 10,
+    "pollsAtMax10": 5,
+    "satisfied": true
+   }
+  },
+  "b_tailDegradation": {
+   "same-overlay-r1": {
+    "save": {
+     "preP99Ms": 46,
+     "t7P99Ms": 1560,
+     "ratio": 33.91,
+     "absGe50ms": true,
+     "satisfied": true
+    },
+    "hb": {
+     "preP99Ms": 31,
+     "t7P99Ms": 300,
+     "ratio": 9.68,
+     "absGe50ms": true,
+     "satisfied": true
+    },
+    "proctor": {
+     "preP99Ms": 39,
+     "t7P99Ms": 1929,
+     "ratio": 49.46,
+     "absGe50ms": true,
+     "satisfied": true
+    },
+    "satisfied": true
+   },
+   "cross-overlay-r1": {
+    "save": {
+     "preP99Ms": 41,
+     "t7P99Ms": 1582,
+     "ratio": 38.59,
+     "absGe50ms": true,
+     "satisfied": true
+    },
+    "hb": {
+     "preP99Ms": 31,
+     "t7P99Ms": 964,
+     "ratio": 31.1,
+     "absGe50ms": true,
+     "satisfied": true
+    },
+    "proctor": {
+     "preP99Ms": 39,
+     "t7P99Ms": 1777,
+     "ratio": 45.56,
+     "absGe50ms": true,
+     "satisfied": true
+    },
+    "satisfied": true
+   }
+  }
+ },
+ "notes": []
+}

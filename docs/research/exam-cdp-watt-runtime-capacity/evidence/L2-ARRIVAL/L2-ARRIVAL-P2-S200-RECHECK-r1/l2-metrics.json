@@ -1,0 +1,250 @@
+{
+  "runId": "L2-ARRIVAL-P2-S200-RECHECK-r1",
+  "profile": "p2",
+  "n": 200,
+  "scenario": "full",
+  "topology": "direct",
+  "fourLevel": {
+    "planned": 3258,
+    "actuallySent": 3258,
+    "gotResponse": 3258,
+    "gotCorrectSessionOrTerminal": {
+      "loginSessionsIssued": 200,
+      "loginSessionsValidOnProtectedCall": 200
+    }
+  },
+  "offered": 3258,
+  "sent": 3258,
+  "login": {
+    "offered": 200,
+    "ok": 200,
+    "failedOrRejected": 0,
+    "statusTally": {
+      "200": 200
+    },
+    "latencyOk": {
+      "n": 200,
+      "p50": 57,
+      "p95": 78,
+      "p99": 114,
+      "max": 116
+    },
+    "independentSuccessDbOracle": 200,
+    "independentSuccessDriverSessionValid": 200,
+    "lastOkAfterWindowStartMs": 240002
+  },
+  "rejections": {
+    "http429": 0,
+    "http401": 0,
+    "http503": 0,
+    "httpOther4xx5xx": {},
+    "networkTimeout": 0,
+    "networkOther": {},
+    "noResponse": 0,
+    "cancelledDepFailed": 0,
+    "driverDropped": 0,
+    "designedAbortReplay": 29
+  },
+  "completion": {
+    "lastLoginOkAfterWindowStartMs": 240002,
+    "lastSubmitOkAfterWindowStartMs": 283614,
+    "lastVerifiedOpAfterWindowStartMs": 283786
+  },
+  "inProgressOps": {
+    "saveAll": {
+      "runWide": {
+        "n": 371,
+        "p50": 29,
+        "p95": 54,
+        "p99": 75,
+        "max": 101
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 277,
+        "p50": 30,
+        "p95": 57,
+        "p99": 88,
+        "max": 101
+      }
+    },
+    "save1": {
+      "runWide": {
+        "n": 200,
+        "p50": 29,
+        "p95": 55,
+        "p99": 93,
+        "max": 101
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 156,
+        "p50": 30,
+        "p95": 57,
+        "p99": 93,
+        "max": 101
+      }
+    },
+    "save2": {
+      "runWide": {
+        "n": 171,
+        "p50": 28,
+        "p95": 52,
+        "p99": 71,
+        "max": 88
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 121,
+        "p50": 30,
+        "p95": 57,
+        "p99": 71,
+        "max": 88
+      }
+    },
+    "heartbeat": {
+      "runWide": {
+        "n": 171,
+        "p50": 15,
+        "p95": 24,
+        "p99": 28,
+        "max": 32
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 28,
+        "p50": 16,
+        "p95": 22,
+        "p99": 32,
+        "max": 32
+      }
+    },
+    "start": {
+      "runWide": {
+        "n": 200,
+        "p50": 32,
+        "p95": 59,
+        "p99": 94,
+        "max": 107
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 164,
+        "p50": 32,
+        "p95": 63,
+        "p99": 94,
+        "max": 107
+      }
+    },
+    "take": {
+      "runWide": {
+        "n": 429,
+        "p50": 23,
+        "p95": 38,
+        "p99": 48,
+        "max": 65
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 247,
+        "p50": 24,
+        "p95": 44,
+        "p99": 49,
+        "max": 65
+      }
+    },
+    "submit": {
+      "runWide": {
+        "n": 200,
+        "p50": 46,
+        "p95": 64,
+        "p99": 91,
+        "max": 108
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 55,
+        "p50": 49,
+        "p95": 82,
+        "p99": 108,
+        "max": 108
+      }
+    },
+    "clientEvents": {
+      "runWide": {
+        "n": 342,
+        "p50": 14,
+        "p95": 26,
+        "p99": 33,
+        "max": 39
+      },
+      "failures": 0,
+      "withinArrivalWindow": {
+        "n": 196,
+        "p50": 15,
+        "p95": 30,
+        "p99": 36,
+        "max": 39
+      }
+    }
+  },
+  "arrival": {
+    "loginPlannedFirstMs": 2964,
+    "loginPlannedLastMs": 239954,
+    "sameMomentActualEmitWidthMs": null
+  },
+  "apiCpu": {
+    "procCpuMsWindow": 35330,
+    "mainThreadCpuMsWindow": 19370,
+    "wallMsWindow": 285018,
+    "cpuPerSuccessMs": 176.7,
+    "vmHwmKb": 506032,
+    "busyThreadsMax": 7,
+    "busyThreadsNonMainMax": 6,
+    "hostCpuMsWindow": 5720230
+  },
+  "eventLoop": {
+    "p90MaxMs": 1.44,
+    "maxMs": 24.77,
+    "snapshots": 282
+  },
+  "t6": {
+    "driverCpuMax1Core": 9.4,
+    "driverCpuAvg1Core": 1.1,
+    "emitLagP99Ms": 2,
+    "emitLagMaxMs": 29,
+    "emitLagOver50": 0,
+    "dropped": 0,
+    "verdict": "PASS",
+    "notes": []
+  },
+  "oracle": {
+    "attempts": {
+      "total": 200,
+      "byStatus": {
+        "graded": 200
+      },
+      "terminalOk": 200,
+      "flowIncomplete": 0,
+      "mismatches": [],
+      "noAttempt": 0
+    },
+    "invariants": {
+      "duplicateActiveAttempts": 0,
+      "duplicateTerminalTransitions": 0
+    },
+    "dbOracle": {
+      "loginSuccessAll": 202,
+      "loginSuccessCandidates": 200,
+      "loginSuccessDistinctCandidates": 200,
+      "loginSuccessDistinctCandidateIps": 200,
+      "loginFailure": 0,
+      "loginFailureReasons": null,
+      "auditTotal": 463,
+      "attemptsByStatus": {
+        "graded": 200
+      },
+      "inProgressAttempts": 0
+    }
+  }
+}

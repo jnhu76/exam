@@ -1,0 +1,91 @@
+[series 04:20:01] == stage aa（同臂连续 2 轮 A：噪声地板，不入配对）==
+[series 04:20:01] START L3-ADMISSION-A-P2-S200-aa1 (arm=a pair=—)
+[l3] 1/9 full R1 reset (arm A: frozen dist, no admission env)
+[l3] 2/9 API pid=2867343 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=a (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-A-P2-S200-aa1
+[series 04:25:05] DONE  L3-ADMISSION-A-P2-S200-aa1 (304s)
+[series 04:25:05] START L3-ADMISSION-A-P2-S200-aa2 (arm=a pair=—)
+[l3] 1/9 full R1 reset (arm A: frozen dist, no admission env)
+[l3] 2/9 API pid=2878624 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=a (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-A-P2-S200-aa2
+[series 04:30:09] DONE  L3-ADMISSION-A-P2-S200-aa2 (304s)
+[series 04:30:09] == stage pairs（交错：对1 A→B、对2 B→A、对3 A→B）==
+[series 04:30:09] START L3-ADMISSION-A-P2-S200-r1a (arm=a pair=1)
+[l3] 1/9 full R1 reset (arm A: frozen dist, no admission env)
+[l3] 2/9 API pid=2889891 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=a (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-A-P2-S200-r1a
+[series 04:35:13] DONE  L3-ADMISSION-A-P2-S200-r1a (304s)
+[series 04:35:13] START L3-ADMISSION-B-P2-S200-r1b (arm=b pair=1)
+[l3] 1/9 full R1 reset (arm B: dist=dist-l3 env=LOGIN_ADMISSION=1,LOGIN_ADMISSION_PERMITS=4,LOGIN_ADMISSION_QUEUE_CAPACITY=189,LOGIN_ADMISSION_WAIT_BUDGET_MS=5000)
+[l3] 2/9 API pid=2901155 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=b (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-B-P2-S200-r1b
+[series 04:40:17] DONE  L3-ADMISSION-B-P2-S200-r1b (304s)
+[series 04:40:17] START L3-ADMISSION-B-P2-S200-r2b (arm=b pair=2)
+[l3] 1/9 full R1 reset (arm B: dist=dist-l3 env=LOGIN_ADMISSION=1,LOGIN_ADMISSION_PERMITS=4,LOGIN_ADMISSION_QUEUE_CAPACITY=189,LOGIN_ADMISSION_WAIT_BUDGET_MS=5000)
+[l3] 2/9 API pid=2912419 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=b (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-B-P2-S200-r2b
+[series 04:45:21] DONE  L3-ADMISSION-B-P2-S200-r2b (304s)
+[series 04:45:21] START L3-ADMISSION-A-P2-S200-r2a (arm=a pair=2)
+[l3] 1/9 full R1 reset (arm A: frozen dist, no admission env)
+[l3] 2/9 API pid=2923712 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=a (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-A-P2-S200-r2a
+[series 04:50:25] DONE  L3-ADMISSION-A-P2-S200-r2a (304s)
+[series 04:50:25] START L3-ADMISSION-A-P2-S200-r3a (arm=a pair=3)
+[l3] 1/9 full R1 reset (arm A: frozen dist, no admission env)
+[l3] 2/9 API pid=2934976 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=a (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-A-P2-S200-r3a
+[series 04:55:29] DONE  L3-ADMISSION-A-P2-S200-r3a (304s)
+[series 04:55:29] START L3-ADMISSION-B-P2-S200-r3b (arm=b pair=3)
+[l3] 1/9 full R1 reset (arm B: dist=dist-l3 env=LOGIN_ADMISSION=1,LOGIN_ADMISSION_PERMITS=4,LOGIN_ADMISSION_QUEUE_CAPACITY=189,LOGIN_ADMISSION_WAIT_BUDGET_MS=5000)
+[l3] 2/9 API pid=2946252 (fresh JWT secret per reset, R3)
+[l3] 3/9 arm check (pre-run)
+[l3] 4/9 starting API sampler (background)
+[l3] 5/9 driver: scenario=full profile=p2 n=200 topo=direct window=240s tail=30s arm=b (via nginx)
+[l3] 6/9 stop sampler + arm check (post-run)
+[l3] 8/9 l2-metrics.py (per-run indicators + T6 verdict)
+[l3] 9/9 run-meta + cmd.sh
+[l3] run complete: /home/hoo/Source/exam/.wt-capacity/docs/research/exam-cdp-watt-runtime-capacity/evidence/L3-ADMISSION/L3-ADMISSION-B-P2-S200-r3b
+[series 05:00:33] DONE  L3-ADMISSION-B-P2-S200-r3b (304s)
+[series 05:00:33] == series stage 'all' finished ==

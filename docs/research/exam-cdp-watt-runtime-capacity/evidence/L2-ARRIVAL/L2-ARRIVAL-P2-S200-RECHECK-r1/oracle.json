@@ -1,0 +1,2796 @@
+{
+  "runId": "L2-ARRIVAL-P2-S200-RECHECK-r1",
+  "loginAudit": {
+    "successRows": 200,
+    "distinctCandidates": 200,
+    "ipTally": {
+      "172.28.10.10": 1,
+      "172.28.10.100": 1,
+      "172.28.10.101": 1,
+      "172.28.10.102": 1,
+      "172.28.10.103": 1,
+      "172.28.10.104": 1,
+      "172.28.10.105": 1,
+      "172.28.10.106": 1,
+      "172.28.10.107": 1,
+      "172.28.10.108": 1,
+      "172.28.10.109": 1,
+      "172.28.10.11": 1,
+      "172.28.10.110": 1,
+      "172.28.10.111": 1,
+      "172.28.10.112": 1,
+      "172.28.10.113": 1,
+      "172.28.10.114": 1,
+      "172.28.10.115": 1,
+      "172.28.10.116": 1,
+      "172.28.10.117": 1,
+      "172.28.10.118": 1,
+      "172.28.10.119": 1,
+      "172.28.10.12": 1,
+      "172.28.10.120": 1,
+      "172.28.10.121": 1,
+      "172.28.10.122": 1,
+      "172.28.10.123": 1,
+      "172.28.10.124": 1,
+      "172.28.10.125": 1,
+      "172.28.10.126": 1,
+      "172.28.10.127": 1,
+      "172.28.10.128": 1,
+      "172.28.10.129": 1,
+      "172.28.10.13": 1,
+      "172.28.10.130": 1,
+      "172.28.10.131": 1,
+      "172.28.10.132": 1,
+      "172.28.10.133": 1,
+      "172.28.10.134": 1,
+      "172.28.10.135": 1,
+      "172.28.10.136": 1,
+      "172.28.10.137": 1,
+      "172.28.10.138": 1,
+      "172.28.10.139": 1,
+      "172.28.10.14": 1,
+      "172.28.10.140": 1,
+      "172.28.10.141": 1,
+      "172.28.10.142": 1,
+      "172.28.10.143": 1,
+      "172.28.10.144": 1,
+      "172.28.10.145": 1,
+      "172.28.10.146": 1,
+      "172.28.10.147": 1,
+      "172.28.10.148": 1,
+      "172.28.10.149": 1,
+      "172.28.10.15": 1,
+      "172.28.10.150": 1,
+      "172.28.10.151": 1,
+      "172.28.10.152": 1,
+      "172.28.10.153": 1,
+      "172.28.10.154": 1,
+      "172.28.10.155": 1,
+      "172.28.10.156": 1,
+      "172.28.10.157": 1,
+      "172.28.10.158": 1,
+      "172.28.10.159": 1,
+      "172.28.10.16": 1,
+      "172.28.10.160": 1,
+      "172.28.10.161": 1,
+      "172.28.10.162": 1,
+      "172.28.10.163": 1,
+      "172.28.10.164": 1,
+      "172.28.10.165": 1,
+      "172.28.10.166": 1,
+      "172.28.10.167": 1,
+      "172.28.10.168": 1,
+      "172.28.10.169": 1,
+      "172.28.10.17": 1,
+      "172.28.10.170": 1,
+      "172.28.10.171": 1,
+      "172.28.10.172": 1,
+      "172.28.10.173": 1,
+      "172.28.10.174": 1,
+      "172.28.10.175": 1,
+      "172.28.10.176": 1,
+      "172.28.10.177": 1,
+      "172.28.10.178": 1,
+      "172.28.10.179": 1,
+      "172.28.10.18": 1,
+      "172.28.10.180": 1,
+      "172.28.10.181": 1,
+      "172.28.10.182": 1,
+      "172.28.10.183": 1,
+      "172.28.10.184": 1,
+      "172.28.10.185": 1,
+      "172.28.10.186": 1,
+      "172.28.10.187": 1,
+      "172.28.10.188": 1,
+      "172.28.10.189": 1,
+      "172.28.10.19": 1,
+      "172.28.10.190": 1,
+      "172.28.10.191": 1,
+      "172.28.10.192": 1,
+      "172.28.10.193": 1,
+      "172.28.10.194": 1,
+      "172.28.10.195": 1,
+      "172.28.10.196": 1,
+      "172.28.10.197": 1,
+      "172.28.10.198": 1,
+      "172.28.10.199": 1,
+      "172.28.10.20": 1,
+      "172.28.10.200": 1,
+      "172.28.10.201": 1,
+      "172.28.10.202": 1,
+      "172.28.10.203": 1,
+      "172.28.10.204": 1,
+      "172.28.10.205": 1,
+      "172.28.10.206": 1,
+      "172.28.10.207": 1,
+      "172.28.10.208": 1,
+      "172.28.10.209": 1,
+      "172.28.10.21": 1,
+      "172.28.10.22": 1,
+      "172.28.10.23": 1,
+      "172.28.10.24": 1,
+      "172.28.10.25": 1,
+      "172.28.10.26": 1,
+      "172.28.10.27": 1,
+      "172.28.10.28": 1,
+      "172.28.10.29": 1,
+      "172.28.10.30": 1,
+      "172.28.10.31": 1,
+      "172.28.10.32": 1,
+      "172.28.10.33": 1,
+      "172.28.10.34": 1,
+      "172.28.10.35": 1,
+      "172.28.10.36": 1,
+      "172.28.10.37": 1,
+      "172.28.10.38": 1,
+      "172.28.10.39": 1,
+      "172.28.10.40": 1,
+      "172.28.10.41": 1,
+      "172.28.10.42": 1,
+      "172.28.10.43": 1,
+      "172.28.10.44": 1,
+      "172.28.10.45": 1,
+      "172.28.10.46": 1,
+      "172.28.10.47": 1,
+      "172.28.10.48": 1,
+      "172.28.10.49": 1,
+      "172.28.10.50": 1,
+      "172.28.10.51": 1,
+      "172.28.10.52": 1,
+      "172.28.10.53": 1,
+      "172.28.10.54": 1,
+      "172.28.10.55": 1,
+      "172.28.10.56": 1,
+      "172.28.10.57": 1,
+      "172.28.10.58": 1,
+      "172.28.10.59": 1,
+      "172.28.10.60": 1,
+      "172.28.10.61": 1,
+      "172.28.10.62": 1,
+      "172.28.10.63": 1,
+      "172.28.10.64": 1,
+      "172.28.10.65": 1,
+      "172.28.10.66": 1,
+      "172.28.10.67": 1,
+      "172.28.10.68": 1,
+      "172.28.10.69": 1,
+      "172.28.10.70": 1,
+      "172.28.10.71": 1,
+      "172.28.10.72": 1,
+      "172.28.10.73": 1,
+      "172.28.10.74": 1,
+      "172.28.10.75": 1,
+      "172.28.10.76": 1,
+      "172.28.10.77": 1,
+      "172.28.10.78": 1,
+      "172.28.10.79": 1,
+      "172.28.10.80": 1,
+      "172.28.10.81": 1,
+      "172.28.10.82": 1,
+      "172.28.10.83": 1,
+      "172.28.10.84": 1,
+      "172.28.10.85": 1,
+      "172.28.10.86": 1,
+      "172.28.10.87": 1,
+      "172.28.10.88": 1,
+      "172.28.10.89": 1,
+      "172.28.10.90": 1,
+      "172.28.10.91": 1,
+      "172.28.10.92": 1,
+      "172.28.10.93": 1,
+      "172.28.10.94": 1,
+      "172.28.10.95": 1,
+      "172.28.10.96": 1,
+      "172.28.10.97": 1,
+      "172.28.10.98": 1,
+      "172.28.10.99": 1
+    }
+  },
+  "attempts": {
+    "total": 200,
+    "byStatus": {
+      "graded": 200
+    },
+    "terminalOk": 200,
+    "flowIncomplete": 0,
+    "mismatches": [],
+    "noAttempt": 0
+  },
+  "invariants": {
+    "duplicateActiveAttempts": 0,
+    "duplicateTerminalTransitions": 0
+  },
+  "perCandidate": [
+    {
+      "candidate": "cap9same-c0000-ee783a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0001-1b05f3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0002-70b0e5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0003-53a22f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0004-b584d8",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0005-7d9557",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0006-2d18fd",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0007-3a181d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0008-d60687",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0009-840d6a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0010-040534",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0011-a16402",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0012-d74d1a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0013-9cc33e",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0014-5811c7",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0015-2fcd4c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0016-2fa862",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0017-c7f093",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0018-632578",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0019-b6fe4c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0020-56854d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0021-3465aa",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0022-73f439",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0023-2f01ae",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0024-22141a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0025-d7f22a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0026-87817c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0027-32f5a0",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0028-3ce867",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0029-e4df9e",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0030-7431a0",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0031-406b91",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0032-57b790",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0033-4655bf",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0034-f02711",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0035-54caee",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0036-665f16",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0037-93263b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0038-982411",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0039-e8cd30",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0040-e2633f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0041-9c8c03",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0042-c1f68e",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0043-566420",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0044-477a7b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0045-93ebf3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0046-ba47e4",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0047-407c5b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0048-0d51ed",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0049-99afb8",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0050-9bf8fe",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0051-d2cbb4",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0052-bf59c3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0053-4113e5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0054-2b31cd",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0055-cedaff",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0056-8b1756",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0057-6308d6",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0058-222954",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0059-195246",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0060-6c9962",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0061-484a51",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0062-7a0013",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0063-e25bcd",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0064-bf942c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0065-5bfd38",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0066-f3885d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0067-98d88d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0068-d6bdf3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0069-bc73e7",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0070-7e4b5b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0071-c0bd4e",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0072-ba258c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0073-bb014f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0074-9de05a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0075-a5a86a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0076-3a6010",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0077-d5875a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0078-10d1a5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0079-ff7c81",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0080-a1a2ed",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0081-5bd2cb",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0082-6a92d9",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0083-9d8b42",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0084-c2e457",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0085-3e18e5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0086-f66ebc",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0087-1493b4",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0088-f47e4b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0089-d69279",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0090-a93372",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0091-af80a4",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0092-d4b850",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0093-bfe021",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0094-6f76fa",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0095-c4469f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0096-05a65d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0097-8669fe",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0098-0f249f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0099-149133",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0100-99c6cd",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0101-30ddef",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0102-671bde",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0103-a4f6b1",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0104-141542",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0105-561ca7",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0106-cd8202",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0107-fa6df9",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0108-7a528f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0109-9bf443",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0110-76e602",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0111-818074",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0112-49129b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0113-022481",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0114-d4dfeb",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0115-598ddc",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0116-3e664c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0117-001b16",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0118-ae94a3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0119-1b289b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0120-8eb803",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0121-eea989",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0122-8d8990",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0123-7783e6",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0124-8aeee0",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0125-977888",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0126-632a1a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0127-be3216",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0128-6df5f0",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0129-fe1fc5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0130-dfecc1",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0131-5733e8",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0132-41c07d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0133-1ddf7b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0134-642f00",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0135-1fd89a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0136-7674b8",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0137-545aca",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0138-ba1367",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0139-f656c3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0140-0371f6",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0141-ef6f50",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0142-4f08d5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0143-b87a0e",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0144-aff90f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0145-0f141c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0146-17ae39",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0147-0e0611",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0148-4d15ed",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0149-92b429",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0150-57c78d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0151-a7bbc1",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0152-db8fa6",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0153-132fdc",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0154-70763a",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0155-fba6d6",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0156-023c91",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0157-fbc498",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0158-120e44",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0159-39549c",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0160-455741",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0161-a61953",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0162-99f1b2",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0163-24782f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0164-a3aa58",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0165-93a8b3",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0166-b248f8",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0167-e63200",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0168-d0c642",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0169-454017",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0170-8a31d7",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0171-60aaac",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0172-dbab67",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0173-732811",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0174-f0478d",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0175-7be321",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0176-92ce8b",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0177-e3a069",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0178-6e22e5",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0179-17e936",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0180-9945b4",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0181-044c64",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0182-b4dc35",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0183-d3c967",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0184-d3d7c7",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0185-eba4f0",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0186-2cb3d7",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0187-afe9fb",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0188-c571e8",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0189-08f189",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0190-3db896",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0191-689792",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0192-b16f26",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1
+      ]
+    },
+    {
+      "candidate": "cap9same-c0193-d91c26",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0194-266b34",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0195-9ea594",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0196-c32e8f",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0197-ebf009",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0198-67da97",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    },
+    {
+      "candidate": "cap9same-c0199-0392b1",
+      "status": "graded",
+      "submissionReason": "manual",
+      "gradingEntries": 12,
+      "frozenQuestions": 12,
+      "outcome": "terminal-ok",
+      "answersMatchDriver": true,
+      "receiptClientSeqs": [
+        1,
+        2
+      ]
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+[
+  {
+    "case": "①-a save-ok-then-submit",
+    "user": "cap9same-c0000-30ca27",
+    "attemptId": "1c8b2846-6791-4dc6-83fe-984705d8bcf8",
+    "oracle": {
+      "saved": "1,2",
+      "attempt": {
+        "id": "1c8b2846-6791-4dc6-83fe-984705d8bcf8",
+        "status": "graded",
+        "submissionReason": "manual",
+        "submittedAt": "2026-11-20 17:57:19.884+08",
+        "gradingEntries": 12,
+        "submitAudits": 1,
+        "answers": "[{\"answer\": false, \"savedAt\": \"2026-11-20T09:57:19.857Z\", \"version\": 2, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}]",
+        "submittedAnswers": "{\"answers\": [{\"value\": false, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}, {\"value\": null, \"questionId\": \"3e8b7025-4bd4-47f7-bed3-72fa9dced176\"}, {\"value\": null, \"questionId\": \"d1337a02-13c5-4b48-a667-a79dce55543f\"}, {\"value\": null, \"questionId\": \"26e5d056-4e7d-42da-b4d5-c4c2612d8d58\"}, {\"value\": null, \"questionId\": \"a1c4c0a8-4d80-4ce2-9e8b-a45314cb0f57\"}, {\"value\": null, \"questionId\": \"89a531b3-48e4-4701-9eae-266821596a7d\"}, {\"value\": null, \"questionId\": \"5e102014-755d-4919-a4f4-eb606564527c\"}, {\"value\": null, \"questionId\": \"7e506090-a7aa-4a50-84ac-1df46d09118d\"}, {\"value\": null, \"questionId\": \"71e5aa55-eed3-4b16-8e8b-8dd28ccad513\"}, {\"value\": null, \"questionId\": \"cc1e9e2f-9009-4667-9cda-af3fc3748b9e\"}, {\"value\": null, \"questionId\": \"0b831230-80a7-4b76-ac0c-b47c2f8b5ec9\"}, {\"value\": null, \"questionId\": \"f4cbb0d9-d306-4ee0-b2f4-b67c8fa2fa58\"}], \"schemaVersion\": 1}",
+        "finalScore": "0"
+      }
+    }
+  },
+  {
+    "case": "①-b save-first-lock",
+    "user": "cap9same-c0001-c98e07",
+    "attemptId": "7648cf0e-3597-4816-a40e-3be9ac1817fc",
+    "oracle": {
+      "saved": "1,2",
+      "attempt": {
+        "id": "7648cf0e-3597-4816-a40e-3be9ac1817fc",
+        "status": "graded",
+        "submissionReason": "manual",
+        "submittedAt": "2026-11-20 17:57:20.657+08",
+        "gradingEntries": 12,
+        "submitAudits": 1,
+        "answers": "[{\"answer\": false, \"savedAt\": \"2026-11-20T09:57:20.347Z\", \"version\": 2, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}]",
+        "submittedAnswers": "{\"answers\": [{\"value\": false, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}, {\"value\": null, \"questionId\": \"3e8b7025-4bd4-47f7-bed3-72fa9dced176\"}, {\"value\": null, \"questionId\": \"d1337a02-13c5-4b48-a667-a79dce55543f\"}, {\"value\": null, \"questionId\": \"26e5d056-4e7d-42da-b4d5-c4c2612d8d58\"}, {\"value\": null, \"questionId\": \"a1c4c0a8-4d80-4ce2-9e8b-a45314cb0f57\"}, {\"value\": null, \"questionId\": \"89a531b3-48e4-4701-9eae-266821596a7d\"}, {\"value\": null, \"questionId\": \"5e102014-755d-4919-a4f4-eb606564527c\"}, {\"value\": null, \"questionId\": \"7e506090-a7aa-4a50-84ac-1df46d09118d\"}, {\"value\": null, \"questionId\": \"71e5aa55-eed3-4b16-8e8b-8dd28ccad513\"}, {\"value\": null, \"questionId\": \"cc1e9e2f-9009-4667-9cda-af3fc3748b9e\"}, {\"value\": null, \"questionId\": \"0b831230-80a7-4b76-ac0c-b47c2f8b5ec9\"}, {\"value\": null, \"questionId\": \"f4cbb0d9-d306-4ee0-b2f4-b67c8fa2fa58\"}], \"schemaVersion\": 1}",
+        "finalScore": "0"
+      }
+    }
+  },
+  {
+    "case": "①-b' submit-first-lock",
+    "user": "cap9same-c0002-603f2c",
+    "attemptId": "da81e949-3763-4f72-8bae-a6893ecf3e06",
+    "oracle": {
+      "saved": "1",
+      "attempt": {
+        "id": "da81e949-3763-4f72-8bae-a6893ecf3e06",
+        "status": "graded",
+        "submissionReason": "manual",
+        "submittedAt": "2026-11-20 17:57:21.709+08",
+        "gradingEntries": 12,
+        "submitAudits": 1,
+        "answers": "[{\"answer\": true, \"savedAt\": \"2026-11-20T09:57:21.591Z\", \"version\": 1, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}]",
+        "submittedAnswers": "{\"answers\": [{\"value\": true, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}, {\"value\": null, \"questionId\": \"3e8b7025-4bd4-47f7-bed3-72fa9dced176\"}, {\"value\": null, \"questionId\": \"d1337a02-13c5-4b48-a667-a79dce55543f\"}, {\"value\": null, \"questionId\": \"26e5d056-4e7d-42da-b4d5-c4c2612d8d58\"}, {\"value\": null, \"questionId\": \"a1c4c0a8-4d80-4ce2-9e8b-a45314cb0f57\"}, {\"value\": null, \"questionId\": \"89a531b3-48e4-4701-9eae-266821596a7d\"}, {\"value\": null, \"questionId\": \"5e102014-755d-4919-a4f4-eb606564527c\"}, {\"value\": null, \"questionId\": \"7e506090-a7aa-4a50-84ac-1df46d09118d\"}, {\"value\": null, \"questionId\": \"71e5aa55-eed3-4b16-8e8b-8dd28ccad513\"}, {\"value\": null, \"questionId\": \"cc1e9e2f-9009-4667-9cda-af3fc3748b9e\"}, {\"value\": null, \"questionId\": \"0b831230-80a7-4b76-ac0c-b47c2f8b5ec9\"}, {\"value\": null, \"questionId\": \"f4cbb0d9-d306-4ee0-b2f4-b67c8fa2fa58\"}], \"schemaVersion\": 1}",
+        "finalScore": "10"
+      }
+    }
+  },
+  {
+    "case": "③-a double-submit-POST",
+    "user": "cap9same-c0003-ac0182",
+    "attemptId": "8d7e0fb8-84d2-4424-a774-4fa74ec090f2",
+    "oracle": {
+      "saved": "1",
+      "attempt": {
+        "id": "8d7e0fb8-84d2-4424-a774-4fa74ec090f2",
+        "status": "graded",
+        "submissionReason": "manual",
+        "submittedAt": "2026-11-20 17:57:22.991+08",
+        "gradingEntries": 12,
+        "submitAudits": 1,
+        "answers": "[{\"answer\": true, \"savedAt\": \"2026-11-20T09:57:22.872Z\", \"version\": 1, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}]",
+        "submittedAnswers": "{\"answers\": [{\"value\": true, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}, {\"value\": null, \"questionId\": \"3e8b7025-4bd4-47f7-bed3-72fa9dced176\"}, {\"value\": null, \"questionId\": \"d1337a02-13c5-4b48-a667-a79dce55543f\"}, {\"value\": null, \"questionId\": \"26e5d056-4e7d-42da-b4d5-c4c2612d8d58\"}, {\"value\": null, \"questionId\": \"a1c4c0a8-4d80-4ce2-9e8b-a45314cb0f57\"}, {\"value\": null, \"questionId\": \"89a531b3-48e4-4701-9eae-266821596a7d\"}, {\"value\": null, \"questionId\": \"5e102014-755d-4919-a4f4-eb606564527c\"}, {\"value\": null, \"questionId\": \"7e506090-a7aa-4a50-84ac-1df46d09118d\"}, {\"value\": null, \"questionId\": \"71e5aa55-eed3-4b16-8e8b-8dd28ccad513\"}, {\"value\": null, \"questionId\": \"cc1e9e2f-9009-4667-9cda-af3fc3748b9e\"}, {\"value\": null, \"questionId\": \"0b831230-80a7-4b76-ac0c-b47c2f8b5ec9\"}, {\"value\": null, \"questionId\": \"f4cbb0d9-d306-4ee0-b2f4-b67c8fa2fa58\"}], \"schemaVersion\": 1}",
+        "finalScore": "10"
+      }
+    },
+    "firstStatus": 200,
+    "secondStatus": 200,
+    "outcomes": [
+      "graded",
+      "replay_no_change"
+    ]
+  },
+  {
+    "case": "③-b response-lost-recovery",
+    "user": "cap9same-c0004-005bfc",
+    "attemptId": "29a84c6f-1278-4e36-b62d-e7ce7afca934",
+    "oracle": {
+      "saved": "1",
+      "attempt": {
+        "id": "29a84c6f-1278-4e36-b62d-e7ce7afca934",
+        "status": "graded",
+        "submissionReason": "manual",
+        "submittedAt": "2026-11-20 17:57:24.309+08",
+        "gradingEntries": 12,
+        "submitAudits": 1,
+        "answers": "[{\"answer\": true, \"savedAt\": \"2026-11-20T09:57:24.276Z\", \"version\": 1, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}]",
+        "submittedAnswers": "{\"answers\": [{\"value\": true, \"questionId\": \"d820870d-818a-4e84-b165-107441e3a49d\"}, {\"value\": null, \"questionId\": \"3e8b7025-4bd4-47f7-bed3-72fa9dced176\"}, {\"value\": null, \"questionId\": \"d1337a02-13c5-4b48-a667-a79dce55543f\"}, {\"value\": null, \"questionId\": \"26e5d056-4e7d-42da-b4d5-c4c2612d8d58\"}, {\"value\": null, \"questionId\": \"a1c4c0a8-4d80-4ce2-9e8b-a45314cb0f57\"}, {\"value\": null, \"questionId\": \"89a531b3-48e4-4701-9eae-266821596a7d\"}, {\"value\": null, \"questionId\": \"5e102014-755d-4919-a4f4-eb606564527c\"}, {\"value\": null, \"questionId\": \"7e506090-a7aa-4a50-84ac-1df46d09118d\"}, {\"value\": null, \"questionId\": \"71e5aa55-eed3-4b16-8e8b-8dd28ccad513\"}, {\"value\": null, \"questionId\": \"cc1e9e2f-9009-4667-9cda-af3fc3748b9e\"}, {\"value\": null, \"questionId\": \"0b831230-80a7-4b76-ac0c-b47c2f8b5ec9\"}, {\"value\": null, \"questionId\": \"f4cbb0d9-d306-4ee0-b2f4-b67c8fa2fa58\"}], \"schemaVersion\": 1}",
+        "finalScore": "10"
+      }
+    },
+    "clientView": "UND_ERR_SOCKET",
+    "recoveryReadStatus": "graded",
+    "retryStatus": 200
+  }
+]

@@ -1,0 +1,2688 @@
+{
+  "runId": "G1-FIDELITY-browser-r1-2026-11-19T1952",
+  "trajectory": "B",
+  "description": "密码登录 → 开考 → 作答 true → 保存确认 → 刷新（重连/恢复）→ 恢复校验 → 提交 → 结果",
+  "origin": "http://127.0.0.1:8080",
+  "startedAt": "2026-11-19T19:53:25.578Z",
+  "candidate": {
+    "username": "cap9same-c0001-c49935",
+    "source": "seed-manifest.json sameField",
+    "password": "CANDIDATE_PASSWORD (redacted)"
+  },
+  "examId": "330d1242-8262-4631-9fb3-6d0dca741678",
+  "phases": [
+    {
+      "phase": "login",
+      "tStart": 1795118005618,
+      "note": "UI 密码登录",
+      "tEnd": 1795118006058
+    },
+    {
+      "phase": "start",
+      "tStart": 1795118006058,
+      "note": "开考 → /take",
+      "tEnd": 1795118006461
+    },
+    {
+      "phase": "answer1",
+      "tStart": 1795118006461,
+      "note": "作答 true → 保存确认",
+      "tEnd": 1795118008053
+    },
+    {
+      "phase": "refresh",
+      "tStart": 1795118008053,
+      "note": "刷新（模拟断线重连）：page.reload() → 服务端恢复",
+      "tEnd": 1795118008255
+    },
+    {
+      "phase": "submit",
+      "tStart": 1795118008255,
+      "note": "恢复后提交 → /result",
+      "tEnd": 1795118011666
+    },
+    {
+      "phase": "done",
+      "tStart": 1795118011666,
+      "note": ""
+    }
+  ],
+  "uiEvents": [
+    {
+      "t": 480,
+      "phase": "login",
+      "event": "登录成功，落地 /exam/list"
+    },
+    {
+      "t": 883,
+      "phase": "start",
+      "event": "开考完成，take 页挂载"
+    },
+    {
+      "t": 2475,
+      "phase": "answer1",
+      "event": "保存确认",
+      "detail": "{\"clientSeq\":1,\"baseVersion\":0,\"serverVersion\":1,\"accepted\":true,\"url\":\"http://127.0.0.1:8080/api/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/answers/7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"tSentMs\":2415,\"latencyMs\":49}"
+    },
+    {
+      "t": 2633,
+      "phase": "refresh",
+      "event": "刷新后恢复完成",
+      "detail": "true-false-true checked=true"
+    },
+    {
+      "t": 2927,
+      "phase": "submit",
+      "event": "提交完成，落地 /result"
+    }
+  ],
+  "requests": [
+    {
+      "seq": 1,
+      "phase": "login",
+      "tsRequest": 1795118005623,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/login",
+      "resourceType": "document",
+      "headers": {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "sec-fetch-dest": "document",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-site": "none",
+        "sec-fetch-user": "?1",
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005627,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "1014",
+        "content-type": "text/html",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-3f6\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118005641,
+      "timing": {
+        "startTime": 1795118005623,
+        "requestStart": 1,
+        "responseStart": 2,
+        "responseEnd": 4
+      }
+    },
+    {
+      "seq": 2,
+      "phase": "login",
+      "tsRequest": 1795118005629,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "accept": "text/css,*/*;q=0.1",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "style",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005641,
+      "tsFinished": 1795118005641,
+      "timing": {
+        "startTime": 1795118005629,
+        "requestStart": 0,
+        "responseStart": 1,
+        "responseEnd": 6
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "129153",
+        "content-type": "text/css",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-1f881\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 3,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "accept": "text/css,*/*;q=0.1",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "style",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005647,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "129131",
+        "content-type": "text/css",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85c-1f86b\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118005658,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 3,
+        "responseStart": 16,
+        "responseEnd": 22
+      }
+    },
+    {
+      "seq": 4,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Bold.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "accept": "text/css,*/*;q=0.1",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "style",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005653,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "128926",
+        "content-type": "text/css",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85c-1f79e\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118005656,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 3,
+        "responseStart": 16,
+        "responseEnd": 21
+      }
+    },
+    {
+      "seq": 5,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/noto-serif-sc/css/regular.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "accept": "text/css,*/*;q=0.1",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "style",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005646,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "322",
+        "content-type": "text/css",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-142\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118005647,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 3,
+        "responseStart": 14,
+        "responseEnd": 17
+      }
+    },
+    {
+      "seq": 6,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/noto-serif-sc/css/bold.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "accept": "text/css,*/*;q=0.1",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "style",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005675,
+      "tsFinished": 1795118005676,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 3,
+        "responseStart": 41,
+        "responseEnd": 44
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "319",
+        "content-type": "text/css",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-13f\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 7,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/index-ONQOMFwP.js",
+      "resourceType": "script",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "script",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005695,
+      "tsFinished": 1795118005696,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 6,
+        "responseStart": 17,
+        "responseEnd": 33
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "772694",
+        "content-type": "application/javascript",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-bca56\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 8,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/rolldown-runtime-QTnfLwEv.js",
+      "resourceType": "script",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "script",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005659,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "694",
+        "content-type": "application/javascript",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-2b6\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118005660,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 19,
+        "responseStart": 22,
+        "responseEnd": 26
+      }
+    },
+    {
+      "seq": 9,
+      "phase": "login",
+      "tsRequest": 1795118005630,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/vendor-KUFdH8ut.js",
+      "resourceType": "script",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "script",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005710,
+      "tsFinished": 1795118005711,
+      "timing": {
+        "startTime": 1795118005630,
+        "requestStart": 25,
+        "responseStart": 27,
+        "responseEnd": 35
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "547016",
+        "content-type": "application/javascript",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-858c8\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 10,
+      "phase": "login",
+      "tsRequest": 1795118005631,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/vendor-react-dom-CXKa0MAT.js",
+      "resourceType": "script",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "script",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005673,
+      "tsFinished": 1795118005674,
+      "timing": {
+        "startTime": 1795118005631,
+        "requestStart": 25,
+        "responseStart": 29,
+        "responseEnd": 33
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "174790",
+        "content-type": "application/javascript",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-2aac6\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 11,
+      "phase": "login",
+      "tsRequest": 1795118005631,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/index-CqBD-Ynj.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "accept": "text/css,*/*;q=0.1",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "style",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005676,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "103691",
+        "content-type": "text/css",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-1950b\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118005678,
+      "timing": {
+        "startTime": 1795118005631,
+        "requestStart": 2,
+        "responseStart": 43,
+        "responseEnd": 45
+      }
+    },
+    {
+      "seq": 12,
+      "phase": "login",
+      "tsRequest": 1795118005827,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_88d643.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005844,
+      "tsFinished": 1795118005845,
+      "timing": {
+        "startTime": 1795118005827,
+        "requestStart": 0,
+        "responseStart": 2,
+        "responseEnd": 23
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "70588",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-113bc\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 13,
+      "phase": "login",
+      "tsRequest": 1795118005828,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_18d529.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005845,
+      "tsFinished": 1795118005845,
+      "timing": {
+        "startTime": 1795118005828,
+        "requestStart": 1,
+        "responseStart": 5,
+        "responseEnd": 26
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "67532",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85c-107cc\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 14,
+      "phase": "login",
+      "tsRequest": 1795118005828,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_107da6.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005856,
+      "tsFinished": 1795118005857,
+      "timing": {
+        "startTime": 1795118005828,
+        "requestStart": 1,
+        "responseStart": 7,
+        "responseEnd": 27
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "70720",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85c-11440\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 15,
+      "phase": "login",
+      "tsRequest": 1795118005828,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_256855.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005857,
+      "tsFinished": 1795118005857,
+      "timing": {
+        "startTime": 1795118005828,
+        "requestStart": 1,
+        "responseStart": 12,
+        "responseEnd": 19
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "67512",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-107b8\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 16,
+      "phase": "login",
+      "tsRequest": 1795118005829,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_2e32bb.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005857,
+      "tsFinished": 1795118005858,
+      "timing": {
+        "startTime": 1795118005829,
+        "requestStart": 1,
+        "responseStart": 14,
+        "responseEnd": 18
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "67208",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85c-10688\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 17,
+      "phase": "login",
+      "tsRequest": 1795118005829,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_68d530.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005860,
+      "tsFinished": 1795118005861,
+      "timing": {
+        "startTime": 1795118005829,
+        "requestStart": 1,
+        "responseStart": 15,
+        "responseEnd": 19
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "67024",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-105d0\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 18,
+      "phase": "login",
+      "tsRequest": 1795118005829,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_b2c226.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005861,
+      "tsFinished": 1795118005861,
+      "timing": {
+        "startTime": 1795118005829,
+        "requestStart": 17,
+        "responseStart": 20,
+        "responseEnd": 25
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "65168",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-fe90\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 19,
+      "phase": "login",
+      "tsRequest": 1795118005829,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_ac4458.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005862,
+      "tsFinished": 1795118005864,
+      "timing": {
+        "startTime": 1795118005829,
+        "requestStart": 17,
+        "responseStart": 18,
+        "responseEnd": 25
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "61236",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-ef34\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 20,
+      "phase": "login",
+      "tsRequest": 1795118005846,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/auth/me",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 401,
+      "tsResponse": 1795118005870,
+      "tsFinished": 1795118005872,
+      "timing": {
+        "startTime": 1795118005846,
+        "requestStart": 0,
+        "responseStart": 17,
+        "responseEnd": 19
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "110",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "84",
+        "x-ratelimit-reset": "13",
+        "x-request-id": "bdb00abb-f74e-409f-911a-94b67c6ef22d",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"error\":{\"code\":\"AUTH_REQUIRED\",\"message\":\"请先登录\",\"requestId\":\"bdb00abb-f74e-409f-911a-94b67c6ef22d\"}}"
+    },
+    {
+      "seq": 21,
+      "phase": "login",
+      "tsRequest": 1795118005846,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/settings/branding",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005880,
+      "tsFinished": 1795118005882,
+      "timing": {
+        "startTime": 1795118005846,
+        "requestStart": 0,
+        "responseStart": 30,
+        "responseEnd": 32
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "84",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "83",
+        "x-ratelimit-reset": "13",
+        "x-request-id": "4261a2f3-9dc6-4ced-b3bc-66e765ebfb8c",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"productName\":\"LAN Exam Platform\",\"organizationDisplayName\":\"Default Organization\"}"
+    },
+    {
+      "seq": 22,
+      "phase": "login",
+      "tsRequest": 1795118005890,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_014f33.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005895,
+      "tsFinished": 1795118005896,
+      "timing": {
+        "startTime": 1795118005890,
+        "requestStart": 0,
+        "responseStart": 2,
+        "responseEnd": 6
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "25792",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85c-64c0\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 23,
+      "phase": "login",
+      "tsRequest": 1795118005900,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_ea8896.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118005908,
+      "tsFinished": 1795118005908,
+      "timing": {
+        "startTime": 1795118005900,
+        "requestStart": 1,
+        "responseStart": 4,
+        "responseEnd": 10
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "23860",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "etag": "\"6afef85d-5d34\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 24,
+      "phase": "login",
+      "tsRequest": 1795118005961,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/auth/login",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "content-length": "62",
+        "content-type": "application/json",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/login",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "postData": "{\"username\":\"cap9same-c0001-c49935\",\"password\":\"<redacted>\"}",
+      "status": 200,
+      "tsResponse": 1795118006057,
+      "tsFinished": 1795118006058,
+      "timing": {
+        "startTime": 1795118005961,
+        "requestStart": 0,
+        "responseStart": 94,
+        "responseEnd": 95
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "350",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:26 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "set-cookie": "<redacted>",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "10",
+        "x-ratelimit-remaining": "8",
+        "x-ratelimit-reset": "13",
+        "x-request-id": "071b1bee-5428-46ce-949e-6c18d287fb33",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"id\":\"57ac09e2-316c-4226-9daf-f6a66845ded6\",\"username\":\"cap9same-c0001-c49935\",\"name\":\"Candidate cap9same-c00\",\"role\":\"Candidate\",\"organizationId\":\"673ed73e-d79f-4879-af16-c30e77aaa261\",\"capabilities\":[\"attempt.answer.save\",\"attempt.heartbeat.send\",\"attempt.restore\",\"attempt.start\",\"attempt.submit\",\"attempt.view_own\",\"exam.take\",\"score.own.view\"]}"
+    },
+    {
+      "seq": 25,
+      "phase": "start",
+      "tsRequest": 1795118006072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/notifications/unread-count",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/list",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118006091,
+      "tsFinished": 1795118006092,
+      "timing": {
+        "startTime": 1795118006072,
+        "requestStart": 0,
+        "responseStart": 17,
+        "responseEnd": 19
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "11",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:26 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "82",
+        "x-ratelimit-reset": "13",
+        "x-request-id": "942cbc3b-af78-4ad6-9fe7-439aeaeb36e0",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"count\":0}"
+    },
+    {
+      "seq": 26,
+      "phase": "start",
+      "tsRequest": 1795118006072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/candidate/exams",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/list",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118006106,
+      "tsFinished": 1795118006107,
+      "timing": {
+        "startTime": 1795118006072,
+        "requestStart": 0,
+        "responseStart": 29,
+        "responseEnd": 33
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "389",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:26 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "81",
+        "x-ratelimit-reset": "13",
+        "x-request-id": "3709fb51-3415-450e-a92e-2a739970a1c1",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "[{\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"title\":\"cap900 same-field S200\",\"windowStartAt\":\"2026-11-19T18:46:21.975Z\",\"windowEndAt\":\"2026-11-20T19:46:21.975Z\",\"durationMinutes\":90,\"timingMode\":\"timed_window\",\"totalQuestions\":12,\"passingScore\":60,\"totalScore\":120,\"attemptsUsed\":0,\"maxAttempts\":1,\"retakePolicy\":\"unlimited\",\"availabilityStatus\":\"available\",\"primaryAction\":\"start\"}]"
+    },
+    {
+      "seq": 27,
+      "phase": "start",
+      "tsRequest": 1795118006208,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/candidate/exams/330d1242-8262-4631-9fb3-6d0dca741678",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/330d1242-8262-4631-9fb3-6d0dca741678/start",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118006241,
+      "tsFinished": 1795118006242,
+      "timing": {
+        "startTime": 1795118006208,
+        "requestStart": 0,
+        "responseStart": 31,
+        "responseEnd": 33
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "567",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:26 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "80",
+        "x-ratelimit-reset": "13",
+        "x-request-id": "8e1bfe1e-7aa9-4d73-9fa0-ed7b4385f883",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"id\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"title\":\"cap900 same-field S200\",\"durationMinutes\":90,\"timingMode\":\"timed_window\",\"passingScore\":60,\"totalScore\":120,\"questionCount\":12,\"controlFlags\":{\"shuffleQuestions\":false,\"shuffleOptions\":false,\"detectTabSwitch\":false,\"disableCopyPaste\":false,\"requireQueue\":false,\"batchSize\":10,\"batchInterval\":3,\"restrictIp\":false,\"requireLockdown\":false,\"showResultImmediately\":true},\"maxAttempts\":1,\"retakePolicy\":\"unlimited\",\"currentAttempts\":0,\"canStartNewAttempt\":true,\"availabilityStatus\":\"available\",\"primaryAction\":\"start\"}"
+    },
+    {
+      "seq": 28,
+      "phase": "start",
+      "tsRequest": 1795118006294,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/attempts/330d1242-8262-4631-9fb3-6d0dca741678/start",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "content-length": "0",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/330d1242-8262-4631-9fb3-6d0dca741678/start",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 201,
+      "tsResponse": 1795118006359,
+      "tsFinished": 1795118006360,
+      "timing": {
+        "startTime": 1795118006294,
+        "requestStart": 0,
+        "responseStart": 64,
+        "responseEnd": 65
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "2839",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:26 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "79",
+        "x-ratelimit-reset": "12",
+        "x-request-id": "66a27dd6-7b9b-4838-a465-1ec25d5f5612",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"id\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"organizationId\":\"673ed73e-d79f-4879-af16-c30e77aaa261\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"enrollmentId\":\"7c24bc03-5058-48c4-bd4b-bca7bb3a698a\",\"candidateId\":\"c49935d3-c0e3-4ca8-9953-62fc36050be4\",\"attemptNo\":1,\"status\":\"in_progress\",\"questionSnapshot\":[{\"originalQuestionId\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"type\":\"true_false\",\"content\":\"Q0\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":0},{\"originalQuestionId\":\"d9a3a35f-ce2e-4876-91e2-fd3508ebb140\",\"type\":\"true_false\",\"content\":\"Q1\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":1},{\"originalQuestionId\":\"25cb5648-efe0-4116-9db0-569121ce143b\",\"type\":\"true_false\",\"content\":\"Q2\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":2},{\"originalQuestionId\":\"b778c2fa-37f5-4dfb-97b8-fb238f469d38\",\"type\":\"true_false\",\"content\":\"Q3\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":3},{\"originalQuestionId\":\"02082666-912b-4b93-9801-dfe99af46d2e\",\"type\":\"true_false\",\"content\":\"Q4\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":4},{\"originalQuestionId\":\"957b46a9-330d-43e3-862f-9c1aad78b232\",\"type\":\"true_false\",\"content\":\"Q5\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":5},{\"originalQuestionId\":\"4dedf961-7aea-42d0-8491-464e0fc46949\",\"type\":\"true_false\",\"content\":\"Q6\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":6},{\"originalQuestionId\":\"d7db0fd3-f2ee-41cf-a0ef-f71f0e9ccb22\",\"type\":\"true_false\",\"content\":\"Q7\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":7},{\"originalQuestionId\":\"9802137e-9b00-4002-8151-ff548931f8b9\",\"type\":\"true_false\",\"content\":\"Q8\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":8},{\"originalQuestionId\":\"3506c674-3043-453b-bc66-8b30f7a8da9f\",\"type\":\"true_false\",\"content\":\"Q9\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":9},{\"originalQuestionId\":\"20d5632f-5752-4fb3-984a-02de24ac41d4\",\"type\":\"true_false\",\"content\":\"Q10\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":10},{\"originalQuestionId\":\"ee368ad0-10c4-4f83-9e69-4ca1ae91cb5a\",\"type\":\"true_false\",\"content\":\"Q11\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":11}],\"answers\":[],\"startedAt\":\"2026-11-19T19:53:26.315Z\",\"deadlineAt\":\"2026-11-19T21:23:26.315Z\",\"lastActivityAt\":\"2026-11-19T19:53:26.315Z\",\"createdAt\":\"2026-11-19T19:53:26.342Z\",\"updatedAt\":\"2026-11-19T19:53:26.342Z\",\"serverNow\":\"2026-11-19T19:53:26.315Z\"}"
+    },
+    {
+      "seq": 29,
+      "phase": "start",
+      "tsRequest": 1795118006373,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/candidate/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118006427,
+      "tsFinished": 1795118006428,
+      "timing": {
+        "startTime": 1795118006373,
+        "requestStart": 0,
+        "responseStart": 52,
+        "responseEnd": 55
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "3050",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:26 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "78",
+        "x-ratelimit-reset": "12",
+        "x-request-id": "396aef51-3d6b-4682-a7f9-89cde5437b2f",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"attemptStatus\":\"in_progress\",\"gradingStatus\":\"auto_graded\",\"isEditable\":true,\"canStart\":false,\"canResume\":false,\"canSave\":true,\"canSubmit\":true,\"resultVisibility\":\"hidden\",\"answerVisibility\":\"hidden\",\"timingMode\":\"timed_window\",\"submittedAt\":null,\"serverNow\":\"2026-11-19T19:53:26.423Z\",\"effectiveDeadline\":\"2026-11-19T21:23:26.315Z\",\"serverRevision\":\"2026-11-19T19:53:26.342Z\",\"questions\":[{\"id\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"type\":\"true_false\",\"prompt\":\"Q0\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"d9a3a35f-ce2e-4876-91e2-fd3508ebb140\",\"type\":\"true_false\",\"prompt\":\"Q1\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"25cb5648-efe0-4116-9db0-569121ce143b\",\"type\":\"true_false\",\"prompt\":\"Q2\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"b778c2fa-37f5-4dfb-97b8-fb238f469d38\",\"type\":\"true_false\",\"prompt\":\"Q3\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"02082666-912b-4b93-9801-dfe99af46d2e\",\"type\":\"true_false\",\"prompt\":\"Q4\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"957b46a9-330d-43e3-862f-9c1aad78b232\",\"type\":\"true_false\",\"prompt\":\"Q5\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"4dedf961-7aea-42d0-8491-464e0fc46949\",\"type\":\"true_false\",\"prompt\":\"Q6\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"d7db0fd3-f2ee-41cf-a0ef-f71f0e9ccb22\",\"type\":\"true_false\",\"prompt\":\"Q7\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"9802137e-9b00-4002-8151-ff548931f8b9\",\"type\":\"true_false\",\"prompt\":\"Q8\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"3506c674-3043-453b-bc66-8b30f7a8da9f\",\"type\":\"true_false\",\"prompt\":\"Q9\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"20d5632f-5752-4fb3-984a-02de24ac41d4\",\"type\":\"true_false\",\"prompt\":\"Q10\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"ee368ad0-10c4-4f83-9e69-4ca1ae91cb5a\",\"type\":\"true_false\",\"prompt\":\"Q11\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"}]}"
+    },
+    {
+      "seq": 30,
+      "phase": "answer1",
+      "tsRequest": 1795118007993,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/answers/7b618d55-dfc2-4da8-bba1-4a19fd90a4cd",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "content-length": "191",
+        "content-type": "application/json",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "postData": "{\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"questionId\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"answer\":true,\"clientSeq\":1,\"clientSavedAt\":\"2026-11-19T19:53:27.991Z\",\"baseVersion\":0}",
+      "status": 200,
+      "tsResponse": 1795118008044,
+      "tsFinished": 1795118008045,
+      "timing": {
+        "startTime": 1795118007993,
+        "requestStart": 0,
+        "responseStart": 49,
+        "responseEnd": 51
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "72",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "77",
+        "x-ratelimit-reset": "11",
+        "x-request-id": "5db3a707-9cc0-4e38-be1c-f408ad837a07",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"accepted\":true,\"serverVersion\":1,\"savedAt\":\"2026-11-19T19:53:28.008Z\"}"
+    },
+    {
+      "seq": 31,
+      "phase": "refresh",
+      "tsRequest": 1795118008056,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+      "resourceType": "document",
+      "headers": {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "cache-control": "max-age=0",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "sec-fetch-dest": "document",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-user": "?1",
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008058,
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "1014",
+        "content-type": "text/html",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "etag": "\"6afef85d-3f6\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      },
+      "tsFinished": 1795118008077,
+      "timing": {
+        "startTime": 1795118008056,
+        "requestStart": 0,
+        "responseStart": 1,
+        "responseEnd": 2
+      }
+    },
+    {
+      "seq": 32,
+      "phase": "refresh",
+      "tsRequest": 1795118008062,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/client-events",
+      "resourceType": "fetch",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "postData": "{\"events\":[{\"kind\":\"exam_telemetry\",\"level\":\"info\",\"name\":\"exam_started\",\"occurredAt\":\"2026-11-19T19:53:26.359Z\",\"route\":\"/exam/330d1242-8262-4631-9fb3-6d0dca741678/start\",\"eventId\":\"39a123f4-93e9-4fca-a55e-1174201ab4bb\",\"clientSessionId\":\"33b54c1e-6a97-4715-9fef-7ed9da5d37c7\",\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"metadata\":{}},{\"kind\":\"exam_telemetry\",\"level\":\"info\",\"name\":\"exam_page_loaded\",\"occurredAt\":\"2026-11-19T19:53:26.427Z\",\"route\":\"/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take\",\"eventId\":\"77dc9fbc-db2d-4af6-9711-6e21bd20620a\",\"clientSessionId\":\"33b54c1e-6a97-4715-9fef-7ed9da5d37c7\",\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"metadata\":{\"status\":\"in_progress\"}},{\"kind\":\"exam_telemetry\",\"level\":\"info\",\"name\":\"answer_autosave_started\",\"occurredAt\":\"2026-11-19T19:53:27.991Z\",\"route\":\"/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take\",\"eventId\":\"171f7aa7-fa6e-424f-849f-73ea4ca7a75f\",\"clientSessionId\":\"33b54c1e-6a97-4715-9fef-7ed9da5d37c7\",\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"questionId\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"metadata\":{\"clientSeq\":1}}]}",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "seq": 33,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008071,
+      "tsFinished": 1795118008073,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-1f881\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "129153",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "text/css",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 34,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008073,
+      "tsFinished": 1795118008073,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85c-1f86b\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "129131",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "text/css",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 35,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Bold.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008073,
+      "tsFinished": 1795118008073,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85c-1f79e\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "128926",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "text/css",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 36,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/noto-serif-sc/css/regular.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008074,
+      "tsFinished": 1795118008074,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-142\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "322",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "text/css",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 37,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/noto-serif-sc/css/bold.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008074,
+      "tsFinished": 1795118008074,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-13f\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "319",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "text/css",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 38,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/index-ONQOMFwP.js",
+      "resourceType": "script",
+      "headers": {
+        "origin": "http://127.0.0.1:8080",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008074,
+      "tsFinished": 1795118008074,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-bca56\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "772694",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "application/javascript",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 39,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/rolldown-runtime-QTnfLwEv.js",
+      "resourceType": "script",
+      "headers": {
+        "origin": "http://127.0.0.1:8080",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008074,
+      "tsFinished": 1795118008075,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-2b6\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "694",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "application/javascript",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 40,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/vendor-KUFdH8ut.js",
+      "resourceType": "script",
+      "headers": {
+        "origin": "http://127.0.0.1:8080",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008075,
+      "tsFinished": 1795118008075,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-858c8\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "547016",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "application/javascript",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 41,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/vendor-react-dom-CXKa0MAT.js",
+      "resourceType": "script",
+      "headers": {
+        "origin": "http://127.0.0.1:8080",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008075,
+      "tsFinished": 1795118008075,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-2aac6\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "174790",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "application/javascript",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 42,
+      "phase": "refresh",
+      "tsRequest": 1795118008063,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/assets/index-CqBD-Ynj.css",
+      "resourceType": "stylesheet",
+      "headers": {
+        "origin": "http://127.0.0.1:8080",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "status": 200,
+      "tsResponse": 1795118008075,
+      "tsFinished": 1795118008075,
+      "timing": {
+        "startTime": 1795118008063,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-1950b\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "103691",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "text/css",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 43,
+      "phase": "refresh",
+      "tsRequest": 1795118008072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_ac4458.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008080,
+      "tsFinished": 1795118008080,
+      "timing": {
+        "startTime": 1795118008072,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-ef34\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "61236",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 44,
+      "phase": "refresh",
+      "tsRequest": 1795118008072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_b2c226.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008080,
+      "tsFinished": 1795118008081,
+      "timing": {
+        "startTime": 1795118008072,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-fe90\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "65168",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 45,
+      "phase": "refresh",
+      "tsRequest": 1795118008072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_256855.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008081,
+      "tsFinished": 1795118008082,
+      "timing": {
+        "startTime": 1795118008072,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-107b8\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "67512",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 46,
+      "phase": "refresh",
+      "tsRequest": 1795118008072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_ea8896.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008082,
+      "tsFinished": 1795118008082,
+      "timing": {
+        "startTime": 1795118008072,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-5d34\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "23860",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 47,
+      "phase": "refresh",
+      "tsRequest": 1795118008072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_68d530.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008082,
+      "tsFinished": 1795118008083,
+      "timing": {
+        "startTime": 1795118008072,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-105d0\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "67024",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 48,
+      "phase": "refresh",
+      "tsRequest": 1795118008072,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Regular_88d643.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008084,
+      "tsFinished": 1795118008086,
+      "timing": {
+        "startTime": 1795118008072,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85d-113bc\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "70588",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:41 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 49,
+      "phase": "refresh",
+      "tsRequest": 1795118008073,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_107da6.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008087,
+      "tsFinished": 1795118008087,
+      "timing": {
+        "startTime": 1795118008073,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85c-11440\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "70720",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 50,
+      "phase": "refresh",
+      "tsRequest": 1795118008073,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_2e32bb.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008087,
+      "tsFinished": 1795118008087,
+      "timing": {
+        "startTime": 1795118008073,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85c-10688\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "67208",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 51,
+      "phase": "refresh",
+      "tsRequest": 1795118008073,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_014f33.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008088,
+      "tsFinished": 1795118008088,
+      "timing": {
+        "startTime": 1795118008073,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85c-64c0\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "25792",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 52,
+      "phase": "refresh",
+      "tsRequest": 1795118008073,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_18d529.woff2",
+      "resourceType": "font",
+      "headers": {
+        "referer": ""
+      },
+      "status": 200,
+      "tsResponse": 1795118008088,
+      "tsFinished": 1795118008088,
+      "timing": {
+        "startTime": 1795118008073,
+        "requestStart": -1,
+        "responseStart": 0,
+        "responseEnd": 0
+      },
+      "responseHeaders": {
+        "etag": "\"6afef85c-107cc\"",
+        "connection": "keep-alive",
+        "accept-ranges": "bytes",
+        "content-length": "67532",
+        "date": "Thu, 19 Nov 2026 19:53:25 GMT",
+        "content-type": "font/woff2",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 53,
+      "phase": "refresh",
+      "tsRequest": 1795118008122,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/auth/me",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008139,
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "350",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "75",
+        "x-ratelimit-reset": "11",
+        "x-request-id": "f84735c1-c0f9-411b-bddd-66aa22a79b21",
+        "x-xss-protection": "0"
+      },
+      "tsFinished": 1795118008141,
+      "timing": {
+        "startTime": 1795118008122,
+        "requestStart": 0,
+        "responseStart": 15,
+        "responseEnd": 17
+      },
+      "responseBody": "{\"id\":\"57ac09e2-316c-4226-9daf-f6a66845ded6\",\"username\":\"cap9same-c0001-c49935\",\"name\":\"Candidate cap9same-c00\",\"role\":\"Candidate\",\"organizationId\":\"673ed73e-d79f-4879-af16-c30e77aaa261\",\"capabilities\":[\"attempt.answer.save\",\"attempt.heartbeat.send\",\"attempt.restore\",\"attempt.start\",\"attempt.submit\",\"attempt.view_own\",\"exam.take\",\"score.own.view\"]}"
+    },
+    {
+      "seq": 54,
+      "phase": "refresh",
+      "tsRequest": 1795118008122,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/settings/branding",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008138,
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "84",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "74",
+        "x-ratelimit-reset": "11",
+        "x-request-id": "ee24439e-cedc-44c2-8d5b-737902cc8167",
+        "x-xss-protection": "0"
+      },
+      "tsFinished": 1795118008139,
+      "timing": {
+        "startTime": 1795118008122,
+        "requestStart": 0,
+        "responseStart": 10,
+        "responseEnd": 14
+      },
+      "responseBody": "{\"productName\":\"LAN Exam Platform\",\"organizationDisplayName\":\"Default Organization\"}"
+    },
+    {
+      "seq": 55,
+      "phase": "refresh",
+      "tsRequest": 1795118008144,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/notifications/unread-count",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008162,
+      "tsFinished": 1795118008163,
+      "timing": {
+        "startTime": 1795118008144,
+        "requestStart": 0,
+        "responseStart": 16,
+        "responseEnd": 18
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "11",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "73",
+        "x-ratelimit-reset": "11",
+        "x-request-id": "b6c82ed8-0860-446b-b09b-9f9c91f7b6a3",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"count\":0}"
+    },
+    {
+      "seq": 56,
+      "phase": "refresh",
+      "tsRequest": 1795118008145,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/candidate/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008187,
+      "tsFinished": 1795118008188,
+      "timing": {
+        "startTime": 1795118008145,
+        "requestStart": 0,
+        "responseStart": 37,
+        "responseEnd": 40
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "3091",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "72",
+        "x-ratelimit-reset": "11",
+        "x-request-id": "d0381d4b-2127-40cf-8eae-61b5de8b059e",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"attemptStatus\":\"in_progress\",\"gradingStatus\":\"auto_graded\",\"isEditable\":true,\"canStart\":false,\"canResume\":false,\"canSave\":true,\"canSubmit\":true,\"resultVisibility\":\"hidden\",\"answerVisibility\":\"hidden\",\"timingMode\":\"timed_window\",\"submittedAt\":null,\"serverNow\":\"2026-11-19T19:53:28.179Z\",\"effectiveDeadline\":\"2026-11-19T21:23:26.315Z\",\"serverRevision\":\"2026-11-19T19:53:28.029Z\",\"questions\":[{\"id\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"type\":\"true_false\",\"prompt\":\"Q0\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":true,\"answerSource\":\"draft\",\"currentClientSeq\":1,\"currentVersion\":1},{\"id\":\"d9a3a35f-ce2e-4876-91e2-fd3508ebb140\",\"type\":\"true_false\",\"prompt\":\"Q1\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"25cb5648-efe0-4116-9db0-569121ce143b\",\"type\":\"true_false\",\"prompt\":\"Q2\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"b778c2fa-37f5-4dfb-97b8-fb238f469d38\",\"type\":\"true_false\",\"prompt\":\"Q3\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"02082666-912b-4b93-9801-dfe99af46d2e\",\"type\":\"true_false\",\"prompt\":\"Q4\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"957b46a9-330d-43e3-862f-9c1aad78b232\",\"type\":\"true_false\",\"prompt\":\"Q5\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"4dedf961-7aea-42d0-8491-464e0fc46949\",\"type\":\"true_false\",\"prompt\":\"Q6\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"d7db0fd3-f2ee-41cf-a0ef-f71f0e9ccb22\",\"type\":\"true_false\",\"prompt\":\"Q7\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"9802137e-9b00-4002-8151-ff548931f8b9\",\"type\":\"true_false\",\"prompt\":\"Q8\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"3506c674-3043-453b-bc66-8b30f7a8da9f\",\"type\":\"true_false\",\"prompt\":\"Q9\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"20d5632f-5752-4fb3-984a-02de24ac41d4\",\"type\":\"true_false\",\"prompt\":\"Q10\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"},{\"id\":\"ee368ad0-10c4-4f83-9e69-4ca1ae91cb5a\",\"type\":\"true_false\",\"prompt\":\"Q11\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"none\"}]}"
+    },
+    {
+      "seq": 57,
+      "phase": "submit",
+      "tsRequest": 1795118008317,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_26fb9a.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008327,
+      "tsFinished": 1795118008327,
+      "timing": {
+        "startTime": 1795118008317,
+        "requestStart": 1,
+        "responseStart": 5,
+        "responseEnd": 11
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "60252",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "etag": "\"6afef85c-eb5c\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 58,
+      "phase": "submit",
+      "tsRequest": 1795118008360,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/submit",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "content-length": "0",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008456,
+      "tsFinished": 1795118008458,
+      "timing": {
+        "startTime": 1795118008360,
+        "requestStart": 0,
+        "responseStart": 94,
+        "responseEnd": 95
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "3017",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "71",
+        "x-ratelimit-reset": "10",
+        "x-request-id": "8843d139-711a-4a1f-8a03-a03a8e0edde6",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"id\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"organizationId\":\"673ed73e-d79f-4879-af16-c30e77aaa261\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"enrollmentId\":\"7c24bc03-5058-48c4-bd4b-bca7bb3a698a\",\"candidateId\":\"c49935d3-c0e3-4ca8-9953-62fc36050be4\",\"attemptNo\":1,\"status\":\"graded\",\"questionSnapshot\":[{\"originalQuestionId\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"type\":\"true_false\",\"content\":\"Q0\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":0},{\"originalQuestionId\":\"d9a3a35f-ce2e-4876-91e2-fd3508ebb140\",\"type\":\"true_false\",\"content\":\"Q1\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":1},{\"originalQuestionId\":\"25cb5648-efe0-4116-9db0-569121ce143b\",\"type\":\"true_false\",\"content\":\"Q2\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":2},{\"originalQuestionId\":\"b778c2fa-37f5-4dfb-97b8-fb238f469d38\",\"type\":\"true_false\",\"content\":\"Q3\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":3},{\"originalQuestionId\":\"02082666-912b-4b93-9801-dfe99af46d2e\",\"type\":\"true_false\",\"content\":\"Q4\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":4},{\"originalQuestionId\":\"957b46a9-330d-43e3-862f-9c1aad78b232\",\"type\":\"true_false\",\"content\":\"Q5\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":5},{\"originalQuestionId\":\"4dedf961-7aea-42d0-8491-464e0fc46949\",\"type\":\"true_false\",\"content\":\"Q6\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":6},{\"originalQuestionId\":\"d7db0fd3-f2ee-41cf-a0ef-f71f0e9ccb22\",\"type\":\"true_false\",\"content\":\"Q7\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":7},{\"originalQuestionId\":\"9802137e-9b00-4002-8151-ff548931f8b9\",\"type\":\"true_false\",\"content\":\"Q8\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":8},{\"originalQuestionId\":\"3506c674-3043-453b-bc66-8b30f7a8da9f\",\"type\":\"true_false\",\"content\":\"Q9\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":9},{\"originalQuestionId\":\"20d5632f-5752-4fb3-984a-02de24ac41d4\",\"type\":\"true_false\",\"content\":\"Q10\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":10},{\"originalQuestionId\":\"ee368ad0-10c4-4f83-9e69-4ca1ae91cb5a\",\"type\":\"true_false\",\"content\":\"Q11\",\"contentDocument\":null,\"answerMode\":null,\"attachments\":[],\"options\":[],\"score\":10,\"order\":11}],\"answers\":[{\"questionId\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"answer\":true,\"version\":1,\"savedAt\":\"2026-11-19T19:53:28.008Z\"}],\"score\":10,\"passed\":false,\"startedAt\":\"2026-11-19T19:53:26.315Z\",\"submittedAt\":\"2026-11-19T19:53:28.377Z\",\"deadlineAt\":\"2026-11-19T21:23:26.315Z\",\"lastActivityAt\":\"2026-11-19T19:53:28.008Z\",\"createdAt\":\"2026-11-19T19:53:26.342Z\",\"updatedAt\":\"2026-11-19T19:53:28.430Z\",\"serverNow\":\"2026-11-19T19:53:28.377Z\"}"
+    },
+    {
+      "seq": 59,
+      "phase": "submit",
+      "tsRequest": 1795118008457,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/candidate/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008503,
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "3156",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "70",
+        "x-ratelimit-reset": "10",
+        "x-request-id": "a9d409d0-5189-459c-9c39-36ea26aa56d1",
+        "x-xss-protection": "0"
+      },
+      "tsFinished": 1795118008505,
+      "timing": {
+        "startTime": 1795118008457,
+        "requestStart": 0,
+        "responseStart": 41,
+        "responseEnd": 42
+      },
+      "responseBody": "{\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"examId\":\"330d1242-8262-4631-9fb3-6d0dca741678\",\"attemptStatus\":\"graded\",\"gradingStatus\":\"auto_graded\",\"isEditable\":false,\"canStart\":false,\"canResume\":false,\"canSave\":false,\"canSubmit\":false,\"lockReason\":\"submitted\",\"resultVisibility\":\"visible\",\"answerVisibility\":\"hidden\",\"timingMode\":\"timed_window\",\"submittedAt\":\"2026-11-19T19:53:28.377Z\",\"serverNow\":\"2026-11-19T19:53:28.494Z\",\"effectiveDeadline\":\"2026-11-19T21:23:26.315Z\",\"serverRevision\":\"2026-11-19T19:53:28.430Z\",\"questions\":[{\"id\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"type\":\"true_false\",\"prompt\":\"Q0\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":true,\"answerSource\":\"submitted\"},{\"id\":\"d9a3a35f-ce2e-4876-91e2-fd3508ebb140\",\"type\":\"true_false\",\"prompt\":\"Q1\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"25cb5648-efe0-4116-9db0-569121ce143b\",\"type\":\"true_false\",\"prompt\":\"Q2\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"b778c2fa-37f5-4dfb-97b8-fb238f469d38\",\"type\":\"true_false\",\"prompt\":\"Q3\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"02082666-912b-4b93-9801-dfe99af46d2e\",\"type\":\"true_false\",\"prompt\":\"Q4\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"957b46a9-330d-43e3-862f-9c1aad78b232\",\"type\":\"true_false\",\"prompt\":\"Q5\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"4dedf961-7aea-42d0-8491-464e0fc46949\",\"type\":\"true_false\",\"prompt\":\"Q6\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"d7db0fd3-f2ee-41cf-a0ef-f71f0e9ccb22\",\"type\":\"true_false\",\"prompt\":\"Q7\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"9802137e-9b00-4002-8151-ff548931f8b9\",\"type\":\"true_false\",\"prompt\":\"Q8\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"3506c674-3043-453b-bc66-8b30f7a8da9f\",\"type\":\"true_false\",\"prompt\":\"Q9\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"20d5632f-5752-4fb3-984a-02de24ac41d4\",\"type\":\"true_false\",\"prompt\":\"Q10\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"},{\"id\":\"ee368ad0-10c4-4f83-9e69-4ca1ae91cb5a\",\"type\":\"true_false\",\"prompt\":\"Q11\",\"promptDocument\":null,\"answerMode\":\"plain\",\"options\":[],\"inputMode\":\"boolean\",\"maxScore\":10,\"answerValue\":null,\"answerSource\":\"submitted\"}]}"
+    },
+    {
+      "seq": 60,
+      "phase": "submit",
+      "tsRequest": 1795118008521,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium_d96074.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Medium.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008531,
+      "tsFinished": 1795118008531,
+      "timing": {
+        "startTime": 1795118008521,
+        "requestStart": 0,
+        "responseStart": 2,
+        "responseEnd": 14
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "64972",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "etag": "\"6afef85c-fdcc\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    },
+    {
+      "seq": 61,
+      "phase": "submit",
+      "tsRequest": 1795118008529,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/scores/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b",
+      "resourceType": "fetch",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/exam/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/result",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008557,
+      "tsFinished": 1795118008558,
+      "timing": {
+        "startTime": 1795118008529,
+        "requestStart": 0,
+        "responseStart": 26,
+        "responseEnd": 28
+      },
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-length": "2935",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "server": "nginx/1.30.5",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-origin": "http://127.0.0.1:8080",
+        "access-control-expose-headers": "x-request-id",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        "permissions-policy": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "69",
+        "x-ratelimit-reset": "10",
+        "x-request-id": "84b902d5-750d-44a2-b41a-0ba4b5bce16d",
+        "x-xss-protection": "0"
+      },
+      "responseBody": "{\"attemptId\":\"e4a82b69-95b6-4b93-89a7-838eb5b8df0b\",\"status\":\"graded\",\"showResultImmediately\":true,\"examTitle\":\"cap900 same-field S200\",\"passingScore\":60,\"totalScore\":10,\"passed\":false,\"gradedAt\":\"2026-11-19T19:53:28.377Z\",\"questionResults\":[{\"questionId\":\"7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"score\":10,\"maxScore\":10,\"correct\":true,\"candidateAnswer\":true,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q0\",\"contentDocument\":null,\"answerMode\":null,\"order\":0},{\"questionId\":\"d9a3a35f-ce2e-4876-91e2-fd3508ebb140\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q1\",\"contentDocument\":null,\"answerMode\":null,\"order\":1},{\"questionId\":\"25cb5648-efe0-4116-9db0-569121ce143b\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q2\",\"contentDocument\":null,\"answerMode\":null,\"order\":2},{\"questionId\":\"b778c2fa-37f5-4dfb-97b8-fb238f469d38\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q3\",\"contentDocument\":null,\"answerMode\":null,\"order\":3},{\"questionId\":\"02082666-912b-4b93-9801-dfe99af46d2e\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q4\",\"contentDocument\":null,\"answerMode\":null,\"order\":4},{\"questionId\":\"957b46a9-330d-43e3-862f-9c1aad78b232\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q5\",\"contentDocument\":null,\"answerMode\":null,\"order\":5},{\"questionId\":\"4dedf961-7aea-42d0-8491-464e0fc46949\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q6\",\"contentDocument\":null,\"answerMode\":null,\"order\":6},{\"questionId\":\"d7db0fd3-f2ee-41cf-a0ef-f71f0e9ccb22\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q7\",\"contentDocument\":null,\"answerMode\":null,\"order\":7},{\"questionId\":\"9802137e-9b00-4002-8151-ff548931f8b9\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q8\",\"contentDocument\":null,\"answerMode\":null,\"order\":8},{\"questionId\":\"3506c674-3043-453b-bc66-8b30f7a8da9f\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q9\",\"contentDocument\":null,\"answerMode\":null,\"order\":9},{\"questionId\":\"20d5632f-5752-4fb3-984a-02de24ac41d4\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q10\",\"contentDocument\":null,\"answerMode\":null,\"order\":10},{\"questionId\":\"ee368ad0-10c4-4f83-9e69-4ca1ae91cb5a\",\"score\":0,\"maxScore\":10,\"correct\":false,\"candidateAnswer\":null,\"manualGraded\":false,\"type\":\"true_false\",\"content\":\"Q11\",\"contentDocument\":null,\"answerMode\":null,\"order\":11}]}"
+    },
+    {
+      "seq": 62,
+      "phase": "submit",
+      "tsRequest": 1795118008580,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Bold_fdb231.woff2",
+      "resourceType": "font",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "connection": "keep-alive",
+        "cookie": "<redacted>",
+        "host": "127.0.0.1:8080",
+        "origin": "http://127.0.0.1:8080",
+        "referer": "http://127.0.0.1:8080/fonts/harmonyos-sans-sc/Bold.css",
+        "sec-fetch-dest": "font",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "sec-ch-ua": "\"HeadlessChrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "status": 200,
+      "tsResponse": 1795118008589,
+      "tsFinished": 1795118008590,
+      "timing": {
+        "startTime": 1795118008580,
+        "requestStart": 0,
+        "responseStart": 3,
+        "responseEnd": 14
+      },
+      "responseHeaders": {
+        "accept-ranges": "bytes",
+        "connection": "keep-alive",
+        "content-length": "26080",
+        "content-type": "font/woff2",
+        "date": "Thu, 19 Nov 2026 19:53:28 GMT",
+        "etag": "\"6afef85c-65e0\"",
+        "last-modified": "Thu, 19 Nov 2026 13:23:40 GMT",
+        "server": "nginx/1.30.5"
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "name": "B-save1-accepted",
+      "pass": true,
+      "detail": "{\"clientSeq\":1,\"baseVersion\":0,\"serverVersion\":1,\"accepted\":true,\"url\":\"http://127.0.0.1:8080/api/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/answers/7b618d55-dfc2-4da8-bba1-4a19fd90a4cd\",\"tSentMs\":2415,\"latencyMs\":49}"
+    },
+    {
+      "name": "B-save1-chip-saved",
+      "pass": true,
+      "detail": "chip=已保存"
+    },
+    {
+      "name": "B-restore-radio-checked",
+      "pass": true,
+      "detail": "恢复后已保存答案回显选中"
+    },
+    {
+      "name": "B-result-visible",
+      "pass": true,
+      "detail": "score=10"
+    }
+  ],
+  "consoleErrors": [
+    "[login] Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "sessionClaims": {
+    "actorId": "57ac09e2-316c-4226-9daf-f6a66845ded6",
+    "role": "Candidate",
+    "organizationId": "673ed73e-d79f-4879-af16-c30e77aaa261",
+    "authEpoch": 0,
+    "iat": 1795118006,
+    "exp": 1795204406
+  }
+}

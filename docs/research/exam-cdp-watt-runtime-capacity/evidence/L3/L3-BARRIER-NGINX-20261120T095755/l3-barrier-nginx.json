@@ -1,0 +1,212 @@
+{
+  "runId": "L3-BARRIER-NGINX-20261120T095755",
+  "startedAt": "2026-11-20T09:57:55.833Z",
+  "finishedAt": "2026-11-20T10:06:04.404Z",
+  "branch": "research/capacity-900-1021-l3-admission",
+  "topology": {
+    "nginxContainer": "exam-cap-nginx-l3",
+    "nginxPort": 8081,
+    "network": "exam-cap-net-l3",
+    "apiPort": 3310,
+    "apiBuild": "apps/api/dist-l3 (experiment branch)",
+    "database": "exam_550_l3_barrier",
+    "sourceIps": "distinct 127.0.0.x per client (T-DIRECT discipline)"
+  },
+  "aIsolation": {
+    "before": {
+      "nginx": "exam-cap-nginx Up 42 seconds",
+      "api3300": "http 200"
+    },
+    "after": {
+      "nginx": "exam-cap-nginx Up 8 minutes",
+      "api3300": "http 200"
+    }
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 67,
+        "closerSettledAtMs": 89,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 185
+      }
+    },
+    {
+      "rep": 1,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 63,
+        "closerSettledAtMs": 87,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 177
+      }
+    },
+    {
+      "rep": 2,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 66,
+        "closerSettledAtMs": 86,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 175
+      }
+    },
+    {
+      "rep": 3,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 63,
+        "closerSettledAtMs": 84,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 170
+      }
+    },
+    {
+      "rep": 4,
+      "case": "A-disconnect",
+      "ok": true,
+      "details": {
+        "queuedAtMs": 59644,
+        "closerSettledAtMs": 59664,
+        "keeperStatus": 200,
+        "sqlDeltaDuringCase": 20,
+        "totalMs": 59752
+      }
+    },
+    {
+      "rep": 0,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 204
+      }
+    },
+    {
+      "rep": 1,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 206
+      }
+    },
+    {
+      "rep": 2,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 212
+      }
+    },
+    {
+      "rep": 3,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 226
+      }
+    },
+    {
+      "rep": 4,
+      "case": "B-queue-full",
+      "ok": true,
+      "details": {
+        "overStatus": 503,
+        "retryAfter": "15",
+        "overCode": "LOGIN_BUSY",
+        "totalMs": 219
+      }
+    },
+    {
+      "rep": 0,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [
+          503,
+          503,
+          503
+        ],
+        "totalMs": 991
+      }
+    },
+    {
+      "rep": 1,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [
+          503,
+          503,
+          503
+        ],
+        "totalMs": 980
+      }
+    },
+    {
+      "rep": 2,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [
+          503,
+          503,
+          503
+        ],
+        "totalMs": 990
+      }
+    },
+    {
+      "rep": 3,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [
+          503,
+          503,
+          503
+        ],
+        "totalMs": 970
+      }
+    },
+    {
+      "rep": 4,
+      "case": "C-wait-expiry",
+      "ok": true,
+      "details": {
+        "waiterStatuses": [
+          503,
+          503,
+          503
+        ],
+        "totalMs": 977
+      }
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "ok": 15,
+    "repsPerCase": 5
+  }
+}

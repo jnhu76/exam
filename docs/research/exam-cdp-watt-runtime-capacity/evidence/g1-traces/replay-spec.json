@@ -1,0 +1,702 @@
+{
+  "specVersion": 1,
+  "runId": "G1-FIDELITY-browser-r1-2026-11-19T1952",
+  "campaign": "exam-cdp-watt-runtime-capacity (#900/#1021) — G1.1",
+  "generatedFrom": [
+    "trace-a-happy-path.json",
+    "trace-b-refresh-recovery.json"
+  ],
+  "entry": {
+    "origin": "http://127.0.0.1:8080",
+    "ingress": "real nginx (deploy/nginx/web.conf derivative)"
+  },
+  "globalParams": {
+    "origin": {
+      "value": "http://127.0.0.1:8080",
+      "note": "实际 Nginx 入口；回放必须经该入口而非直连 API"
+    },
+    "username": {
+      "type": "string",
+      "examples": [
+        "cap9same-c0000-de2c5a",
+        "cap9same-c0001-c49935"
+      ],
+      "source": "evidence/fixtures/seed-manifest.json sameField.candidates[k]（maxAttempts=1 → 每轨迹独立考生）"
+    },
+    "password": {
+      "type": "secret",
+      "constant": "CANDIDATE_PASSWORD",
+      "source": "harness/lib/config.ts（合成考生共享密码；不归档明文）"
+    },
+    "examId": {
+      "value": "330d1242-8262-4631-9fb3-6d0dca741678",
+      "source": "seed-manifest.json sameField.examId"
+    },
+    "authCookie": {
+      "name": "auth-token",
+      "source": "login 响应 Set-Cookie（HttpOnly; SameSite=Strict; Path=/; Max-Age=86400）",
+      "note": "后续所有 /api 请求以 Cookie: auth-token=<login> 携带；值不入库"
+    },
+    "timingConstants": {
+      "saveDebounceMs": 1500,
+      "source": "apps/web/src/hooks/useSubmitFlush.ts:10 DEBOUNCE_MS=1500（最后一次作答变更后 1500ms 才发 POST）",
+      "heartbeatIntervalMs": 30000,
+      "heartbeatSource": "apps/web/src/pages/exam/TakeExamPage.tsx:1651（take 页挂载起每 30s）",
+      "deadlineCheckLocalMs": 1000
+    }
+  },
+  "flows": {
+    "A-happy-path": {
+      "description": "密码登录 → 等候（列表驻留 8s）→ 开考 → 作答 true → 保存确认 → 改答 false → 保存确认 → 心跳窗口 32s → 交卷 → 查看结果",
+      "observedApiCalls": [
+        {
+          "seq": 20,
+          "phase": "login",
+          "tRelMs": 284,
+          "method": "GET",
+          "path": "/api/auth/me",
+          "status": 401,
+          "serverMs": 17
+        },
+        {
+          "seq": 21,
+          "phase": "login",
+          "tRelMs": 285,
+          "method": "GET",
+          "path": "/api/settings/branding",
+          "status": 200,
+          "serverMs": 29
+        },
+        {
+          "seq": 24,
+          "phase": "login",
+          "tRelMs": 413,
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "serverMs": 90
+        },
+        {
+          "seq": 25,
+          "phase": "wait",
+          "tRelMs": 525,
+          "method": "GET",
+          "path": "/api/notifications/unread-count",
+          "status": 200,
+          "serverMs": 23
+        },
+        {
+          "seq": 26,
+          "phase": "wait",
+          "tRelMs": 528,
+          "method": "GET",
+          "path": "/api/candidate/exams",
+          "status": 200,
+          "serverMs": 45
+        },
+        {
+          "seq": 27,
+          "phase": "start",
+          "tRelMs": 8635,
+          "method": "GET",
+          "path": "/api/candidate/exams/330d1242-8262-4631-9fb3-6d0dca741678",
+          "status": 200,
+          "serverMs": 36
+        },
+        {
+          "seq": 28,
+          "phase": "start",
+          "tRelMs": 8718,
+          "method": "POST",
+          "path": "/api/attempts/330d1242-8262-4631-9fb3-6d0dca741678/start",
+          "status": 201,
+          "serverMs": 62
+        },
+        {
+          "seq": 29,
+          "phase": "start",
+          "tRelMs": 8793,
+          "method": "GET",
+          "path": "/api/candidate/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd/take",
+          "status": 200,
+          "serverMs": 56
+        },
+        {
+          "seq": 30,
+          "phase": "answer1",
+          "tRelMs": 10485,
+          "method": "POST",
+          "path": "/api/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd/answers/7b618d55-dfc2-4da8-bba1-4a19fd90a4cd",
+          "status": 200,
+          "serverMs": 62
+        },
+        {
+          "seq": 31,
+          "phase": "revise",
+          "tRelMs": 12100,
+          "method": "POST",
+          "path": "/api/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd/answers/7b618d55-dfc2-4da8-bba1-4a19fd90a4cd",
+          "status": 200,
+          "serverMs": 54
+        },
+        {
+          "seq": 32,
+          "phase": "heartbeat-window",
+          "tRelMs": 13786,
+          "method": "POST",
+          "path": "/api/client-events",
+          "status": 200,
+          "serverMs": 33
+        },
+        {
+          "seq": 33,
+          "phase": "heartbeat-window",
+          "tRelMs": 18785,
+          "method": "POST",
+          "path": "/api/client-events",
+          "status": 200,
+          "serverMs": 35
+        },
+        {
+          "seq": 34,
+          "phase": "heartbeat-window",
+          "tRelMs": 38795,
+          "method": "POST",
+          "path": "/api/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd/heartbeat",
+          "status": 200,
+          "serverMs": 22
+        },
+        {
+          "seq": 36,
+          "phase": "submit",
+          "tRelMs": 44269,
+          "method": "POST",
+          "path": "/api/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd/submit",
+          "status": 200,
+          "serverMs": 86
+        },
+        {
+          "seq": 37,
+          "phase": "submit",
+          "tRelMs": 44364,
+          "method": "GET",
+          "path": "/api/candidate/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd/take",
+          "status": 200,
+          "serverMs": 52
+        },
+        {
+          "seq": 39,
+          "phase": "submit",
+          "tRelMs": 44457,
+          "method": "GET",
+          "path": "/api/scores/attempts/433ce9a3-1e90-4ec0-890a-f5416bc29bbd",
+          "status": 200,
+          "serverMs": 42
+        }
+      ],
+      "steps": [
+        {
+          "id": "A1-session-probe",
+          "when": "登录页加载（瞬时）",
+          "method": "GET",
+          "url": "${origin}/api/auth/me",
+          "headersRole": {
+            "accept": "application/json",
+            "cookie": "（可无；未登录 → 401 预期）"
+          },
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": "401（未登录时）",
+            "note": "会话探测；回放可省略"
+          },
+          "dependsOn": []
+        },
+        {
+          "id": "A2-branding",
+          "when": "登录页加载（瞬时）",
+          "method": "GET",
+          "url": "${origin}/api/settings/branding",
+          "headersRole": {
+            "accept": "application/json"
+          },
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200
+          },
+          "dependsOn": []
+        },
+        {
+          "id": "A3-login",
+          "when": "用户点击登录（瞬时）",
+          "method": "POST",
+          "url": "${origin}/api/auth/login",
+          "headersRole": {
+            "content-type": "application/json",
+            "origin": "${origin}",
+            "referer": "${origin}/login",
+            "cookie": "（无需）"
+          },
+          "bodyTemplate": {
+            "username": "${username}",
+            "password": "${password}"
+          },
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "authCookie": "set-cookie: auth-token=<jwt>（HttpOnly; SameSite=Strict; Max-Age=86400；后续所有请求携带；不落盘）",
+              "userId": "body.id",
+              "role": "body.role=Candidate"
+            }
+          },
+          "dependsOn": []
+        },
+        {
+          "id": "A4-list",
+          "when": "登录跳转后页面加载（瞬时；与 unread-count 并发）",
+          "method": "GET",
+          "url": "${origin}/api/candidate/exams",
+          "headersRole": {
+            "accept": "application/json",
+            "cookie": "auth-token=${authCookie}",
+            "referer": "${origin}/exam/list"
+          },
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "examId": "body[].id（card=exam-card-${examId}）"
+            }
+          },
+          "dependsOn": [
+            "A3-login"
+          ]
+        },
+        {
+          "id": "A5-notifications",
+          "when": "同 A4（并发）",
+          "method": "GET",
+          "url": "${origin}/api/notifications/unread-count",
+          "headersRole": "同 A4",
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200
+          },
+          "dependsOn": [
+            "A3-login"
+          ]
+        },
+        {
+          "id": "A6-exam-detail",
+          "when": "点击列表卡片 start（瞬时）",
+          "method": "GET",
+          "url": "${origin}/api/candidate/exams/${examId}",
+          "headersRole": {
+            "accept": "application/json",
+            "cookie": "auth-token=${authCookie}",
+            "referer": "${origin}/exam/list"
+          },
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200,
+            "note": "start 页详情（enrollment/attempt 状态）"
+          },
+          "dependsOn": [
+            "A4-list"
+          ]
+        },
+        {
+          "id": "A7-start-attempt",
+          "when": "点击 exam-start-btn（瞬时）",
+          "method": "POST",
+          "url": "${origin}/api/attempts/${examId}/start",
+          "headersRole": {
+            "content-type": "application/json",
+            "cookie": "auth-token=${authCookie}",
+            "origin": "${origin}",
+            "referer": "${origin}/exam/${examId}/start"
+          },
+          "bodyTemplate": {},
+          "responseContract": {
+            "status": 201,
+            "extract": {
+              "attemptId": "body.id（startOrRestoreAttempt：已存在 in_progress attempt 则恢复返回）"
+            }
+          },
+          "dependsOn": [
+            "A6-exam-detail"
+          ]
+        },
+        {
+          "id": "A8-take-restore",
+          "when": "take 页挂载（紧跟 A7）",
+          "method": "GET",
+          "url": "${origin}/api/candidate/attempts/${attemptId}/take",
+          "headersRole": {
+            "accept": "application/json",
+            "cookie": "auth-token=${authCookie}",
+            "referer": "${origin}/exam/${attemptId}/take"
+          },
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "questionId": "body.questions[0].id（首题；shuffleQuestions=false → 蓝图顺序）",
+              "answers": "body.answers（恢复已有答案）"
+            }
+          },
+          "dependsOn": [
+            "A7-start-attempt"
+          ]
+        },
+        {
+          "id": "A9-save-answer-v1",
+          "when": "作答变更后 1500ms debounce（DEBOUNCE_MS，实测 check→POST ≈1.5s）",
+          "method": "POST",
+          "url": "${origin}/api/attempts/${attemptId}/answers/${questionId}",
+          "headersRole": {
+            "content-type": "application/json",
+            "cookie": "auth-token=${authCookie}",
+            "origin": "${origin}",
+            "referer": "${origin}/exam/${attemptId}/take"
+          },
+          "bodyTemplate": {
+            "attemptId": "${attemptId}",
+            "questionId": "${questionId}",
+            "answer": "${answerV1}",
+            "clientSeq": 1,
+            "clientSavedAt": "${iso8601-now}",
+            "baseVersion": 0
+          },
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "accepted": "body.accepted===true",
+              "serverVersion": "body.serverVersion=1（→ 下一次 baseVersion）"
+            }
+          },
+          "dependsOn": [
+            "A8-take-restore"
+          ]
+        },
+        {
+          "id": "A10-save-answer-v2-revise",
+          "when": "改答变更后 1500ms debounce；clientSeq=2、baseVersion=A9.serverVersion=1",
+          "method": "POST",
+          "url": "${origin}/api/attempts/${attemptId}/answers/${questionId}",
+          "headersRole": "同 A9",
+          "bodyTemplate": {
+            "attemptId": "${attemptId}",
+            "questionId": "${questionId}",
+            "answer": "${answerV2}",
+            "clientSeq": 2,
+            "clientSavedAt": "${iso8601-now}",
+            "baseVersion": 1
+          },
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "accepted": "true",
+              "serverVersion": 2
+            }
+          },
+          "dependsOn": [
+            "A9-save-answer-v1"
+          ]
+        },
+        {
+          "id": "A11-client-events",
+          "when": "每次保存 started/success 后批量上报（实测 save 后 ~1.6s）",
+          "method": "POST",
+          "url": "${origin}/api/client-events",
+          "headersRole": "同 A9",
+          "bodyTemplate": {
+            "events": "${telemetry-batch（answer_autosave_started/success，携带 clientSeq 相关键）}"
+          },
+          "responseContract": {
+            "status": 200
+          },
+          "dependsOn": [
+            "A9-save-answer-v1"
+          ]
+        },
+        {
+          "id": "A12-heartbeat",
+          "when": "take 页挂载起每 30000ms（实测 mount→heartbeat=30.001s）",
+          "method": "POST",
+          "url": "${origin}/api/attempts/${attemptId}/heartbeat",
+          "headersRole": "同 A9（无 body）",
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200,
+            "note": "连续失败进入断连态；恢复后重基准服务端时钟"
+          },
+          "dependsOn": [
+            "A8-take-restore"
+          ]
+        },
+        {
+          "id": "A13-submit",
+          "when": "用户点击交卷并确认（瞬时；提交前 flush 未落盘保存）",
+          "method": "POST",
+          "url": "${origin}/api/attempts/${attemptId}/submit",
+          "headersRole": "同 A9",
+          "bodyTemplate": {},
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "status": "body.status（submitted/graded）",
+              "grading": "结果含评分（resultPublicationMode=immediate）"
+            }
+          },
+          "dependsOn": [
+            "A10-save-answer-v2-revise"
+          ]
+        },
+        {
+          "id": "A14-result-read",
+          "when": "跳转 /result 后页面加载（两条并发）",
+          "method": "GET",
+          "url": "${origin}/api/scores/attempts/${attemptId} + GET ${origin}/api/candidate/attempts/${attemptId}/take",
+          "headersRole": "同 A9（referer=${origin}/exam/${attemptId}/result）",
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "totalScore": "body（scores）；UI testid=result-total-score"
+            }
+          },
+          "dependsOn": [
+            "A13-submit"
+          ]
+        }
+      ]
+    },
+    "B-refresh-recovery": {
+      "description": "密码登录 → 开考 → 作答 true → 保存确认 → 刷新（重连/恢复）→ 恢复校验 → 提交 → 结果",
+      "observedApiCalls": [
+        {
+          "seq": 20,
+          "phase": "login",
+          "tRelMs": 223,
+          "method": "GET",
+          "path": "/api/auth/me",
+          "status": 401,
+          "serverMs": 17
+        },
+        {
+          "seq": 21,
+          "phase": "login",
+          "tRelMs": 223,
+          "method": "GET",
+          "path": "/api/settings/branding",
+          "status": 200,
+          "serverMs": 30
+        },
+        {
+          "seq": 24,
+          "phase": "login",
+          "tRelMs": 338,
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "serverMs": 94
+        },
+        {
+          "seq": 25,
+          "phase": "start",
+          "tRelMs": 449,
+          "method": "GET",
+          "path": "/api/notifications/unread-count",
+          "status": 200,
+          "serverMs": 17
+        },
+        {
+          "seq": 26,
+          "phase": "start",
+          "tRelMs": 449,
+          "method": "GET",
+          "path": "/api/candidate/exams",
+          "status": 200,
+          "serverMs": 29
+        },
+        {
+          "seq": 27,
+          "phase": "start",
+          "tRelMs": 585,
+          "method": "GET",
+          "path": "/api/candidate/exams/330d1242-8262-4631-9fb3-6d0dca741678",
+          "status": 200,
+          "serverMs": 31
+        },
+        {
+          "seq": 28,
+          "phase": "start",
+          "tRelMs": 671,
+          "method": "POST",
+          "path": "/api/attempts/330d1242-8262-4631-9fb3-6d0dca741678/start",
+          "status": 201,
+          "serverMs": 64
+        },
+        {
+          "seq": 29,
+          "phase": "start",
+          "tRelMs": 750,
+          "method": "GET",
+          "path": "/api/candidate/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+          "status": 200,
+          "serverMs": 52
+        },
+        {
+          "seq": 30,
+          "phase": "answer1",
+          "tRelMs": 2370,
+          "method": "POST",
+          "path": "/api/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/answers/7b618d55-dfc2-4da8-bba1-4a19fd90a4cd",
+          "status": 200,
+          "serverMs": 49
+        },
+        {
+          "seq": 32,
+          "phase": "refresh",
+          "tRelMs": 2439,
+          "method": "POST",
+          "path": "/api/client-events",
+          "status": null,
+          "serverMs": null
+        },
+        {
+          "seq": 53,
+          "phase": "refresh",
+          "tRelMs": 2499,
+          "method": "GET",
+          "path": "/api/auth/me",
+          "status": 200,
+          "serverMs": 15
+        },
+        {
+          "seq": 54,
+          "phase": "refresh",
+          "tRelMs": 2499,
+          "method": "GET",
+          "path": "/api/settings/branding",
+          "status": 200,
+          "serverMs": 10
+        },
+        {
+          "seq": 55,
+          "phase": "refresh",
+          "tRelMs": 2521,
+          "method": "GET",
+          "path": "/api/notifications/unread-count",
+          "status": 200,
+          "serverMs": 16
+        },
+        {
+          "seq": 56,
+          "phase": "refresh",
+          "tRelMs": 2522,
+          "method": "GET",
+          "path": "/api/candidate/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+          "status": 200,
+          "serverMs": 37
+        },
+        {
+          "seq": 58,
+          "phase": "submit",
+          "tRelMs": 2737,
+          "method": "POST",
+          "path": "/api/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/submit",
+          "status": 200,
+          "serverMs": 94
+        },
+        {
+          "seq": 59,
+          "phase": "submit",
+          "tRelMs": 2834,
+          "method": "GET",
+          "path": "/api/candidate/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b/take",
+          "status": 200,
+          "serverMs": 41
+        },
+        {
+          "seq": 61,
+          "phase": "submit",
+          "tRelMs": 2906,
+          "method": "GET",
+          "path": "/api/scores/attempts/e4a82b69-95b6-4b93-89a7-838eb5b8df0b",
+          "status": 200,
+          "serverMs": 26
+        }
+      ],
+      "steps": [
+        {
+          "id": "B1-B6",
+          "when": "同 A1–A10（换 ${username}=第二名考生；maxAttempts=1 → 每轨迹独立考生；本轨迹只作答一次）",
+          "method": "—",
+          "url": "见 A1–A10（A9 保存 v1 后即进入刷新）",
+          "headersRole": "同 A",
+          "bodyTemplate": null,
+          "responseContract": null,
+          "dependsOn": [
+            "A-flow"
+          ]
+        },
+        {
+          "id": "B7-refresh-reload",
+          "when": "保存确认后用户刷新（page.reload / 断线重连）",
+          "method": "GET",
+          "url": "${origin}/exam/${attemptId}/take（SPA 文档）→ GET ${origin}/api/auth/me + GET ${origin}/api/settings/branding + GET ${origin}/api/notifications/unread-count + GET ${origin}/api/candidate/attempts/${attemptId}/take",
+          "headersRole": "同 A8（cookie 保持 → 会话跨刷新续存）",
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200,
+            "extract": {
+              "restoredAnswer": "body.answers[questionId] —— UI 回显为 radio checked（实测 true-false-true 恢复选中）"
+            }
+          },
+          "dependsOn": [
+            "B6（=A9 保存 v1）"
+          ]
+        },
+        {
+          "id": "B8-submit-after-recovery",
+          "when": "恢复确认后用户交卷（瞬时，实测恢复→submit ~170ms）",
+          "method": "POST",
+          "url": "${origin}/api/attempts/${attemptId}/submit",
+          "headersRole": "同 A13",
+          "bodyTemplate": {},
+          "responseContract": {
+            "status": 200,
+            "note": "提交的服务端答案集合=最后接受版本（B6 的 v1=true）；结果 score=10/120"
+          },
+          "dependsOn": [
+            "B7-refresh-reload"
+          ]
+        },
+        {
+          "id": "B9-result-read",
+          "when": "同 A14",
+          "method": "GET",
+          "url": "${origin}/api/scores/attempts/${attemptId} + GET ${origin}/api/candidate/attempts/${attemptId}/take",
+          "headersRole": "同 A14",
+          "bodyTemplate": null,
+          "responseContract": {
+            "status": 200
+          },
+          "dependsOn": [
+            "B8-submit-after-recovery"
+          ]
+        }
+      ]
+    }
+  },
+  "invariantsForReplayDriver": [
+    "clientSeq 每题从 1 起单调递增；改答（同一题）必须 +1，且 baseVersion=上一接受的 serverVersion",
+    "刷新/重连后客户端 clientSeq 计数从服务端持久化版本恢复（refresh-during-exam.spec.ts 回归锁：恢复后改答 clientSeq≥2）",
+    "保存 POST 的 200 必要非充分：必须断言 body.accepted===true 且 serverVersion 递增（STALE_VERSION 等业务拒绝也是 200）",
+    "交卷成功判据用 DB oracle（唯一终态 submitted/graded + submissionReason），不得凭一个 200 推断最后改答已保存",
+    "登录来源限流 10 次/60s/IP（生产 limiter ON）：回放到达表必须按源 IP 预算",
+    "heartbeat 与保存共享同一 auth-token cookie 与 attempt 作用域",
+    "真实浏览器 reload 会中止在途 telemetry：实测 B 刷新瞬间 POST /api/client-events（exam_started 批量）被 net::ERR_ABORTED，服务端未收到；回放驱动应容忍该类中止，业务终态判据不得依赖 client-events 成功"
+  ]
+}
