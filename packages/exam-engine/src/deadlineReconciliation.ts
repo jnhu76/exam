@@ -283,9 +283,9 @@ export async function ensureAttemptDeadlineReconciled(
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    examRepo,
     gradingWorksetRepo,
     capability,
-    snapshot.exam,
     now,
   );
 

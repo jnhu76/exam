@@ -413,6 +413,7 @@ async function runMixedLifecycle(input: {
     lastResult = await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap,
       m.questionId,
@@ -420,7 +421,6 @@ async function runMixedLifecycle(input: {
       "",
       "grader-1",
       NOW,
-      exam,
     );
   }
 
@@ -569,6 +569,7 @@ describe("multi-manual partial completion", () => {
     const partial = await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap2,
       "q-text-1",
@@ -576,7 +577,6 @@ describe("multi-manual partial completion", () => {
       "",
       "grader-1",
       NOW,
-      makeExam(),
     );
 
     expect(partial.fullyGraded).toBe(false);
@@ -699,6 +699,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap3,
       "q-text-2",
@@ -706,7 +707,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
 
     const enrollment = repos.getEnrollment();
@@ -759,6 +759,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap4,
       "q-text",
@@ -766,7 +767,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
     expect(repos.getEnrollment().finalScore).toBe(80);
     expect(repos.getEnrollment().finalAttemptId).toBe("attempt-1");
@@ -798,6 +798,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos2.attemptRepo,
       repos2.enrollmentRepo,
+      repos2.examRepo,
       repos2.gradingWorksetRepo,
       cap5,
       "q-text",
@@ -805,7 +806,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
 
     // highest: 80 > 50, so the projection keeps attempt-1's 80.
@@ -851,6 +851,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap6,
       "q-text",
@@ -858,7 +859,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
     expect(repos.getEnrollment().finalScore).toBe(80);
 
@@ -886,6 +886,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos2.attemptRepo,
       repos2.enrollmentRepo,
+      repos2.examRepo,
       repos2.gradingWorksetRepo,
       cap7,
       "q-text",
@@ -893,7 +894,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
 
     // latest always wins, even when lower.
@@ -936,6 +936,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap8,
       "q-text",
@@ -943,7 +944,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
 
     expect(repos.getEnrollment().status).toBe("completed");
@@ -985,6 +985,7 @@ describe("manual terminal closure projects Enrollment", () => {
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap9,
       "q-text",
@@ -992,7 +993,6 @@ describe("manual terminal closure projects Enrollment", () => {
       "",
       "grader-1",
       NOW,
-      exam,
     );
 
     expect(repos.getEnrollment().status).toBe("started");

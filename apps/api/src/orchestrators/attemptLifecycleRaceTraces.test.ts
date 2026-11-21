@@ -575,9 +575,9 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
       await finalizeGrading(
         repos.enrollments,
         repos.attempts,
+        repos.exams,
         repos.gradingWorkset,
         cap,
-        snapshot.exam,
         args.now,
       );
       await args.hold();

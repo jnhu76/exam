@@ -367,7 +367,7 @@ async function finalizeInTx(
 ): Promise<boolean> {
   return executeInTransaction(db, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
-    const { enrollments, attempts } = createExamEngineRepos(
+    const { exams, enrollments, attempts } = createExamEngineRepos(
       {
         examRepo: createExamRepo(tx),
         attemptRepo: txAttemptRepo,
@@ -387,9 +387,9 @@ async function finalizeInTx(
     return finalizeGrading(
       enrollments,
       attempts,
+      exams,
       gradingWorksetRepo,
       cap,
-      exam,
       new Date(),
     );
   });
@@ -463,7 +463,7 @@ async function runSerializedFinalizerSchedule(
 
   const t1 = executeInTransaction(connections.db1, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
-    const { enrollments, attempts } = createExamEngineRepos(
+    const { exams, enrollments, attempts } = createExamEngineRepos(
       {
         examRepo: createExamRepo(tx),
         attemptRepo: txAttemptRepo,
@@ -486,9 +486,9 @@ async function runSerializedFinalizerSchedule(
     return finalizeGrading(
       parked,
       attempts,
+      exams,
       gradingWorksetRepo,
       cap,
-      f.exam,
       new Date(),
     );
   });

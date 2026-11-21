@@ -295,8 +295,9 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
    * The command updates the SAME `attempt_grading_entries` row that
    * the freeze barrier materialized (pending_manual → completed_manual). It
    * fails closed when no entry exists and rejects attempts to score an
-   * auto-graded entry. The route pre-fetches attempt/exam metadata for audit
-   * only; the authoritative maxScore and entry lookup live in the command.
+   * auto-graded entry. The route pre-fetches attempt/entry metadata for
+   * audit only; the authoritative maxScore, entry lookup AND the Exam
+   * authority for the terminal decision live in the command's closure.
    */
   fastify.post(
     "/admin/attempts/:attemptId/grade-question",
@@ -355,14 +356,11 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const maxScore = preEntry?.maxScore ?? 0;
       const previousScore = preEntry?.earnedScore ?? null;
 
-      // Load the exam for the terminal closure: gradeQuestion
-      // now delegates terminal projection to finalizeTerminalGrading, which
-      // needs the full Exam (passingScore, scoreStrategy, retakePolicy, etc.).
-      const gradingQueueRepo = createGradingQueueRepo(fastify.db);
-      const exam = await gradingQueueRepo.findExamById(ctx, preAttempt.examId);
-      if (!exam) {
-        throw new NotFoundError("Attempt grading context not found");
-      }
+      // The Exam authority for the terminal closure is NOT pre-read here:
+      // finalizeTerminalGrading reads it under FOR SHARE inside the
+      // transaction (#1038 R-T3-1/R-ENG-1 — an out-of-transaction read could
+      // decide the Enrollment's irreversible terminal state from a closeAt a
+      // concurrently committed extendExam had already replaced).
 
       // The capability minted inside the transaction carries enrollment
       // identity (proven by the canonical seam), so gradeQuestion +
@@ -370,14 +368,16 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       // never pre-fetches enrollment for the command.
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
-        // Build the engine repo pair once, mint the EA capability via the
+        // Build the engine repo set once, mint the EA capability via the
         // canonical seam, and thread the SAME instances + capability into
         // gradeQuestion → finalizeTerminalGrading so one object pair flows
-        // from mint to consumer (HR-6: exact repo object identity).
+        // from mint to consumer (HR-6: exact repo object identity). The
+        // tx-scoped exam repo is threaded too: the closure takes the Exam
+        // authority under FOR SHARE in THIS transaction (E → A → Exam).
         const txAttemptRepo = createAttemptRepo(tx);
         const txEnrollmentRepo = createEnrollmentRepo(tx);
         const txEntryRepo = createAttemptGradingEntryRepo(tx);
-        const { enrollments, attempts } = createExamEngineRepos(
+        const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
             attemptRepo: txAttemptRepo,
@@ -393,6 +393,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
         const graded = await gradeQuestion(
           attempts,
           enrollments,
+          exams,
           createGradingWorksetRepoAdapter(txEntryRepo, ctx),
           cap,
           questionId,
@@ -400,13 +401,6 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           comment,
           ctx.actorId,
           now,
-          // The DB-layer findExamById returns the raw Drizzle row (status:
-          // string); gradeQuestion's canonical closure expects the domain Exam
-          // type (status: ExamStatus). The row IS a valid Exam at runtime
-          // (Postgres enums map 1:1); the cast narrows the string-literal type
-          // for TypeScript. Mirrors how other engine callers bridge DB rows to
-          // the domain type.
-          exam as unknown as import("@exam/domain").Exam,
         );
         await recordAtomicHttpAudit(tx, request, ctx, {
           action: "grading.score_entered",

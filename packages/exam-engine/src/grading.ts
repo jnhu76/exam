@@ -194,6 +194,11 @@ export function computeGradingResult(
  * atomic against concurrent grading calls. `gradeQuestion` and the auto paths
  * (`submitAndGradeAttempt`, `autoSubmitAndGrade`, admin force-submit,
  * `deadlineReconciliation`) all wrap this in a transaction holding that lock.
+ * The caller must also pass a tx-scoped ExamRepository: the closure reads the
+ * Exam authority itself, under FOR SHARE, at its decision point — callers no
+ * longer supply an Exam snapshot, so no terminalization entrypoint can decide
+ * the Enrollment's irreversible terminal state from a superseded one
+ * (#1038 R-T3-1/R-ENG-1).
  *
  * Idempotency vs. retry vs. historical inconsistency:
  *   - Transaction retry (40001/40P01): re-execution re-reads the attempt; if
@@ -212,9 +217,9 @@ export function computeGradingResult(
 export async function finalizeTerminalGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  examRepo: ExamRepository,
   gradingWorksetRepo: GradingWorksetRepository,
   capability: LockedEnrollmentAttemptIdentity,
-  exam: Exam,
   now: Date,
 ): Promise<boolean> {
   // EA lock-order protocol: the FIRST executable protocol action is the
@@ -248,6 +253,30 @@ export async function finalizeTerminalGrading(
     throw new InvalidStateTransitionError(
       `Cannot grade attempt in ${attempt.status} state`,
     );
+  }
+
+  // Exam authority read under a shared row lock (#1038 R-T3-1/R-ENG-1; lock
+  // mode per #668). The Enrollment terminal decision consumes LIVE exam
+  // facts (closeAt window, retakePolicy — EXSEM-011/013), so it must not
+  // trust a caller-provided snapshot: a legal extendExam committing between
+  // the caller's read and this closure would complete the enrollment off a
+  // superseded closeAt — and `completed` has no outgoing transitions. The
+  // FOR SHARE read is this closure's linearization point against exam-window
+  // writers: under REPEATABLE READ, a closeAt change committed after this
+  // transaction's snapshot raises 40001 here — before any projection write
+  // — and executeInTransaction retries the whole transaction onto the new
+  // authority; a writer committing only after this lock queues behind the
+  // decision (reader-wins linearization, same contract as the
+  // ensureAttemptDeadlineReconciled seam). Reader/reader coexistence keeps
+  // same-exam terminal closures convoy-free.
+  //
+  // Lock order: Enrollment → Attempt → Exam (the canonical order; the EA
+  // capability above proves the first two are already held). INVARIANT
+  // (no upgrade): this is a terminal Exam-lock acquisition — this closure
+  // never writes the Exam row afterwards (#668 no-upgrade invariant).
+  const exam = await examRepo.findByIdForShare(attempt.examId);
+  if (!exam) {
+    throw new ValidationError("Exam not found");
   }
 
   // Canonical terminal aggregation. This is BOTH the score authority AND the
@@ -360,9 +389,9 @@ export async function finalizeTerminalGrading(
 export async function finalizeGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  examRepo: ExamRepository,
   gradingWorksetRepo: GradingWorksetRepository,
   capability: LockedEnrollmentAttemptIdentity,
-  exam: Exam,
   now: Date,
 ): Promise<boolean> {
   const attempt = await attemptRepo.findById(capability.attemptId);
@@ -388,9 +417,9 @@ export async function finalizeGrading(
   return finalizeTerminalGrading(
     enrollmentRepo,
     attemptRepo,
+    examRepo,
     gradingWorksetRepo,
     capability,
-    exam,
     now,
   );
 }
@@ -459,9 +488,9 @@ export async function gradeAttemptIdempotent(
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    examRepo,
     gradingWorksetRepo,
     capability,
-    snapshot.exam,
     now,
   );
 

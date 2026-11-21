@@ -315,7 +315,7 @@ describe("crash/rollback atomicity", () => {
 
       await expect(
         executeInTransaction(ctx.db, async (tx) => {
-          const { attempts, enrollments } = createExamEngineRepos(
+          const { exams, enrollments, attempts } = createExamEngineRepos(
             {
               examRepo: createExamRepo(tx),
               attemptRepo: createAttemptRepo(tx),
@@ -335,6 +335,7 @@ describe("crash/rollback atomicity", () => {
           await gradeQuestion(
             attempts,
             enrollments,
+            exams,
             workset,
             cap,
             qId,
@@ -342,7 +343,6 @@ describe("crash/rollback atomicity", () => {
             "ok",
             ctx.admin.id,
             new Date(),
-            examRow,
           );
           throw new Error("SIMULATED_CRASH_AFTER_MUTATION");
         }),
@@ -364,7 +364,7 @@ describe("crash/rollback atomicity", () => {
       // Retry: terminal closure succeeds (attempt graded + enrollment
       // projection via finalizeTerminalGrading).
       await executeInTransaction(ctx.db, async (tx) => {
-        const { attempts, enrollments } = createExamEngineRepos(
+        const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
             attemptRepo: createAttemptRepo(tx),
@@ -384,6 +384,7 @@ describe("crash/rollback atomicity", () => {
         await gradeQuestion(
           attempts,
           enrollments,
+          exams,
           workset,
           cap,
           qId,
@@ -391,7 +392,6 @@ describe("crash/rollback atomicity", () => {
           "ok",
           ctx.admin.id,
           new Date(),
-          examRow,
         );
       });
       const finalRow = (await attemptRow(seeded.attemptId)) as {

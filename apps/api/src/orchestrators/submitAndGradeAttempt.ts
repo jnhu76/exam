@@ -319,9 +319,9 @@ export async function submitAndGradeAttempt(
         await finalizeGrading(
           enrollments,
           attempts,
+          exams,
           gradingWorksetRepo,
           cap,
-          snapshot.exam,
           now,
         );
         // Entry `submitted` means this transaction recovered a crash-landed
