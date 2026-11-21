@@ -4,14 +4,24 @@ import type { Database } from "./types.js";
 /**
  * Identifies a family of organization-scoped advisory locks.
  *
- * All authority-mutation seams MUST use the SAME kind: the Admin↔Maintainer
- * exclusion post-condition (ADR-017 D14) and the last-effective-Admin
- * post-condition are only race-safe when every authority mutation for an
- * organization serializes on one lock. Adding a second kind for a second
- * invariant would let two concurrent mutations run under different locks and
- * reintroduce write-skew.
+ * INVARIANT: every invariant family owns exactly ONE kind, and every seam
+ * guarding that family MUST acquire that same kind — splitting one family
+ * across kinds lets two concurrent mutations run under different locks and
+ * reintroduces write-skew. The Admin↔Maintainer exclusion post-condition
+ * (ADR-017 D14) and the last-effective-Admin post-condition are only
+ * race-safe because every authority mutation for an organization serializes
+ * on `authority-invariants`.
+ *
+ * `candidate-identity` is a deliberately DISJOINT family, not a split of the
+ * authority family: it serializes candidate identity-field configuration
+ * (at most one unique field; an org with candidates keeps it) against
+ * candidate creation. Candidate creation holds no authority lock, so
+ * folding it into `authority-invariants` would add serialization between
+ * unrelated invariants without guarding any shared one.
  */
-export type OrganizationLockKind = "authority-invariants";
+export type OrganizationLockKind =
+  | "authority-invariants"
+  | "candidate-identity";
 
 /**
  * Acquires a PostgreSQL transaction-scoped advisory lock for the given

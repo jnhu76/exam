@@ -22,7 +22,7 @@ export const errorMessages = {
   USER_ALREADY_EXISTS: "用户名已存在",
   ADMIN_ALREADY_EXISTS: "已存在启用的管理员",
   CANDIDATE_IDENTITY_CONFLICT: "身份信息已存在",
-  CANDIDATE_FIELD_IN_USE: "该身份字段正在使用，无法删除",
+  CANDIDATE_FIELD_IN_USE: "已有考生，无法移除唯一身份字段",
   CANDIDATE_IDENTITY_FIELD_CONFLICT: "只能设置一个唯一身份字段",
   INVALID_STATE_TRANSITION: "当前状态不允许执行此操作",
   ATTEMPT_ALREADY_STARTED: "考试尝试已开始",

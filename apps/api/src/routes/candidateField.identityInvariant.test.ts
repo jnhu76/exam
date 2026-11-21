@@ -13,6 +13,7 @@ import candidateRoutes from "./candidate.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import { schema } from "@exam/db/schema/pg";
 import { cleanupOrganizationTestData } from "@exam/db/testCleanup";
+import { hasPostgresErrorCode } from "@exam/db/types";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -224,7 +225,7 @@ describe("candidate identity field invariants (#1066)", () => {
     // DB-level invariant: even a direct insert bypassing the API precheck
     // must fail against the partial unique index.
     let rejected = false;
-    let pgCode: string | undefined;
+    let violated = false;
     try {
       await ctx.db.insert(schema.candidateFields).values({
         id: crypto.randomUUID(),
@@ -239,44 +240,50 @@ describe("candidate identity field invariants (#1066)", () => {
       });
     } catch (err) {
       rejected = true;
-      pgCode = (err as { code?: string }).code;
+      // Drizzle wraps driver errors — classify via the repository's
+      // cause-chain walk, like the route error mapping does.
+      violated = hasPostgresErrorCode(err, "23505");
     }
     expect(rejected).toBe(true);
-    expect(pgCode).toBe("23505");
+    expect(violated).toBe(true);
 
-    // Concurrent API creates race the check-then-act precheck; the index
-    // must let exactly one win and surface the loser as a 409 conflict.
+    // Concurrent API creates race the check-then-act precheck in a FRESH
+    // org (zero configured fields): the index must let exactly one win and
+    // surface the loser as a 409 conflict.
+    const { token: raceToken } = await makeOrg("dbrace");
     const [r1, r2] = await Promise.all([
-      createField(token, {
+      createField(raceToken, {
         name: `${p}-d-race-a`,
         label: "RaceA",
         fieldType: "text",
         required: false,
         unique: true,
-        sortOrder: 2,
+        sortOrder: 0,
       }),
-      createField(token, {
+      createField(raceToken, {
         name: `${p}-d-race-b`,
         label: "RaceB",
         fieldType: "text",
         required: false,
         unique: true,
-        sortOrder: 3,
+        sortOrder: 1,
       }),
     ]);
     expect([r1.status, r2.status].filter((s) => s === 201)).toHaveLength(1);
     expect([r1.status, r2.status].filter((s) => s === 409)).toHaveLength(1);
     const loser = r1.status === 201 ? r2 : r1;
-    expect(loser.json.code).toBe("CANDIDATE_IDENTITY_FIELD_CONFLICT");
+    expect((loser.json as { error?: { code?: string } }).error?.code).toBe(
+      "CANDIDATE_IDENTITY_FIELD_CONFLICT",
+    );
 
-    const fields = await listFields(token);
+    const fields = await listFields(raceToken);
     const uniqueFields = fields.filter((f) => f.unique === true);
     expect(uniqueFields).toHaveLength(1);
     const winnerName = uniqueFields[0]!.name as string;
 
     // Provisioning stays intact: exactly one identity field means candidate
     // creation works.
-    const cand = await createCandidate(token, {
+    const cand = await createCandidate(raceToken, {
       username: `wp02dbu1${p}`,
       password: "password123",
       name: "Provisioned",

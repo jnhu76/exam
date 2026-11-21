@@ -17,6 +17,7 @@ import { createUserRepo } from "@exam/db/repository/userRepo";
 import { createUserRoleAssignmentRepo } from "@exam/db/repository/userRoleAssignmentRepo";
 import { createCandidateFieldRepo } from "@exam/db/repository/candidateFieldRepo";
 import { createImportJobLogRepo } from "@exam/db/repository/importJobLogRepo";
+import { acquireOrganizationAdvisoryLock } from "@exam/db/lock";
 import { executeInTransaction } from "@exam/db/types";
 import { Permission } from "@exam/authz";
 import {
@@ -298,62 +299,76 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateCandidateRequestSchema.parse(request.body);
-      const candidateRepo = createCandidateRepo(fastify.db);
-      const configuredFields = await createCandidateFieldRepo(fastify.db).list(
-        ctx,
-      );
-      validateCandidateFields(configuredFields, data.fields);
-      if (
-        findByIdentity(
-          await candidateRepo.list(ctx),
-          configuredFields,
-          data.fields,
-        )
-      ) {
-        throw new CandidateIdentityConflictError();
-      }
-
       const passwordHash = await hashPassword(data.password);
       let candidate;
       let createdEmail: string | null;
       try {
-        const created = await executeInTransaction(fastify.db, async (tx) => {
-          const txUserRepo = createUserRepo(tx);
-          const txCandidateRepo = createCandidateRepo(tx);
-          const user = await txUserRepo.createUnique(ctx, {
-            username: data.username,
-            passwordHash,
-            name: data.name,
-            role: "Candidate" as const,
-            isActive: true,
-            // Optional recipient email; contract normalizes + maps
-            // blank to undefined, so we store null when absent.
-            email: data.email ?? null,
-          });
-          // A candidate created here MUST get a primary active
-          // Candidate assignment in the SAME transaction, or the union-of-assignments flip
-          // would leave the new candidate with no authority row (locked out).
-          await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
-            tx,
-            ctx,
-            {
-              userId: user.id,
-              role: "Candidate",
-              isPrimary: true,
+        const created = await executeInTransaction(
+          fastify.db,
+          async (tx) => {
+            // Field-config reads, validation and the identity probe must
+            // observe org state serialized against concurrent candidate-field
+            // mutations (they hold the same candidate-identity lock), so they
+            // run INSIDE the locked transaction.
+            await acquireOrganizationAdvisoryLock(
+              tx,
+              ctx.organizationId,
+              "candidate-identity",
+            );
+            const configuredFields =
+              await createCandidateFieldRepo(tx).list(ctx);
+            validateCandidateFields(configuredFields, data.fields);
+            const txCandidateRepo = createCandidateRepo(tx);
+            if (
+              findByIdentity(
+                await txCandidateRepo.list(ctx),
+                configuredFields,
+                data.fields,
+              )
+            ) {
+              throw new CandidateIdentityConflictError();
+            }
+            const txUserRepo = createUserRepo(tx);
+            const user = await txUserRepo.createUnique(ctx, {
+              username: data.username,
+              passwordHash,
+              name: data.name,
+              role: "Candidate" as const,
               isActive: true,
-            },
-          );
-          const createdProfile = await txCandidateRepo.create(ctx, {
-            userId: user.id,
-            fields: data.fields,
-          });
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: "candidate.create",
-            targetType: "candidate",
-            targetId: createdProfile.id,
-          });
-          return { profile: createdProfile, email: user.email };
-        });
+              // Optional recipient email; contract normalizes + maps
+              // blank to undefined, so we store null when absent.
+              email: data.email ?? null,
+            });
+            // A candidate created here MUST get a primary active
+            // Candidate assignment in the SAME transaction, or the union-of-assignments flip
+            // would leave the new candidate with no authority row (locked out).
+            await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+              tx,
+              ctx,
+              {
+                userId: user.id,
+                role: "Candidate",
+                isPrimary: true,
+                isActive: true,
+              },
+            );
+            const createdProfile = await txCandidateRepo.create(ctx, {
+              userId: user.id,
+              fields: data.fields,
+            });
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "candidate.create",
+              targetType: "candidate",
+              targetId: createdProfile.id,
+            });
+            return { profile: createdProfile, email: user.email };
+          },
+          // "read committed" is load-bearing: the config reads and identity
+          // probe must observe rows committed by the transaction whose lock
+          // we just waited on (the REPEATABLE READ snapshot predates the lock
+          // wait).
+          { isolationLevel: "read committed" },
+        );
         candidate = created.profile;
         createdEmail = created.email;
       } catch (err: unknown) {
@@ -563,12 +578,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const data = parsed.data;
       const userRepo = createUserRepo(fastify.db);
-      const candidateRepo = createCandidateRepo(fastify.db);
-      const configuredFields = await createCandidateFieldRepo(fastify.db).list(
-        ctx,
-      );
-
-      const allCandidates = await candidateRepo.list(ctx);
       const existingUsernames = new Set<string>();
       const userIdMap = new Map<string, string>();
       for (const user of await userRepo.list(ctx)) {
@@ -597,48 +606,48 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             });
             continue;
           }
-          validateCandidateFields(configuredFields, fields);
-          let existing = findByIdentity(
-            allCandidates,
-            configuredFields,
-            fields,
-          );
-          if (!existing && existingUsernames.has(username)) {
-            const userId = userIdMap.get(username)!;
-            existing = await candidateRepo.findByUserId(ctx, userId);
-          }
-          if (existing) {
-            await executeInTransaction(fastify.db, async (tx) => {
-              await createCandidateRepo(tx).update(ctx, existing.id, {
-                fields,
-              });
-              await createUserRepo(tx).update(ctx, existing.userId, { name });
-            });
-            existingUsernames.add(username);
-            userIdMap.set(username, existing.userId);
-            updated++;
-            continue;
-          }
-          if (!password) {
-            errors.push({
-              row: i + 1,
-              code: "MISSING_PASSWORD",
-              // i18n-copy-allow: wire-compat — non-authoritative import-row compatibility message persisted for logs; row code is the contract
-              message: "新增考生需要初始密码",
-            });
-            continue;
-          }
 
-          const passwordHash = await hashPassword(password);
-          // Create user + primary Candidate assignment +
-          // candidate profile in ONE per-row transaction. A failure in any of
-          // the three rolls back all three for THIS row only; other rows are
-          // unaffected. The catch below records the row-level import error.
-          const candidate = await executeInTransaction(
+          // Per-row locked transaction: config reads, validation, identity
+          // resolution and the write all observe org state serialized
+          // against concurrent candidate-field mutations (they hold the
+          // same candidate-identity lock). A failure in any step rolls back
+          // THIS row only; other rows are unaffected. The catch below
+          // records the row-level import error.
+          const outcome = await executeInTransaction(
             fastify.db,
             async (tx) => {
-              const txUserRepo = createUserRepo(tx);
+              await acquireOrganizationAdvisoryLock(
+                tx,
+                ctx.organizationId,
+                "candidate-identity",
+              );
+              const configuredFields =
+                await createCandidateFieldRepo(tx).list(ctx);
+              validateCandidateFields(configuredFields, fields);
               const txCandidateRepo = createCandidateRepo(tx);
+              let existing = findByIdentity(
+                await txCandidateRepo.list(ctx),
+                configuredFields,
+                fields,
+              );
+              if (!existing && existingUsernames.has(username)) {
+                existing = await txCandidateRepo.findByUserId(
+                  ctx,
+                  userIdMap.get(username)!,
+                );
+              }
+              if (existing) {
+                await txCandidateRepo.update(ctx, existing.id, {
+                  fields,
+                });
+                await createUserRepo(tx).update(ctx, existing.userId, { name });
+                return { kind: "updated" as const, userId: existing.userId };
+              }
+              if (!password) {
+                return { kind: "missing-password" as const };
+              }
+              const passwordHash = await hashPassword(password);
+              const txUserRepo = createUserRepo(tx);
               const createdUser = await txUserRepo.createUnique(ctx, {
                 username,
                 passwordHash,
@@ -665,12 +674,31 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
                 targetType: "candidate",
                 targetId: createdCandidate.id,
               });
-              return createdCandidate;
+              return { kind: "created" as const, userId: createdUser.id };
             },
+            // "read committed" is load-bearing: the config reads and identity
+            // resolution must observe rows committed by the transaction
+            // whose lock we just waited on (the REPEATABLE READ snapshot
+            // predates the lock wait).
+            { isolationLevel: "read committed" },
           );
+          if (outcome.kind === "updated") {
+            existingUsernames.add(username);
+            userIdMap.set(username, outcome.userId);
+            updated++;
+            continue;
+          }
+          if (outcome.kind === "missing-password") {
+            errors.push({
+              row: i + 1,
+              code: "MISSING_PASSWORD",
+              // i18n-copy-allow: wire-compat — non-authoritative import-row compatibility message persisted for logs; row code is the contract
+              message: "新增考生需要初始密码",
+            });
+            continue;
+          }
           existingUsernames.add(username);
-          userIdMap.set(username, candidate.userId);
-          allCandidates.push(candidate);
+          userIdMap.set(username, outcome.userId);
           created++;
         } catch (err) {
           // INVARIANT (message contract D0.5, C6 F-12): only the explicitly
