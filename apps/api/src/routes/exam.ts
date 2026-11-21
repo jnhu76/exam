@@ -1023,8 +1023,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             }
             // #291: clearing closeAt is legal only for untimed exams
             // (published untimed already carry null). A close-bound published
-            // exam (timed_window/deadline) must never lose its cutoff — the
-            // draft-only canonical validation does not re-check here.
+            // exam (timed_window/deadline) must never lose its cutoff. This
+            // route-level early rejection runs BEFORE the same-value no-op
+            // and the canonical merged-policy validation below, preserving
+            // the legacy response shape for this clear: 400 VALIDATION_ERROR
+            // without details.fields (the canonical timing-mode conflict
+            // would carry details.fields with EXAM_TIMING_MODE_INVALID).
             if (data.closeAt === null && existing.timingMode !== "untimed") {
               throw new ValidationError("Only untimed exams may clear closeAt");
             }
@@ -1269,12 +1273,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           // Canonical cross-field policy validation on draft update
-          // (design §21). Published updates are schedule-only (guarded above)
-          // and excluded. For draft, validate the FULL merged policy that will
-          // result from this patch, so an invalid combination is rejected at
-          // authoring time, not only at publish. This is the ONE semantic
-          // owner for passingScore<=totalScore / openAt<closeAt / interruption
-          // caps / max_attempts on the update path (no separate inline guard).
+          // (design §21). Published schedule edits are validated above by the
+          // SAME canonical owner (merged onto the frozen policy); this block
+          // is the draft leg. For draft, validate the FULL merged policy that
+          // will result from this patch, so an invalid combination is
+          // rejected at authoring time, not only at publish. This function is
+          // the ONE semantic owner for passingScore<=totalScore /
+          // openAt<closeAt / interruption caps / max_attempts on the update
+          // path (no separate inline guard).
           if (exam.status === "draft") {
             assertExamPolicyInputValid({
               timingMode:
