@@ -1023,8 +1023,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             }
             // #291: clearing closeAt is legal only for untimed exams
             // (published untimed already carry null). A close-bound published
-            // exam (timed_window/deadline) must never lose its cutoff — the
-            // draft-only canonical validation does not re-check here.
+            // exam (timed_window/deadline) must never lose its cutoff. This
+            // route-level early rejection runs BEFORE the same-value no-op
+            // and the canonical merged-policy validation below, preserving
+            // the legacy response shape for this clear: 400 VALIDATION_ERROR
+            // without details.fields (the canonical timing-mode conflict
+            // would carry details.fields with EXAM_TIMING_MODE_INVALID).
             if (data.closeAt === null && existing.timingMode !== "untimed") {
               throw new ValidationError("Only untimed exams may clear closeAt");
             }
@@ -1038,6 +1042,43 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             if (sameOpenAt && sameCloseAt) {
               return { exam: existing, draftObservation: false };
             }
+            // R-T2-4 (#1053): the schedule edit above is the only published
+            // mutation, so re-run the SAME canonical policy validator on the
+            // merged window (ADR-005 §3.7: published requires
+            // closeAt > openAt). Without it an admin edit could persist an
+            // inverted/equal window that reconciles straight to closed at
+            // openAt — an exam candidates can never enter. The
+            // ValidationError (400) aborts the transaction before
+            // repo.update, so neither the row nor the
+            // exam.published_schedule_updated audit is written.
+            assertExamPolicyInputValid({
+              timingMode: exam.timingMode,
+              durationMinutes: exam.durationMinutes,
+              openAt:
+                data.openAt !== undefined ? new Date(data.openAt) : exam.openAt,
+              closeAt:
+                data.closeAt !== undefined
+                  ? data.closeAt === null
+                    ? null
+                    : new Date(data.closeAt)
+                  : exam.closeAt,
+              latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+              minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
+              questionSelectionMode: exam.questionSelectionMode,
+              questionIds: exam.questionIds,
+              retakePolicy: exam.retakePolicy,
+              maxAttempts: exam.maxAttempts,
+              scoreStrategy: exam.scoreStrategy,
+              passingScore: exam.passingScore,
+              totalScore: exam.totalScore,
+              resultPublicationMode: exam.resultPublicationMode,
+              interruptionTimePolicy: exam.interruptionTimePolicy ?? "strict",
+              interruptionGracePerIncidentSeconds:
+                exam.interruptionGracePerIncidentSeconds ?? null,
+              interruptionGracePerAttemptSeconds:
+                exam.interruptionGracePerAttemptSeconds ?? null,
+              controlFlags: exam.controlFlags,
+            });
           }
           // #1040 PATCH presence semantics: resolve the two policy fields
           // the repo persists as whole columns BEFORE the same-value guard,
@@ -1232,12 +1273,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           // Canonical cross-field policy validation on draft update
-          // (design §21). Published updates are schedule-only (guarded above)
-          // and excluded. For draft, validate the FULL merged policy that will
-          // result from this patch, so an invalid combination is rejected at
-          // authoring time, not only at publish. This is the ONE semantic
-          // owner for passingScore<=totalScore / openAt<closeAt / interruption
-          // caps / max_attempts on the update path (no separate inline guard).
+          // (design §21). Published schedule edits are validated above by the
+          // SAME canonical owner (merged onto the frozen policy); this block
+          // is the draft leg. For draft, validate the FULL merged policy that
+          // will result from this patch, so an invalid combination is
+          // rejected at authoring time, not only at publish. This function is
+          // the ONE semantic owner for passingScore<=totalScore /
+          // openAt<closeAt / interruption caps / max_attempts on the update
+          // path (no separate inline guard).
           if (exam.status === "draft") {
             assertExamPolicyInputValid({
               timingMode:

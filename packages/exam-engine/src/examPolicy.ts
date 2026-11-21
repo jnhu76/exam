@@ -10,8 +10,9 @@
 // presence, totalScore==sum) stay in `publishExam` orchestration — they need
 // DB facts and are NOT policy semantics.
 //
-// The validator is called from create, update (draft), and publish (revalidate
-// whole policy). Runtime (attempt/grading) does NOT re-run it — publish is the
+// The validator is called from create, update (draft), published schedule
+// update (merged onto the frozen policy), and publish (revalidate whole
+// policy). Runtime (attempt/grading) does NOT re-run it — publish is the
 // acceptance gate (design §34).
 
 import type {
@@ -103,7 +104,7 @@ export function resolveExamPolicy(exam: Exam): ResolvedExamPolicy {
  * durationMinutes, closeAt, interruptionTimePolicy) combinations may be
  * persisted/published. This is the FINAL acceptance authority — Zod may
  * reject shapes early at the API boundary, but every create / draft-update /
- * publish path funnels through here.
+ * published-schedule-update / publish path funnels through here.
  */
 export function validateExamPolicy(
   policy: ResolvedExamPolicy,
