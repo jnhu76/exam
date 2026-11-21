@@ -42,9 +42,10 @@ import {
  *      edit), not the server draft opt-a;
  *   4. window "online" fires → retryFailedSaves re-POSTs q1;
  *      WITNESS 2 — the retry POST body must carry opt-b (the candidate's
- *      last input) on the same versioned sequence (baseVersion 1,
- *      clientSeq 2), not the replaced draft opt-a. A retried opt-a that
- *      succeeds would permanently persist the rollback.
+ *      last input) on the same versioned sequence (baseVersion 1, clientSeq
+ *      3 = the failed save's clientSeq 2 + 1), not the replaced draft
+ *      opt-a. A retried opt-a that succeeds would permanently persist the
+ *      rollback.
  *
  * The two counterfactual tests pin the boundary of the preservation rule
  * through the SAME convergence seam:
