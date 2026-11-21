@@ -1038,6 +1038,43 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             if (sameOpenAt && sameCloseAt) {
               return { exam: existing, draftObservation: false };
             }
+            // R-T2-4 (#1053): the schedule edit above is the only published
+            // mutation, so re-run the SAME canonical policy validator on the
+            // merged window (ADR-005 §3.7: published requires
+            // closeAt > openAt). Without it an admin edit could persist an
+            // inverted/equal window that reconciles straight to closed at
+            // openAt — an exam candidates can never enter. The
+            // ValidationError (400) aborts the transaction before
+            // repo.update, so neither the row nor the
+            // exam.published_schedule_updated audit is written.
+            assertExamPolicyInputValid({
+              timingMode: exam.timingMode,
+              durationMinutes: exam.durationMinutes,
+              openAt:
+                data.openAt !== undefined ? new Date(data.openAt) : exam.openAt,
+              closeAt:
+                data.closeAt !== undefined
+                  ? data.closeAt === null
+                    ? null
+                    : new Date(data.closeAt)
+                  : exam.closeAt,
+              latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+              minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
+              questionSelectionMode: exam.questionSelectionMode,
+              questionIds: exam.questionIds,
+              retakePolicy: exam.retakePolicy,
+              maxAttempts: exam.maxAttempts,
+              scoreStrategy: exam.scoreStrategy,
+              passingScore: exam.passingScore,
+              totalScore: exam.totalScore,
+              resultPublicationMode: exam.resultPublicationMode,
+              interruptionTimePolicy: exam.interruptionTimePolicy ?? "strict",
+              interruptionGracePerIncidentSeconds:
+                exam.interruptionGracePerIncidentSeconds ?? null,
+              interruptionGracePerAttemptSeconds:
+                exam.interruptionGracePerAttemptSeconds ?? null,
+              controlFlags: exam.controlFlags,
+            });
           }
           // #1040 PATCH presence semantics: resolve the two policy fields
           // the repo persists as whole columns BEFORE the same-value guard,
