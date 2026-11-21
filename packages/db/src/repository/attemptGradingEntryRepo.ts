@@ -256,6 +256,13 @@ export function createAttemptGradingEntryRepo(db: Database) {
           attemptGradingEntries.status,
           "pending_manual" as GradingEntryStatus,
         ),
+        // Same-org predicates on the identity joins: the attempt→exam,
+        // attempt→profile, and profile→user links are global FKs, so an
+        // org-scoped entry could otherwise project a foreign-org exam title,
+        // profile fields, or user name into the queue row.
+        eq(exams.organizationId, orgId),
+        eq(candidateProfiles.organizationId, orgId),
+        eq(users.organizationId, orgId),
       ];
       if (options.examId) {
         conditions.push(eq(examAttempts.examId, options.examId));

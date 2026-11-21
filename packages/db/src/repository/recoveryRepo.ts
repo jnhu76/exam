@@ -2436,7 +2436,17 @@ async function enrichPage(
             displayName: users.name,
           })
           .from(candidateProfiles)
-          .leftJoin(users, eq(candidateProfiles.userId, users.id))
+          .leftJoin(
+            users,
+            and(
+              eq(candidateProfiles.userId, users.id),
+              // Same-org predicate on the User join: a historical or
+              // directly-written CandidateProfile may point at a User of
+              // ANOTHER org; without it the queue would project a foreign-org
+              // display name (same shape as the incident aggregate).
+              eq(users.organizationId, orgId),
+            ),
+          )
           .where(
             and(
               eq(candidateProfiles.organizationId, orgId),
@@ -2445,9 +2455,10 @@ async function enrichPage(
           )
       : [];
   // INVARIANT: users.name is NOT NULL and candidate_profiles.user_id is a FK,
-  // so a null displayName here means the user row is gone — tenant-graph
-  // corruption. Fail closed (same contract as the anchor checks below), never
-  // an empty-name stub.
+  // so a null displayName here means the profile's same-org User is
+  // unresolvable — the user row is gone or belongs to another org, i.e.
+  // tenant-graph corruption. Fail closed (same contract as the anchor checks
+  // below), never an empty-name stub.
   const candidateById = new Map(
     candRows.map((c) => {
       if (c.displayName === null) {
@@ -2509,7 +2520,16 @@ async function enrichPage(
       displayName: users.name,
     })
     .from(examProctorAssignments)
-    .leftJoin(users, eq(examProctorAssignments.proctorUserId, users.id))
+    .leftJoin(
+      users,
+      and(
+        eq(examProctorAssignments.proctorUserId, users.id),
+        // Same-org predicate on the User join: the assignment row is
+        // org-scoped but its user link is a global FK, so an active
+        // assignment could otherwise project a foreign-org display name.
+        eq(users.organizationId, orgId),
+      ),
+    )
     .where(
       and(
         eq(examProctorAssignments.organizationId, orgId),
@@ -2521,8 +2541,8 @@ async function enrichPage(
   const proctorsByExam = new Map<string, IncidentQueueProctorSummary[]>();
   for (const p of proctorRows) {
     // Same fail-closed contract as candidateById: a null proctor name means
-    // the FK-protected user row is gone — corruption, never an empty-name
-    // stub.
+    // the assignment's same-org User is unresolvable — the user row is gone
+    // or belongs to another org. Corruption, never an empty-name stub.
     if (p.displayName === null) {
       throw new AuthzUnavailableError(
         `RECOVERY_QUEUE_PROCTOR_BROKEN: exam ${p.examId} proctor ${p.userId}`,
