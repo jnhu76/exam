@@ -42,8 +42,8 @@ import { TakeExamPage } from "@/pages/exam/TakeExamPage";
 import { ResultPage } from "@/pages/exam/ResultPage";
 import { ScoreListPage } from "@/pages/admin/ScoreListPage";
 import { ResultsOverviewPage } from "@/pages/admin/ResultsOverviewPage";
-import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
-import { ProctorDashboardPage } from "@/pages/admin/ProctorDashboardPage";
+import { AttemptDetailPageRoute } from "@/pages/admin/AttemptDetailPage";
+import { ProctorDashboardPageRoute } from "@/pages/admin/ProctorDashboardPage";
 import { ExamMonitoringPage } from "@/pages/admin/ExamMonitoringPage";
 import { ProctorWorkspacePage } from "@/pages/admin/ProctorWorkspacePage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
@@ -111,7 +111,10 @@ export function AppRoutes() {
           path="exam-profiles/:id/edit"
           element={<ExamProfileEditPage />}
         />
-        <Route path="exams/:id/proctor" element={<ProctorDashboardPage />} />
+        <Route
+          path="exams/:id/proctor"
+          element={<ProctorDashboardPageRoute />}
+        />
         <Route path="proctor" element={<ProctorWorkspacePage />} />
         <Route
           path="exams/:id/proctor/monitor"
@@ -123,7 +126,7 @@ export function AppRoutes() {
         <Route path="audit-logs" element={<AuditLogPage />} />
         <Route path="permissions" element={<PermissionRegistryPage />} />
         <Route path="import-logs" element={<ImportLogsPage />} />
-        <Route path="attempts/:id" element={<AttemptDetailPage />} />
+        <Route path="attempts/:id" element={<AttemptDetailPageRoute />} />
         <Route path="recovery" element={<RecoveryQueuePage />} />
         <Route
           path="recovery/incidents/:incidentId"
