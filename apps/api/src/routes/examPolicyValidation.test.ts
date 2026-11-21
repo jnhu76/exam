@@ -1,9 +1,12 @@
-// Canonical exam-policy validation is enforced across
-// create, draft-update, and publish (the freeze/acceptance gate).
+// Canonical exam-policy validation is enforced across create, draft-update,
+// published schedule update (merged onto the frozen policy), and publish
+// (the freeze/acceptance gate).
 // Authority: docs/contracts/exam-policy-authority.md §11, §21.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { and, eq } from "drizzle-orm";
 import { createExamRepo } from "@exam/db/repository/examRepo";
+import { schema } from "@exam/db/schema/pg";
 import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
@@ -585,5 +588,286 @@ describe("unsupported control flags — activation gate (#516)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(reread.json().controlFlags).toEqual(historicalFlags);
+  });
+});
+
+// ── R-T2-4 (#1053): published schedule edits re-run the canonical window ──
+// rule on the MERGED policy (ADR-005 §3.7: published PATCH requires
+// closeAt > openAt). Create / draft-update / publish already funnel through
+// the canonical validator (blocks above); this block pins the fourth leg —
+// the schedule-only published PATCH — to the same authority: an inverted or
+// equal merged window is rejected with no row mutation and no
+// exam.published_schedule_updated audit, while valid merges, untimed
+// null-closeAt legality, and the same-value no-op are preserved.
+
+describe("published schedule window — merged canonical validation (R-T2-4 / #1053)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let questionId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(examRoutes);
+    });
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Published Schedule Course",
+        code: `PS-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Published schedule question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    questionId = qRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  function fieldCodes(body: {
+    error?: { details?: { fields?: Array<{ code: string }> } };
+  }) {
+    return (body.error?.details?.fields ?? []).map((f) => f.code);
+  }
+
+  /** Creates + publishes a timed_window exam with a FUTURE openAt (stays `published`). */
+  async function createPublishedTimedWindowExam(title: string) {
+    const openAt = new Date(Date.now() + 3600_000);
+    const closeAt = new Date(Date.now() + 86_400_000 + 3600_000);
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title,
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: openAt.toISOString(),
+        closeAt: closeAt.toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const id = createRes.json().id as string;
+    const pubRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${id}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(pubRes.statusCode).toBe(200);
+    expect(pubRes.json().status).toBe("published");
+    return {
+      id,
+      openAt: openAt.toISOString(),
+      closeAt: closeAt.toISOString(),
+    };
+  }
+
+  /** Creates + publishes an untimed exam (closeAt null) with a FUTURE openAt. */
+  async function createPublishedUntimedExam(title: string) {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title,
+        courseId,
+        timingMode: "untimed",
+        durationMinutes: null,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: null,
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const id = createRes.json().id as string;
+    const pubRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${id}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(pubRes.statusCode).toBe(200);
+    expect(pubRes.json().status).toBe("published");
+    return id;
+  }
+
+  async function examScheduleRow(id: string) {
+    const rows = await ctx.db
+      .select({
+        status: schema.exams.status,
+        openAt: schema.exams.openAt,
+        closeAt: schema.exams.closeAt,
+        updatedAt: schema.exams.updatedAt,
+      })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, id));
+    return rows[0];
+  }
+
+  async function scheduleAuditCount(id: string) {
+    const rows = await ctx.db
+      .select({ id: schema.auditLogs.id })
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.action, "exam.published_schedule_updated"),
+          eq(schema.auditLogs.targetId, id),
+        ),
+      );
+    return rows.length;
+  }
+
+  it("rejects an inverted merged window (closeAt before openAt) with no row mutation and no schedule audit", async () => {
+    const published = await createPublishedTimedWindowExam(
+      "R-T2-4 Inverted Window",
+    );
+    const rowBefore = await examScheduleRow(published.id);
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${published.id}`,
+      // +30min from now sits BEFORE the persisted openAt (+1h): the merged
+      // window is inverted even though the patch field itself is well-formed.
+      payload: { closeAt: new Date(Date.now() + 1800_000).toISOString() },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(fieldCodes(body)).toContain("EXAM_WINDOW_INVALID");
+
+    // Rejection is atomic: the persisted schedule and the atomic audit
+    // stay untouched.
+    const rowAfter = await examScheduleRow(published.id);
+    expect(rowAfter?.status).toBe("published");
+    expect(rowAfter?.openAt).toEqual(rowBefore?.openAt);
+    expect(rowAfter?.closeAt).toEqual(rowBefore?.closeAt);
+    expect(rowAfter?.updatedAt).toEqual(rowBefore?.updatedAt);
+    expect(await scheduleAuditCount(published.id)).toBe(0);
+  });
+
+  it("rejects an equal merged window (closeAt == openAt)", async () => {
+    const published = await createPublishedTimedWindowExam(
+      "R-T2-4 Equal Window",
+    );
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${published.id}`,
+      payload: { closeAt: published.openAt },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(fieldCodes(body)).toContain("EXAM_WINDOW_INVALID");
+  });
+
+  it("rejects moving openAt past the persisted closeAt (merged inversion without closeAt in the payload)", async () => {
+    const published = await createPublishedTimedWindowExam(
+      "R-T2-4 OpenAt Past CloseAt",
+    );
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${published.id}`,
+      payload: {
+        openAt: new Date(
+          new Date(published.closeAt).getTime() + 3600_000,
+        ).toISOString(),
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(fieldCodes(body)).toContain("EXAM_WINDOW_INVALID");
+  });
+
+  it("accepts a valid merged schedule extension and audits it", async () => {
+    const published = await createPublishedTimedWindowExam(
+      "R-T2-4 Valid Extension",
+    );
+    const newCloseAt = new Date(Date.now() + 172_800_000 + 3600_000);
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${published.id}`,
+      payload: { closeAt: newCloseAt.toISOString() },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await examScheduleRow(published.id);
+    expect(row?.closeAt?.toISOString()).toBe(newCloseAt.toISOString());
+    expect(await scheduleAuditCount(published.id)).toBe(1);
+  });
+
+  it("untimed published exam keeps null closeAt legal (no-op, no audit)", async () => {
+    const examId = await createPublishedUntimedExam("R-T2-4 Untimed Null");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { closeAt: null },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await examScheduleRow(examId);
+    expect(row?.closeAt).toBeNull();
+    expect(await scheduleAuditCount(examId)).toBe(0);
+  });
+
+  it("rejects setting closeAt on an untimed published exam (canonical mode matrix)", async () => {
+    const examId = await createPublishedUntimedExam("R-T2-4 Untimed CloseAt");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { closeAt: new Date(Date.now() + 7200_000).toISOString() },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    // The same merged canonical call that owns openAt<closeAt also owns the
+    // timing-mode matrix: untimed exams must not carry closeAt.
+    expect(fieldCodes(body)).toContain("EXAM_TIMING_MODE_INVALID");
+    const row = await examScheduleRow(examId);
+    expect(row?.closeAt).toBeNull();
+    expect(await scheduleAuditCount(examId)).toBe(0);
+  });
+
+  it("same-value schedule patch stays a no-op (no mutation, no audit)", async () => {
+    const published = await createPublishedTimedWindowExam(
+      "R-T2-4 Same Value No-op",
+    );
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${published.id}`,
+      payload: { closeAt: published.closeAt },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await examScheduleRow(published.id);
+    expect(row?.closeAt?.toISOString()).toBe(published.closeAt);
+    expect(await scheduleAuditCount(published.id)).toBe(0);
   });
 });
