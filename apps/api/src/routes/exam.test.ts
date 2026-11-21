@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
@@ -1930,10 +1931,47 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
       url: `/api/admin/audit-logs?action=exam.cancel`,
       cookies: { "auth-token": ctx.adminToken },
     });
-    const allRows =
-      auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
-    const rows = allRows.filter((r: any) => r.targetId === examId);
+    expect(auditRes.statusCode).toBe(200);
+    const rows = (auditRes.json().items ?? []).filter(
+      (r: any) => r.targetId === examId,
+    );
     expect(rows.length).toBe(0);
+  });
+
+  // R-TST-7 (#1056): the zero-event assertion above must be predicated on a
+  // successful audit read — a non-200 read folded to [] by a ternary fallback
+  // would satisfy it vacuously. This is a static self-check because the defect
+  // lives in this file's own test code: no production behavior distinguishes
+  // the guarded from the unguarded assertion, so the behavioral counterpart is
+  // the counterfactual control (break the audit read → this case must go red
+  // alongside the positive control; normal read → both green).
+  it("rejected-cancel zero-event assertion must not fold a failed audit read to empty (R-TST-7)", async () => {
+    const source = await readFile(
+      new URL("./exam.test.ts", import.meta.url),
+      "utf8",
+    );
+    // Anchor on the `it(` declaration: the bare title literal also occurs in
+    // this self-check's own source, so searching for it would match here when
+    // the target case is renamed or deleted.
+    const caseStart = source.search(
+      /^[ \t]*it\("rejected cancel \(active attempts\) writes NO audit event"/m,
+    );
+    expect(
+      caseStart,
+      "target test case declaration present in this file",
+    ).toBeGreaterThan(-1);
+    const caseBody = source.slice(
+      caseStart,
+      source.indexOf("\n  });", caseStart),
+    );
+    // Line-anchored executable form: a commented-out guard must not count.
+    expect(caseBody).toMatch(
+      /^[ \t]*expect\(auditRes\.statusCode\)\.toBe\(200\);[ \t]*$/m,
+    );
+    expect(
+      caseBody,
+      "read failure must not be folded to an empty list",
+    ).not.toContain("auditRes.statusCode === 200 ?");
   });
 });
 
