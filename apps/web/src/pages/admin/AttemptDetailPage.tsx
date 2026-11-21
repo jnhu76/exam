@@ -694,9 +694,8 @@ export function AttemptDetailPage() {
   // attempt id the in-flight request belongs to; a late response whose scope
   // no longer matches is dropped. The route remounts per :id
   // (AttemptDetailPageRoute), which isolates the single-shot result/timeline
-  // loads by construction; this guard additionally orders the append path
-  // WITHIN one instance (Load-More vs a refetch of the same attempt) and
-  // protects instances mounted outside the keyed route.
+  // loads by construction; this guard covers route-scope changes for the
+  // telemetry reads and protects instances mounted outside the keyed route.
   const telemetryScopeRef = useRef<string | null>(null);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
