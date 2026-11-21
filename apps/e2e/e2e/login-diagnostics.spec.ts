@@ -219,8 +219,21 @@ for (const testCase of [
     contentType: "application/json",
     placeholder: "[non-object body omitted]",
   },
+  {
+    name: "credential-key",
+    body: JSON.stringify({
+      username: "body-probe",
+      password: CANARY_PASSWORD,
+      cookie: CANARY_PASSWORD,
+      AccessToken: CANARY_PASSWORD,
+      nested: { authorization: CANARY_PASSWORD, secret: CANARY_PASSWORD },
+      values: [{ password: CANARY_PASSWORD }],
+    }),
+    contentType: "application/json",
+    placeholder: "[redacted]",
+  },
 ]) {
-  test(`omits ${testCase.name} request bodies from diagnostics`, async ({
+  test(`handles ${testCase.name} request bodies in diagnostics`, async ({
     page,
   }) => {
     await installLoginPage(page, {

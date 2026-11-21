@@ -4,22 +4,45 @@ import {
   type Request,
   type Response,
 } from "@playwright/test";
-import { sanitizeClientEvent } from "@exam/contracts";
 
 const LOGIN_TIMEOUT_MS = 15_000;
 const DIAGNOSTIC_READ_TIMEOUT_MS = 1_000;
+const REDACTED = "[redacted]";
+const SENSITIVE_AUTH_BODY_KEY =
+  /password|token|cookie|authorization|auth|secret/i;
 
 function isObservedAuthUrl(url: string): boolean {
   return url.includes("auth") || url.includes("login");
 }
 
+/** Recursively redacts credential-named fields in a parsed request body. */
+function redactAuthBodyValue(value: unknown, depth = 0): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (depth >= 5) return REDACTED;
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAuthBodyValue(item, depth + 1));
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    result[key] = SENSITIVE_AUTH_BODY_KEY.test(key)
+      ? REDACTED
+      : redactAuthBodyValue(item, depth + 1);
+  }
+  return result;
+}
+
 /**
  * Returns a diagnostic-safe rendering of an observed auth request body.
  *
- * INVARIANT: the raw bytes never reach the error message. JSON object bodies
- * go through the canonical client-event sanitizer, which redacts credential
- * keys and credential-shaped values; bodies whose shape is unknown are
- * omitted instead of risking a credential under an unrecognized key.
+ * INVARIANT: the raw bytes never reach the error message. Credential-named
+ * fields are redacted recursively; bodies whose shape is unknown are omitted
+ * instead of risking a credential under an unrecognized key.
+ *
+ * This does not import the canonical client-event sanitizer: the production
+ * transport rehearsal runs Playwright from the source checkout without
+ * building workspace package dists, so a runtime `@exam/contracts` import
+ * fails there. The denylist mirrors that sanitizer's credential-key subset;
+ * keep the two aligned.
  */
 function redactAuthRequestBody(postData: string | null): string {
   if (!postData) return "";
@@ -32,7 +55,7 @@ function redactAuthRequestBody(postData: string | null): string {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return "[non-object body omitted]";
   }
-  return JSON.stringify(sanitizeClientEvent(parsed as Record<string, unknown>));
+  return JSON.stringify(redactAuthBodyValue(parsed));
 }
 
 /**
