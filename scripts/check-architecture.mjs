@@ -116,9 +116,9 @@ await forbid("packages/db/src", [
     // The subpath alternation closes the F-06-shaped admission hole (#1074):
     // "dotenv/config" and any other dotenv subpath entry admit the developer
     // .env exactly like the bare package, so every specifier form
-    // (side-effect import, from-import, require) is anchored to import
-    // positions — not occurrence-shaped.
-    /from ["']dotenv(?:\/[^"']*)?["']|require\(["']dotenv(?:\/[^"']*)?["']\)|import\s+["']dotenv(?:\/[^"']*)?["']|dotenv\s*\.\s*config/,
+    // (side-effect import, from-import, require, dynamic import()) is
+    // anchored to import positions — not occurrence-shaped.
+    /from ["']dotenv(?:\/[^"']*)?["']|require\(["']dotenv(?:\/[^"']*)?["']\)|import\s+["']dotenv(?:\/[^"']*)?["']|import\s*\(\s*["']dotenv(?:\/[^"']*)?["']|dotenv\s*\.\s*config/,
     "shared db mechanism must not admit dotenv sources — entrypoints own source admission",
   ],
 ]);

@@ -160,9 +160,10 @@ console.log("G3. Checking env reader allowlist…");
 
   // The subpath alternation closes the F-06-shaped hole (#1074): importing
   // "dotenv/config" outside the allowlist is admission just like the bare
-  // package. Import-position anchored — prose mentions stay clean.
+  // package — static and dynamic import() forms alike. Import-position
+  // anchored — prose mentions stay clean.
   const dotenvImport =
-    /from ["']dotenv(?:\/[^"']*)?["']|require\(["']dotenv(?:\/[^"']*)?["']\)|import\s+["']dotenv(?:\/[^"']*)?["']/;
+    /from ["']dotenv(?:\/[^"']*)?["']|require\(["']dotenv(?:\/[^"']*)?["']\)|import\s+["']dotenv(?:\/[^"']*)?["']|import\s*\(\s*["']dotenv(?:\/[^"']*)?["']/;
   const viteLoadEnvImport =
     /import\s*\{[^}]*\bloadEnv\b[^}]*\}\s*from\s*["']vite["']/;
 
