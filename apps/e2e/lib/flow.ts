@@ -203,6 +203,24 @@ export async function adminGet(
 }
 
 /**
+ * Reads the candidate-visible persisted answer of the attempt's first
+ * question (GET /api/attempts/:attemptId). Specs use it to assert the
+ * server-side answer after UI saves without re-implementing the request.
+ */
+export async function getAnswer(
+  request: APIRequestContext,
+  token: string,
+  attemptId: string,
+): Promise<unknown> {
+  const r = await request.get(`${BASE_URL}/api/attempts/${attemptId}`, {
+    headers: { Cookie: `auth-token=${token}` },
+  });
+  if (!r.ok()) throw new Error(`GET attempt failed: ${await r.text()}`);
+  const b = (await r.json()) as { answers: Array<{ answer: unknown }> };
+  return b.answers[0]?.answer;
+}
+
+/**
  * Start a new attempt for `examId` as a candidate. Returns the attempt id.
  * Throws on non-2xx (unlike adminPost/adminGet which return raw response).
  */

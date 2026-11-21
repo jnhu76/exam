@@ -1,7 +1,9 @@
 import { test, expect, type Request, type Response } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import {
+  candidateApiToken,
   candidateLogin,
+  getAnswer,
   startExamFromList,
   answerTrueFalse,
   waitForSaveSaved,
@@ -27,17 +29,17 @@ import {
  * (TakeExamPage.deadlineDeferredRetention.test.tsx) owns the branch logic;
  * this spec owns the composed browser behavior.
  *
- * The heartbeat is faulted with a transport abort for the duration of the
- * scenario — the same network dropout that fails the answer save. That keeps
- * the retry authority with the window-`online` trigger: a SUCCESSFUL
- * heartbeat also re-drives the failed saves from the local drafts, which
- * would race the verification re-read and could mask (or manufacture) the
- * very rollback this spec must observe. A transport fault is the honest,
- * deterministic way to isolate the online-retry path.
+ * The answer save is faulted with a route-injected HTTP 500. The heartbeat
+ * is separately faulted with a transport abort for the duration of the
+ * scenario: a SUCCESSFUL heartbeat also re-drives the failed saves from the
+ * local drafts, which would race the verification re-read and could mask (or
+ * manufacture) the very rollback this spec must observe. Aborting the
+ * heartbeat keeps the retry authority with the window-`online` trigger, so
+ * the observable outcome is deterministic.
  *
  * Interleaving:
  *   1. answer TRUE → save ACKed (server draft = true, serverVersion 1);
- *   2. answer FALSE → save POST faulted with 500 → q1 unacknowledged;
+ *   2. answer FALSE → save POST answered with 500 → q1 unacknowledged;
  *   3. fast-forward the client clock past the attempt deadline → the
  *      episode verifies; the live server clock is still before the deadline
  *      → editable defer (no submit);
@@ -48,33 +50,6 @@ import {
  */
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-
-async function apiToken(
-  request: import("@playwright/test").APIRequestContext,
-  username: string,
-  password: string,
-): Promise<string> {
-  const r = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: { username, password },
-  });
-  if (!r.ok()) throw new Error(`login failed: ${r.status()}`);
-  const t = r.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-  if (!t) throw new Error("no auth-token cookie");
-  return t;
-}
-
-async function getAnswer(
-  request: import("@playwright/test").APIRequestContext,
-  token: string,
-  attemptId: string,
-): Promise<unknown> {
-  const r = await request.get(`${BASE_URL}/api/attempts/${attemptId}`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
-  if (!r.ok()) throw new Error(`GET attempt failed: ${await r.text()}`);
-  const b = (await r.json()) as { answers: Array<{ answer: unknown }> };
-  return b.answers[0]?.answer;
-}
 
 test.describe("deadline editable-defer keeps unacknowledged edits (R-T4-2)", () => {
   test("client clock ahead of the server: editable defer keeps the editor and the online retry carries the candidate's input", async ({
@@ -103,11 +78,7 @@ test.describe("deadline editable-defer keeps unacknowledged edits (R-T4-2)", () 
       route.abort("failed"),
     );
 
-    const token = await apiToken(
-      request,
-      seeded.candidate.username,
-      seeded.candidate.password,
-    );
+    const token = await candidateApiToken(request, seeded.candidate);
     const detailRes = await request.get(
       `${BASE_URL}/api/candidate/exams/${seeded.examId}`,
       { headers: { Cookie: `auth-token=${token}` } },
