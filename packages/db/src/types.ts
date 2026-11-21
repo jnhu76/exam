@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type {
   AttemptTimingPolicySnapshot,
@@ -149,6 +150,26 @@ export interface TransactionCorrelation {
 export interface ExecuteInTransactionOptions {
   isolationLevel?: "read committed" | "repeatable read";
   /**
+   * Bounded wait (milliseconds) for lock acquisitions inside this one
+   * transaction, applied as a transaction-scoped `SET LOCAL lock_timeout`
+   * before the callback's first statement. `undefined` (the default) keeps
+   * PostgreSQL's unbounded lock wait — the semantics every existing caller
+   * (e.g. the candidate submit/save paths) keeps by construction, because
+   * the option is OPT-IN per call.
+   *
+   * PROTOCOL (#1071): on expiry PostgreSQL raises 55P03 (lock_not_available)
+   * and the whole transaction aborts — 55P03 is deliberately NOT in
+   * RETRYABLE_ERROR_CODES (a timed-out transaction must never be retried
+   * inside the same executor pass; the caller's own unit-of-work error
+   * handling owns the retry decision, e.g. the deadline scanner counts the
+   * candidate as a per-candidate failure and the next tick retries it).
+   *
+   * `SET LOCAL` scope is exactly this transaction (reset at commit/rollback),
+   * and it is re-applied on every retry pass, so pool sessions outside the
+   * transaction are never affected.
+   */
+  lockTimeoutMs?: number;
+  /**
    * Optional explicit correlation stamped on every retry WARN. Omit it when
    * the call site has no trusted identity: emits stay correlation-free
    * rather than fabricating one.
@@ -239,7 +260,8 @@ function isRetryableError(err: unknown): boolean {
  * @param db - Database instance.
  * @param fn - Async function that receives a transactional `Database` handle.
  * @param options - Closed options object: `isolationLevel` (default
- *   "repeatable read") and optional `correlation` stamped on retry WARNs.
+ *   "repeatable read"), optional `correlation` stamped on retry WARNs, and
+ *   optional `lockTimeoutMs` bounding this transaction's lock waits (#1071).
  * @returns The value returned by `fn`.
  */
 export async function executeInTransaction<T>(
@@ -247,7 +269,19 @@ export async function executeInTransaction<T>(
   fn: (tx: TransactionDatabase) => Promise<T>,
   options: ExecuteInTransactionOptions = {},
 ): Promise<T> {
-  const { isolationLevel = "repeatable read", correlation } = options;
+  const {
+    isolationLevel = "repeatable read",
+    correlation,
+    lockTimeoutMs,
+  } = options;
+  if (
+    lockTimeoutMs !== undefined &&
+    (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs <= 0)
+  ) {
+    throw new TypeError(
+      `lockTimeoutMs must be a positive integer number of milliseconds, got ${lockTimeoutMs}`,
+    );
+  }
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -260,6 +294,17 @@ export async function executeInTransaction<T>(
     try {
       return await db.transaction(
         async (tx) => {
+          if (lockTimeoutMs !== undefined) {
+            // PROTOCOL: the FIRST statement of the transaction, so every
+            // subsequent lock wait inside the callback is bounded. Utility
+            // statements cannot take bind parameters; the value is a
+            // validated integer interpolated into a quoted literal
+            // (`3000ms` unquoted is a 42601 syntax error — the unit-suffixed
+            // form must be a string literal), so this is injection-free.
+            await tx.execute(
+              sql.raw(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`),
+            );
+          }
           return fn(tx as unknown as TransactionDatabase);
         },
         { isolationLevel },

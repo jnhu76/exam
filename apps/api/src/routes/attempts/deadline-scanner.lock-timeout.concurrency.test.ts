@@ -306,14 +306,18 @@ describe("R-T4-1 / #1071 — deadline scanner vs held enrollment row lock", () =
     // ── Launch one real scanner tick while the lock is held ──
     let heldSettled = false;
     let heldResult: ScanResult | null = null;
+    let heldSettledAtMs = Number.NaN;
+    const tickLaunchAt = Date.now();
     const tick = scanDatabaseForExpiredAttempts(ctx.app, () => new Date());
     tick.then(
       (r) => {
         heldSettled = true;
         heldResult = r;
+        heldSettledAtMs = Date.now();
       },
       () => {
         heldSettled = true;
+        heldSettledAtMs = Date.now();
       },
     );
 
@@ -328,6 +332,7 @@ describe("R-T4-1 / #1071 — deadline scanner vs held enrollment row lock", () =
     // Capture the held-phase evidence BEFORE releasing the lock.
     const settledWhileHeld = heldSettled;
     const heldSnapshot: ScanResult | null = heldResult;
+    const settledElapsedMs = heldSettledAtMs - tickLaunchAt;
 
     // ── Release + drain (no holder or tick leak in either world) ──
     release.resolve();
@@ -349,6 +354,21 @@ describe("R-T4-1 / #1071 — deadline scanner vs held enrollment row lock", () =
     expect(heldSnapshot!.failedCount).toBe(1);
     expect(heldSnapshot!.submittedCount).toBe(0);
     expect(heldSnapshot!.noOpCount).toBe(0);
+    // Bounded but NOT zero: the #1071 contract window is 2–5s. A give-up
+    // bounded by PostgreSQL's lock_timeout cannot fire EARLIER than the
+    // configured budget (PostgreSQL raises 55P03 only after the wait has
+    // actually lasted the budget), so this lower bound — the contract's 2s
+    // floor minus a small timer buffer — is jitter-safe and pins the floor:
+    // a degenerate instant abort (e.g. lock_timeout ≈ 0) would churn
+    // failedCount on every ordinary transient lock wait instead of riding
+    // the mandated 2–5s window out. Slower machines can only increase the
+    // elapsed time; they can never violate the lower bound.
+    expect(
+      settledElapsedMs,
+      `the held-phase settle came too early (${settledElapsedMs}ms after ` +
+        `tick launch): the scanner lock_timeout must sit in the #1071 ` +
+        `contract window (2–5s), never a near-zero abort`,
+    ).toBeGreaterThanOrEqual(1_900);
 
     // ── ORACLE 2: the aborted pass left no partial state ──
     const afterAbort = await readAttemptRow(attemptId);
