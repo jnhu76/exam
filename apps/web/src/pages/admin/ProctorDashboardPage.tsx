@@ -382,10 +382,12 @@ export function ProctorDashboardPage() {
   }, [hydrateForceSubmit]);
 
   // Latest-read ownership for the status poll: only the newest read may
-  // commit data / error / the loading flag. An exam switch (this page is NOT
-  // remounted per :id) supersedes the in-flight read of the previous exam,
-  // and a slow response must never render a candidate list the routed exam
-  // does not name.
+  // commit data / error / the loading flag. The route remounts per :id
+  // (ProctorDashboardPageRoute), so an exam switch normally starts a fresh
+  // instance; these guards still order reads WITHIN one exam instance (poll
+  // tick vs manual refresh vs post-command resync), and protect against a
+  // command continuation that closed over an older examId when the instance
+  // outlives a route change (e.g. a page mounted outside the keyed route).
   const statusRequestRef = useRef(0);
   // The exam the URL currently names, readable from an async continuation that
   // closed over an OLDER examId. A command handler started for exam A can
@@ -2071,4 +2073,19 @@ export function ProctorDashboardPage() {
       </div>
     );
   }
+}
+
+/**
+ * Route element for /admin/exams/:id/proctor. INVARIANT: the dashboard owns
+ * exam-scoped instance state (candidate status projection, loading/error,
+ * per-card action dialogs and frozen commands); an in-place :id change —
+ * the "go to exam" banner link, browser back/forward — must remount the page
+ * instead of letting the previous exam's candidate cards and action buttons
+ * stay interactive while the newly routed exam loads. Remounting also drops
+ * a superseded exam's late reads by construction; the generation guards
+ * inside the page still order reads within one exam instance.
+ */
+export function ProctorDashboardPageRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <ProctorDashboardPage key={id ?? ""} />;
 }

@@ -103,7 +103,7 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
   },
   {
     route: "/admin/exams/:id/proctor",
-    page: "ProctorDashboardPage",
+    page: "ProctorDashboardPageRoute",
     role: "admin-standard",
   },
   {
@@ -148,7 +148,7 @@ export const ROUTE_PAGE_ROLES: readonly RoutePageRole[] = [
   },
   {
     route: "/admin/attempts/:id",
-    page: "AttemptDetailPage",
+    page: "AttemptDetailPageRoute",
     role: "admin-standard",
   },
   {
