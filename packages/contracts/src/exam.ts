@@ -171,6 +171,22 @@ export type EnrollCandidatesRequest = z.infer<
 >;
 
 /**
+ * Authoring `questionIds` shape: uuid array without duplicates (#1039).
+ * Duplicates are a request-shape violation — the publish freeze snapshot
+ * derives one grading-workset entry per element keyed by
+ * (attemptId, questionId), so a repeated id would freeze a repeated snapshot
+ * item and collide with the `attempt_grading_entries` UNIQUE constraint at
+ * submit time. The canonical exam-policy validator re-checks the same
+ * invariant on persisted/merged policy (historical rows, draft PATCH merge);
+ * this schema owns only the untrusted-request boundary.
+ */
+const UniqueQuestionIdsSchema = z
+  .array(z.string().uuid())
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "questionIds must not contain duplicate question ids",
+  });
+
+/**
  * Raw authoring shape for creating an exam (design §20 Option A).
  *
  * This is the FASTIFY-BOUNDARY schema: it validates the raw request shape
@@ -206,7 +222,7 @@ export const CreateExamRequestBaseSchema = z.object({
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
   questionSelectionMode: AuthoringQuestionSelectionModeEnum.optional(),
-  questionIds: z.array(z.string().uuid()).optional(),
+  questionIds: UniqueQuestionIdsSchema.optional(),
   // Raw passthrough at the fastify boundary: ControlFlagsSchema applies nested
   // defaults (showResultImmediately etc.), which would make the route's legacy
   // showResultImmediately presence check see a defaulted flag as explicit
@@ -264,7 +280,7 @@ export const CreateExamRequestSchema = CreateExamRequestBaseSchema.extend({
   description: z.string().max(2000).default(""),
   timingMode: TimingModeEnum.default("timed_window"),
   questionSelectionMode: AuthoringQuestionSelectionModeEnum.default("manual"),
-  questionIds: z.array(z.string().uuid()).default([]),
+  questionIds: UniqueQuestionIdsSchema.default([]),
   controlFlags: ControlFlagsSchema.default({}),
   retakePolicy: AuthoringRetakePolicyEnum.default("unlimited"),
   scoreStrategy: ScoreStrategyEnum.default("highest"),
@@ -309,7 +325,7 @@ export const UpdateExamRequestBaseSchema = z.object({
   closeAt: z.string().datetime().nullish(),
   passingScore: z.number().min(0).optional(),
   totalScore: z.number().positive().optional(),
-  questionIds: z.array(z.string().uuid()).optional(),
+  questionIds: UniqueQuestionIdsSchema.optional(),
   controlFlags: ControlFlagsSchema.partial().optional(),
   retakePolicy: AuthoringRetakePolicyEnum.optional(),
   scoreStrategy: ScoreStrategyEnum.optional(),

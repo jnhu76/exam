@@ -126,6 +126,9 @@ export const ExamPolicyConflictCode = {
   RetakeMaxAttemptsInvalid: "RETAKE_MAX_ATTEMPTS_INVALID",
   InterruptionPolicyCapsInvalid: "INVALID_INTERRUPTION_POLICY",
   UnsupportedExamControl: "UNSUPPORTED_EXAM_CONTROL",
+  // #1039: duplicated question selection breaks the one-entry-per-question
+  // grading workset invariant downstream of the freeze snapshot.
+  QuestionIdsNotUnique: "QUESTION_IDS_NOT_UNIQUE",
 } as const;
 
 export type ExamPolicyConflictCode =

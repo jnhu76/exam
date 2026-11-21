@@ -461,6 +461,37 @@ describe("examCommands", () => {
       );
     });
 
+    // #1039 (R-T2-1): a historically persisted duplicate in questionIds
+    // (the write boundary now rejects duplicates, but pre-fix rows exist)
+    // must fail closed at the freeze boundary. The duplicate sum (50+50)
+    // deliberately matches totalScore so ONLY the uniqueness guard rejects —
+    // proving the snapshot is not frozen via the totalScore check by accident.
+    it("rejects publish of a draft whose persisted questionIds contain duplicates", async () => {
+      const dirty = makeExam({
+        questionIds: ["q1", "q1"],
+        totalScore: 100,
+      });
+      let persisted = { ...dirty };
+      const repo: ExamRepository = {
+        findById: (id: string) => (id === persisted.id ? persisted : null),
+        findByIdForUpdate: (id: string) =>
+          id === persisted.id ? persisted : null,
+        findByIdForShare: (id: string) =>
+          id === persisted.id ? persisted : null,
+        update: (_id: string, data: Partial<Exam>) => {
+          persisted = { ...persisted, ...data };
+          return persisted;
+        },
+      };
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /duplicate/i,
+      );
+      // No half-frozen snapshot: the exam stays a draft with an empty
+      // snapshot after the rejection.
+      expect(persisted.status).toBe("draft");
+      expect(persisted.questionSnapshot).toEqual([]);
+    });
+
     it("captures questionSnapshot with real data", async () => {
       const repo = makeRepo(makeExam());
       const result = await publishExam(repo, "exam-1", testQuestions);
