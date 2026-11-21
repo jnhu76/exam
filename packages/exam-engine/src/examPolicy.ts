@@ -133,6 +133,24 @@ export function validateExamPolicy(
     ),
   );
 
+  // ── Question selection must not repeat a question id (#1039). ──
+  // The publish freeze snapshot freezes one entry per questionIds element
+  // keyed by (attemptId, questionId); a repeated id would break the
+  // grading-workset UNIQUE invariant at submit time. The request schemas
+  // reject duplicates at the untrusted-input boundary; this canonical check
+  // also covers persisted/historical rows (publish revalidation) and the
+  // merged draft policy of a PATCH that omits questionIds.
+  if (
+    new Set(policy.questions.questionIds).size !==
+    policy.questions.questionIds.length
+  ) {
+    conflicts.push({
+      code: ExamPolicyConflictCode.QuestionIdsNotUnique,
+      fields: ["questionIds"],
+      message: "questionIds must not contain duplicate question ids",
+    });
+  }
+
   // ── Passing score must not exceed total score. ──
   // Today this is checked in 4 drifting places; this is the canonical owner.
   // (publishExam additionally checks passingScore against the question-sum

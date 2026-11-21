@@ -178,6 +178,64 @@ describe("validateExamPolicy — supported conflicts", () => {
 // of them on create, draft update, and publish revalidation. `false` stays
 // legal; historical rows with `true` remain readable but can never become
 // newly authoritative.
+describe("validateExamPolicy — questionIds uniqueness (#1039)", () => {
+  it("flags duplicate questionIds as QUESTION_IDS_NOT_UNIQUE", () => {
+    const conflicts = validateExamPolicyForExam(
+      makeExam({ questionIds: ["q1", "q1"] }),
+    );
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.code).toBe(CONFLICT.QuestionIdsNotUnique);
+    expect(conflicts[0]?.fields).toEqual(["questionIds"]);
+  });
+
+  it("accepts distinct questionIds (baseline)", () => {
+    expect(validateExamPolicyForExam(makeExam())).toEqual([]);
+  });
+
+  it("assertExamPolicyValid throws ValidationError with the structured field code", () => {
+    try {
+      assertExamPolicyValid(makeExam({ questionIds: ["q1", "q1"] }));
+      throw new Error("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      const details = (err as ValidationError).details as {
+        fields: { field: string; code: string; message: string }[];
+      };
+      expect(details.fields[0]?.code).toBe(CONFLICT.QuestionIdsNotUnique);
+      expect(details.fields[0]?.field).toBe("questionIds");
+    }
+  });
+
+  it("rejects duplicates through the route-layer input shape (merged update path)", () => {
+    const exam = makeExam();
+    expect(() =>
+      assertExamPolicyInputValid({
+        timingMode: exam.timingMode,
+        durationMinutes: exam.durationMinutes,
+        openAt: exam.openAt,
+        closeAt: exam.closeAt,
+        latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+        minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
+        questionSelectionMode: exam.questionSelectionMode,
+        // A draft PATCH that omits questionIds merges the EXISTING row's
+        // ids; the canonical validator must reject a historically persisted
+        // duplicate even though no request ever carried one.
+        questionIds: ["q1", "q1"],
+        retakePolicy: exam.retakePolicy,
+        maxAttempts: exam.maxAttempts,
+        scoreStrategy: exam.scoreStrategy,
+        passingScore: exam.passingScore,
+        totalScore: exam.totalScore,
+        resultPublicationMode: exam.resultPublicationMode,
+        interruptionTimePolicy: "strict",
+        interruptionGracePerIncidentSeconds: null,
+        interruptionGracePerAttemptSeconds: null,
+        controlFlags: exam.controlFlags,
+      }),
+    ).toThrow(ValidationError);
+  });
+});
+
 describe("validateExamPolicy — unsupported control flags (#516)", () => {
   const UNSUPPORTED_FLAGS = [
     "detectTabSwitch",
