@@ -4,11 +4,60 @@ import {
   type Request,
   type Response,
 } from "@playwright/test";
+import { sanitizeClientEvent } from "@exam/contracts";
 
 const LOGIN_TIMEOUT_MS = 15_000;
+const DIAGNOSTIC_READ_TIMEOUT_MS = 1_000;
 
 function isObservedAuthUrl(url: string): boolean {
   return url.includes("auth") || url.includes("login");
+}
+
+/**
+ * Returns a diagnostic-safe rendering of an observed auth request body.
+ *
+ * INVARIANT: the raw bytes never reach the error message. JSON object bodies
+ * go through the canonical client-event sanitizer, which redacts credential
+ * keys and credential-shaped values; bodies whose shape is unknown are
+ * omitted instead of risking a credential under an unrecognized key.
+ */
+function redactAuthRequestBody(postData: string | null): string {
+  if (!postData) return "";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(postData);
+  } catch {
+    return "[unparseable body omitted]";
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "[non-object body omitted]";
+  }
+  return JSON.stringify(sanitizeClientEvent(parsed as Record<string, unknown>));
+}
+
+/**
+ * Clears every password input without Playwright actionability checks.
+ *
+ * Playwright's automatic failure artifact includes a page snapshot; a filled
+ * password field would be serialized there. `fill("")` waits for an enabled,
+ * visible element and would hang when the app disables the form while a login
+ * request is in flight, so use the native value setter and dispatch `input`
+ * (React's controlled-input contract) instead.
+ */
+async function clearPasswordInputs(page: Page): Promise<void> {
+  await page
+    .locator('input[type="password"]')
+    .evaluateAll((inputs) => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      for (const input of inputs) {
+        valueSetter?.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    })
+    .catch(() => {});
 }
 
 async function buildLoginError(
@@ -18,10 +67,14 @@ async function buildLoginError(
   observed: string[],
   pendingLogs: Promise<void>[],
 ): Promise<Error> {
+  // Clear before awaiting response-log promises: a response can send headers
+  // and then stall its body, which would otherwise keep the password in the
+  // DOM until Playwright's test timeout snapshot.
+  await clearPasswordInputs(page);
   await Promise.allSettled(pendingLogs);
   const alertText = await page
     .getByRole("alert")
-    .textContent()
+    .textContent({ timeout: DIAGNOSTIC_READ_TIMEOUT_MS })
     .catch(() => "");
   const bodyText = await page
     .locator("body")
@@ -61,11 +114,14 @@ export async function loginViaUi(
 ): Promise<void> {
   const observed: string[] = [];
   const pendingLogs: Promise<void>[] = [];
+  let succeeded = false;
 
   const onRequest = (req: Request) => {
     if (!isObservedAuthUrl(req.url())) return;
     observed.push(
-      `[request] ${req.method()} ${req.url()} body=${req.postData() ?? ""}`,
+      `[request] ${req.method()} ${req.url()} body=${redactAuthRequestBody(
+        req.postData(),
+      )}`,
     );
   };
 
@@ -73,7 +129,15 @@ export async function loginViaUi(
     if (!isObservedAuthUrl(res.url())) return;
     pendingLogs.push(
       (async () => {
-        const text = await res.text().catch(() => "");
+        const text = await Promise.race([
+          res.text(),
+          new Promise<string>((resolve) =>
+            setTimeout(
+              () => resolve("[response body unavailable]"),
+              DIAGNOSTIC_READ_TIMEOUT_MS,
+            ),
+          ),
+        ]).catch(() => "");
         observed.push(
           `[response] ${res.status()} ${res.url()} body=${text.slice(0, 500)}`,
         );
@@ -158,7 +222,13 @@ export async function loginViaUi(
         pendingLogs,
       );
     }
+
+    succeeded = true;
   } finally {
+    // A failed login can leave the filled password in the DOM; Playwright's
+    // failure artifact snapshots that value. Clear on every non-success exit,
+    // including action failures that bypass buildLoginError.
+    if (!succeeded) await clearPasswordInputs(page);
     page.off("request", onRequest);
     page.off("response", onResponse);
   }
