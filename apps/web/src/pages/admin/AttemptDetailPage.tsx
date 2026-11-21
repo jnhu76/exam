@@ -692,8 +692,10 @@ export function AttemptDetailPage() {
   // a PREVIOUS attempt must never write rows, pagination metadata, or an error
   // into the next attempt's section after a route change. The ref records the
   // attempt id the in-flight request belongs to; a late response whose scope
-  // no longer matches is dropped. (The result/timeline loads are single-shot
-  // and replace their state wholesale, so they do not need this.)
+  // no longer matches is dropped. The route remounts per :id
+  // (AttemptDetailPageRoute), which isolates the single-shot result/timeline
+  // loads by construction; this guard covers route-scope changes for the
+  // telemetry reads and protects instances mounted outside the keyed route.
   const telemetryScopeRef = useRef<string | null>(null);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
@@ -1323,4 +1325,18 @@ export function AttemptDetailPage() {
       />
     </PageContainer>
   );
+}
+
+/**
+ * Route element for /admin/attempts/:id. INVARIANT: the page owns
+ * attempt-scoped instance state (result, live attempt, timeline, receipt
+ * summary, telemetry rows, flag dialog identity); a previous attempt's
+ * single-shot reads may settle after the route moved, so an in-place :id
+ * change — deep links from the timeline/audit surfaces, browser
+ * back/forward — must remount the page instead of letting those late
+ * responses replace the newly routed attempt's projection.
+ */
+export function AttemptDetailPageRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <AttemptDetailPage key={id ?? ""} />;
 }
