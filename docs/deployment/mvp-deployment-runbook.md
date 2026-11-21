@@ -132,7 +132,7 @@ below are the ones whose behavior an operator actually needs to reason about:
 | `EMAIL_ENABLED` | master switch; false → DisabledEmailSender drains outbox to 'sent' |
 | `EMAIL_TRANSPORT` | `fake` or `smtp`; `smtp` is force-overridden to `fake` in test/e2e/ci |
 | `EMAIL_WORKER_LOCK_TIMEOUT_MS` | abandoned-lock recovery threshold (default 5 min) |
-| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery. One term of the shutdown budget contract: loop (8s) + audit drain (10s) + DB close (10s) must stay below `stop_grace_period` (45s) |
+| `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` | SIGTERM bound for the in-process loop; rows left `processing` are redelivered via lock-timeout recovery. One term of the shutdown budget contract: background loop hooks (email loop included) share 8s + audit drain (10s) + DB close (10s) + exit assist (2s) = 30s, below `stop_grace_period` (45s) |
 | `SMTP_HOST` | **required** when transport=smtp (fail-fast) |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | strict bool; warns but does not hard-fail if false |
 | `SMTP_USER` / `SMTP_PASSWORD` | auth block omitted if both empty; password is scrubbed from logs/errors |
@@ -1016,23 +1016,29 @@ docker compose --env-file .env.production down -v # with bind mounts there are n
                        # rm — see upgrade-and-uninstall.md §3.2.
 ```
 
-Graceful shutdown behavior (#351 budget contract):
+Graceful shutdown behavior (#351 budget contract, extended by #1055):
 
 ```text
 app container (SIGTERM, stop_grace_period: 45s):
   - auditWrites.stopAccepting() (no new audit writes accepted)
   - app.close() runs onClose hooks serially in reverse registration order:
-    - email outbox loop stops: waits up to EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS
-      (default 8s) for the current poll cycle, then abandons it
-    - sender / scanners / redis close
+    - every background loop hook (operability monitor, email outbox,
+      client-event retention, deadline scanner, heartbeat) stops within ONE
+      shared 8s window; an in-flight tick still blocked on the DB past the
+      window is abandoned and its transaction settles under its own owner.
+      The email loop's own bound is the smaller of
+      EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS (default 8s) and the remaining
+      window; abandoned queue rows redeliver via lock-timeout recovery
+    - sender / redis close
     - in-flight audit writes drain (10s timeout, best-effort, overlapping)
-    - DB pool released (sql.end, 10s timeout)
-  - whole-shutdown worst case: 8s + 10s + 10s + 2s (bounded exit assist)
-    = 30s < stop_grace_period 45s
+    - DB pool released (sql.end, 10s timeout; destroys connections still
+      blocked in a query)
+  - whole-shutdown worst case: 8s (shared loop window) + 10s + 10s + 2s
+    (bounded exit assist) = 30s < stop_grace_period 45s
   - exit is then NATURAL on the clean path; if work abandoned by the
-    bounded shutdown (the in-flight send) still holds the event loop, a
-    bounded assist (2s) logs the remaining owners and exits with the
-    settled code — never a Docker SIGKILL
+    bounded shutdown (the in-flight send or a blocked loop tick) still
+    holds the event loop, a bounded assist (2s) logs the remaining owners
+    and exits with the settled code — never a Docker SIGKILL
   - any processing row left behind is recovered by the next app start
     via recoverAbandoned after EMAIL_WORKER_LOCK_TIMEOUT_MS (default 300s)
 ```

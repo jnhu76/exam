@@ -27,6 +27,30 @@
  * developer-file ADMISSION dimension is owned by the loadRootEnv admission
  * tests and the env-surface guard; this test owns the bind oracle and the
  * foreign-:3000 fallback kill).
+ *
+ * Hung-owner scenario (#1055 / #1047 R-T1-3): BEFORE the fix, the four
+ * background-loop plugins other than the email outbox closed with an
+ * UNBOUNDED `await` of the in-flight tick promise (deadlineScanner.ts /
+ * heartbeat.ts / clientEventRetention.ts / operabilityMonitor.ts onClose
+ * hooks), and the email outbox's own bound was independent of them. When a
+ * tick's org-discovery SELECT blocks server-side on a table lock — no
+ * statement/lock timeout on either side — that await never settled,
+ * `app.close()` never settled, the 2s exit assist never armed, and the
+ * process outlived the compose stop_grace_period (SIGKILL / exit 137). The
+ * bounded-close fix races every loop hook's in-flight tick against ONE
+ * shared 8s window (lib/loopShutdown.ts; the email loop's bound is the
+ * smaller of EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS and the remaining window),
+ * which keeps the serial #351 worst case at 30s. The scenario below
+ * reproduces the production-isomorphic hang inside the child's OWN isolated
+ * schema: the harness holds an ACCESS EXCLUSIVE lock on `organizations` from
+ * before the child spawns. The assertions cover only owners that are pending
+ * by construction — the retention startup pass and the email outbox's
+ * default-org wait both issue their org SELECT during plugin registration
+ * (before `listen`), so the post-readiness SIGTERM cannot race them; a
+ * pg_blocking_pids probe proves the lock is really blocking a child query.
+ * The exit must stay inside the 30s total budget (loops 8s shared + audit +
+ * db + assist < 45s grace). Under the pre-fix unbounded await the child
+ * cannot exit at all while the lock is held, so the bound fails.
  */
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
@@ -35,9 +59,13 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import postgres from "postgres";
 import { createPostgresDatabase } from "@exam/db/postgres";
 import { getIsolatedTestDb, resolveTestDbUrl } from "@exam/db/testDb";
-import { addSearchPathToUrl } from "@exam/db/testIsolation";
+import {
+  addSearchPathToUrl,
+  isTestDbIsolationEnabled,
+} from "@exam/db/testIsolation";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = resolve(__dirname, "server.ts");
@@ -48,6 +76,20 @@ const CHILD_SHUTDOWN_TIMEOUT_MS = 6_000;
 /** Natural exit must beat the leaked-timer counterfactual comfortably. */
 const MAX_EXIT_AFTER_SIGTERM_MS = 5_000;
 const BOOT_TIMEOUT_MS = 45_000;
+/**
+ * #1055 hung-owner terms. The exit bound is the #351 TOTAL shutdown budget
+ * (all loop hooks share 8s + audit 10s + db 10s + assist 2s = 30s < 45s
+ * compose grace). In THIS scenario the exit path is bounded by the shared
+ * window, the DB pool close and the assist (≈20s); the 30s total is the
+ * contract ceiling the fix must never exceed, however many loop owners it
+ * abandons. The kill bound sits 10s above it so a marginal overrun is
+ * reported by the assertion (with the child's own logs) instead of a harness
+ * kill.
+ */
+const HUNG_OWNER_EXIT_BUDGET_MS = 30_000;
+const HUNG_OWNER_KILL_MS = 40_000;
+/** How long to wait for the harness lock to demonstrably block a child query. */
+const BLOCKED_BACKEND_WAIT_MS = 15_000;
 
 async function pgReachable(url: string): Promise<boolean> {
   const conn = await createPostgresDatabase(url);
@@ -63,6 +105,11 @@ async function pgReachable(url: string): Promise<boolean> {
 
 const PG_UP = await pgReachable(resolveTestDbUrl());
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
+// The hung-owner scenario locks a table EXCLUSIVE — only safe when the child
+// owns an isolated schema (the default). It must skip, never run degraded,
+// when isolation is explicitly disabled.
+const HUNG_OWNER_DESCRIBE =
+  PG_UP && isTestDbIsolationEnabled() ? describe : describe.skip;
 
 interface ChildRun {
   code: number | null;
@@ -73,11 +120,30 @@ interface ChildRun {
   port: number;
 }
 
+/**
+ * Lifecycle-run options. `iso` hands the runner a PRE-CREATED isolated DB
+ * (caller owns `cleanup()`) so a harness can hold connections into the
+ * child's schema — e.g. the #1055 table lock — before the child spawns.
+ * `env` adds child env keys (fast loop intervals); `beforeSigterm` runs
+ * between readiness and SIGTERM; `exitKillMs` re-arms the harness kill
+ * bound (default: the clean-path 4×5s window).
+ */
+interface LifecycleOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  beforeSigterm?: () => Promise<void>;
+  exitKillMs?: number;
+  iso?: Awaited<ReturnType<typeof getIsolatedTestDb>>;
+}
+
 async function runServerLifecycle(
   namespace = "api-server-shutdown",
-  options: { cwd?: string } = {},
+  options: LifecycleOptions = {},
 ): Promise<ChildRun> {
-  const iso = await getIsolatedTestDb(namespace);
+  // OWNERSHIP: with `options.iso` the CALLER owns the isolated DB lifecycle
+  // (its harness connections must close before the schema can be dropped),
+  // so the runner only cleans up a database it created itself.
+  const iso = options.iso ?? (await getIsolatedTestDb(namespace));
   // Shared-DB fallback (isolation disabled) has no schemaName; the base
   // test URL is then correct as-is.
   const baseUrl = iso.databaseUrl ?? resolveTestDbUrl();
@@ -121,6 +187,7 @@ async function runServerLifecycle(
         EMAIL_ENABLED: "false",
         EMAIL_WORKER_POLL_INTERVAL_MS: "250",
         EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS: String(CHILD_SHUTDOWN_TIMEOUT_MS),
+        ...(options.env ?? {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
       ...(options.cwd ? { cwd: options.cwd } : {}),
@@ -196,20 +263,38 @@ async function runServerLifecycle(
       await new Promise((r) => setTimeout(r, 100));
     }
 
+    // Establish the scenario state (e.g. the #1055 hung owner) AFTER
+    // readiness but BEFORE the clock starts, so exitAfterSigtermMs measures
+    // only the shutdown window the assertions bound. A precondition failure
+    // carries the child's own logs — it usually means the child never issued
+    // the expected query, and its log says why.
+    try {
+      await options.beforeSigterm?.();
+    } catch (err: unknown) {
+      throw new Error(
+        `${err instanceof Error ? err.message : String(err)}\n--- child stdout ---\n${stdout}\n--- child stderr ---\n${stderr}`,
+      );
+    }
+
     const sigtermAt = Date.now();
     child.kill("SIGTERM");
 
+    const exitKillMs = options.exitKillMs ?? MAX_EXIT_AFTER_SIGTERM_MS * 4;
     const result = await new Promise<
       Omit<ChildRun, "exitAfterSigtermMs" | "port">
     >((resolveClose, reject) => {
       const killTimer = setTimeout(() => {
+        // Cut the stuck child loose, then reject only once the OS confirms
+        // death — cleanup after the rejection never races a live backend.
         child.kill("SIGKILL");
-        reject(
-          new Error(
-            `server did not exit within ${MAX_EXIT_AFTER_SIGTERM_MS * 4}ms of SIGTERM (leaked lifecycle owner?)\nstdout: ${stdout}\nstderr: ${stderr}`,
-          ),
-        );
-      }, MAX_EXIT_AFTER_SIGTERM_MS * 4);
+        child.once("close", () => {
+          reject(
+            new Error(
+              `server did not exit within ${exitKillMs}ms of SIGTERM (leaked lifecycle owner?)\nstdout: ${stdout}\nstderr: ${stderr}`,
+            ),
+          );
+        });
+      }, exitKillMs);
       child.on("close", (code, signal) => {
         clearTimeout(killTimer);
         resolveClose({ code, signal, stdout, stderr });
@@ -223,7 +308,7 @@ async function runServerLifecycle(
     };
   } finally {
     if (child.exitCode === null && !child.killed) child.kill("SIGKILL");
-    await iso.cleanup();
+    if (!options.iso) await iso.cleanup();
   }
 }
 
@@ -337,3 +422,182 @@ PG_DESCRIBE("server SIGTERM lifecycle (child process)", () => {
     }
   }, 120_000);
 });
+
+// ── #1055 / R-T1-3 hung-owner regression ─────────────────────────────────
+// Production-isomorphic blocked tick: an ACCESS EXCLUSIVE lock on the
+// child-schema `organizations` table makes every loop's org-discovery SELECT
+// block server-side (TCP healthy, no statement/lock timeout on either side),
+// so the in-flight tick promise never settles. The harness lock is taken
+// BEFORE the child spawns, so the clientEventRetention startup pass and the
+// email outbox's default-org wait — both issued during plugin registration —
+// are provably pending when SIGTERM fires; pg_blocking_pids is the oracle
+// that the lock really blocks a child query (the scenario cannot silently
+// degrade into "no owner was hung"). The 250ms heartbeat/deadline ticks also
+// hang on the same table, but postgres.js pipelining can share backends and
+// their firing is boot-speed dependent, so they are not asserted here.
+
+/** An open transaction holding ACCESS EXCLUSIVE on `<schema>.organizations`. */
+interface OrganizationsTableLock {
+  /** # of OTHER backends currently waiting on a lock this transaction holds. */
+  blockedCount: () => Promise<number>;
+  /** Diagnostic snapshot of those backends (pid + query prefix). */
+  blockedDetails: () => Promise<string[]>;
+  /** ROLLBACK + close — MUST run before the schema may be dropped. */
+  release: () => Promise<void>;
+}
+
+async function acquireOrganizationsTableLock(
+  childDbUrl: string,
+): Promise<OrganizationsTableLock> {
+  // max:1 pins every statement below (and the polling) to ONE backend, so
+  // the explicit BEGIN..LOCK..ROLLBACK transaction stays coherent.
+  const sql = postgres(childDbUrl, { max: 1 });
+  await sql`BEGIN`;
+  const pidRows = await sql`SELECT pg_backend_pid() AS pid`;
+  const pid = pidRows[0]?.pid;
+  if (pid === undefined) {
+    await sql`ROLLBACK`;
+    await sql.end({ timeout: 5 });
+    throw new Error("pg_backend_pid() returned no row");
+  }
+  await sql`LOCK TABLE organizations IN ACCESS EXCLUSIVE MODE`;
+  let released = false;
+  return {
+    blockedCount: async () => {
+      const rows = await sql`
+        SELECT count(*)::int AS n
+        FROM pg_stat_activity
+        WHERE pid <> ${pid}
+          AND pg_blocking_pids(pid) @> ARRAY[${pid}]::int[]
+      `;
+      return rows[0]?.n ?? 0;
+    },
+    blockedDetails: async () => {
+      const rows = await sql`
+        SELECT pid, left(query, 80) AS q
+        FROM pg_stat_activity
+        WHERE pid <> ${pid}
+          AND pg_blocking_pids(pid) @> ARRAY[${pid}]::int[]
+        ORDER BY pid
+      `;
+      return rows.map((r) => `pid=${r.pid} q=${r.q}`);
+    },
+    release: async () => {
+      if (released) return;
+      released = true;
+      await sql`ROLLBACK`;
+      await sql.end({ timeout: 5 });
+    },
+  };
+}
+
+/**
+ * Bounded poll for the causal precondition: the harness lock DEMONSTRABLY
+ * blocks at least one child query (pg_blocking_pids names our transaction).
+ *
+ * WHY only ">= 1" and not one backend per loop owner: postgres.js pipelines
+ * concurrent queries onto BUSY connections (postgres@3.4.9
+ * src/index.js `handler()`: `busy.length ? go(busy.shift(), query)`), so the
+ * four owners' org-discovery SELECTs can share one or two backends — a
+ * backend COUNT is timing-dependent and cannot prove per-owner in-flight
+ * state. The per-owner barrier for the assertions below is instead the
+ * registration-order boundary: the clientEventRetention startup pass and the
+ * email outbox's default-org wait issue their org SELECT synchronously
+ * during plugin registration, which completes BEFORE `listen`. The readiness
+ * oracle only fires after listen + a 200 on /api/health, so at SIGTERM those
+ * two owners are provably pending (nothing can settle them while the table
+ * is locked) — no 250ms tick race involved. The heartbeat/deadline ticks are
+ * intentionally NOT asserted below for the same reason.
+ */
+async function waitForBlockedBackend(
+  lock: OrganizationsTableLock,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const observed = await lock.blockedCount();
+    if (observed >= 1) return;
+    if (Date.now() > deadline) {
+      const details = (await lock.blockedDetails()).join("; ");
+      throw new Error(
+        `no child backend blocked on the organizations lock within ${timeoutMs}ms — hung-owner precondition not established, scenario invalid. Blocked: ${details || "(none)"}`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
+HUNG_OWNER_DESCRIBE(
+  "server SIGTERM lifecycle with a hung loop owner (child process)",
+  () => {
+    it("exits within the #351 total budget when an in-flight loop tick is blocked on a DB table lock", async () => {
+      // Caller-owned isolated DB: the lock harness needs a connection into the
+      // child's schema BEFORE spawn, and must release before the schema drop.
+      const iso = await getIsolatedTestDb("api-server-shutdown-hung-owner");
+      let lock: OrganizationsTableLock | undefined;
+      let run: ChildRun | undefined;
+      try {
+        if (!iso.databaseUrl || !iso.schemaName) {
+          throw new Error(
+            "hung-owner scenario requires schema isolation (TEST_DB_ISOLATION must not be disabled)",
+          );
+        }
+        const childDbUrl = addSearchPathToUrl(iso.databaseUrl, iso.schemaName);
+        lock = await acquireOrganizationsTableLock(childDbUrl);
+        const held = lock;
+        run = await runServerLifecycle(undefined, {
+          iso,
+          env: {
+            // Fast ticks: a loop owner is in-flight on the locked table within
+            // a few hundred ms of readiness (HEARTBEAT_TIMEOUT_MS must stay a
+            // multiple of 1000 — runtimeConfig contract).
+            HEARTBEAT_SCAN_INTERVAL_MS: "250",
+            HEARTBEAT_TIMEOUT_MS: "1000",
+          },
+          beforeSigterm: () =>
+            waitForBlockedBackend(held, BLOCKED_BACKEND_WAIT_MS),
+          exitKillMs: HUNG_OWNER_KILL_MS,
+        });
+      } finally {
+        // OWNERSHIP: lock first, schema second — DROP SCHEMA cannot proceed
+        // past an open transaction holding a table lock inside it.
+        await lock?.release();
+        await iso.cleanup();
+      }
+      if (!run) throw new Error("unreachable: runner must return or throw");
+
+      // Diagnostics carry the child's own logs: under the unbounded onClose
+      // await they end after the email-outbox drain line with NO exit, no
+      // assist warn, and the harness kill (signal SIGKILL) at HUNG_OWNER_KILL_MS.
+      const diag = `\ncode=${run.code} signal=${run.signal} exitAfterSigtermMs=${run.exitAfterSigtermMs}\n--- child stdout tail ---\n${run.stdout.split("\n").slice(-15).join("\n")}\n--- child stderr tail ---\n${run.stderr.split("\n").slice(-15).join("\n")}`;
+      // The #351 total-budget bound is THE regression signal: an unbounded
+      // onClose await cannot exit while the lock is held, so master fails here
+      // (killed by the harness past the bound); a bounded-close fix abandons
+      // the tick, lets db sql.end + the exit assist cut the leash, and exits
+      // naturally well inside it. A leaked ref'ed race timer would likewise
+      // hold the exit past its full budget — covered by the same bound.
+      expect(run.exitAfterSigtermMs, diag).toBeLessThan(
+        HUNG_OWNER_EXIT_BUDGET_MS,
+      );
+      expect(run.code, diag).toBe(0);
+      expect(run.signal, diag).toBeNull();
+      expect(run.stderr, diag).not.toContain("Graceful shutdown failed");
+      // The assertions below cover ONLY owners proven pending at SIGTERM by
+      // the registration-order barrier (see waitForBlockedBackend): the
+      // email outbox's default-org wait and the retention startup pass.
+      // Their bounded races must fire inside the shared window — the
+      // email's pre-existing at-least-once redelivery path and #1055's new
+      // abandonment diagnostics.
+      expect(run.stdout, diag).toContain(
+        "email outbox loop shutdown timeout; in-flight rows stay processing",
+      );
+      expect(run.stdout, diag).toContain(
+        "Client-event retention shutdown timeout; in-flight pass abandoned",
+      );
+      // The heartbeat/deadline ticks are 250ms timer-driven: whether they are
+      // in flight at SIGTERM depends on boot speed, so asserting their warns
+      // here would be timing-dependent. Their bounded-close path is covered
+      // deterministically by the raceLoopShutdown unit tests instead.
+    }, 180_000);
+  },
+);

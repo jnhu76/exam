@@ -5,6 +5,7 @@ import { createOrganizationRepo } from "@exam/db/repository/organizationRepo";
 import { createClientEventRepo } from "@exam/db/repository/clientEventRepo";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import type { Database } from "@exam/db/types";
+import { raceLoopShutdown } from "../lib/loopShutdown.js";
 
 /**
  * Client-event retention executor (#544).
@@ -213,7 +214,19 @@ const clientEventRetentionPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onClose", async () => {
     closing = true;
     clearInterval(interval);
-    await activeRun;
+    // #1055: the startup/daily pass can be blocked on a DB lock at SIGTERM;
+    // bound the wait with the shared loop budget instead of awaiting it
+    // unbounded (app.close() must settle inside the compose stop grace).
+    await raceLoopShutdown({
+      fastify,
+      inFlight: activeRun,
+      messages: {
+        clean: "Client-event retention stopped cleanly",
+        failed: "Client-event retention failed during shutdown",
+        abandoned:
+          "Client-event retention shutdown timeout; in-flight pass abandoned and will settle under its own transaction owner",
+      },
+    });
   });
 };
 

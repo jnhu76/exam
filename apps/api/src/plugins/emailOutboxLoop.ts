@@ -11,6 +11,7 @@ import {
 import { EmailOutboxService } from "../email/outboxService.js";
 import { sanitizeEmailError } from "../email/sanitizeError.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { remainingLoopShutdownBudgetMs } from "../lib/loopShutdown.js";
 import {
   interruptibleSleep,
   waitForSingleOrganization,
@@ -177,17 +178,29 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
 
   fastify.addHook("onClose", async () => {
     stopping = true;
-    // OWNERSHIP: this hook owns the shutdown-timeout timer. It is unref'd
-    // (a bound, not a liveness owner) and MUST be cleared once the race
-    // settles — a cleared-less loser keeps a ref'ed timer that holds the
-    // event loop open for the whole budget after a clean drain (#351).
+    // #1055: this loop is one term of the ONE shared loop-shutdown window
+    // (lib/loopShutdown.ts). Its effective bound is the SMALLER of the
+    // configured EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS and the window left after
+    // any loop hooks that already closed — that is what keeps the serial
+    // #351 worst case at loops 8s + audit 10s + DB 10s + assist 2s = 30s.
+    // A deployment-configured bound larger than the window still stops
+    // within the window; rows then redeliver via lock-timeout recovery.
+    const budgetMs = Math.min(
+      shutdownTimeoutMs,
+      remainingLoopShutdownBudgetMs(fastify),
+    );
+    // OWNERSHIP: this hook owns the shutdown-timeout timer. The timer is
+    // unref'd, so by itself it can never keep the event loop open (#351's
+    // liveness guarantee comes from unref). `finally clearTimeout` is still
+    // required hygiene: it releases the handle and guarantees a stale
+    // callback cannot outlive this hook.
     let timedOut = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<void>((resolve) => {
       timeout = setTimeout(() => {
         timedOut = true;
         resolve();
-      }, shutdownTimeoutMs);
+      }, budgetMs);
       timeout.unref();
     });
     let drained: boolean;
@@ -213,7 +226,10 @@ const emailOutboxLoopPlugin: FastifyPluginAsync = async (fastify) => {
       log(
         "warn",
         "email outbox loop shutdown timeout; in-flight rows stay processing and are redelivered via lock-timeout recovery",
-        { shutdownTimeoutMs },
+        {
+          shutdownTimeoutMs: budgetMs,
+          configuredShutdownTimeoutMs: shutdownTimeoutMs,
+        },
       );
     }
   });
