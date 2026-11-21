@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -57,6 +58,20 @@ export function AuthProvider({
   const [error, setError] = useState<string | null>(null);
   const isLoading = isRestoringSession || isSubmittingLogin || isLoggingOut;
 
+  // Session generation: every commit that supersedes the anonymous restore
+  // probe (login/logout success, effect teardown) bumps the epoch. A probe may
+  // write user/restore state only while its captured epoch is still current
+  // (R-WD-1, #1054). The abort withdraws the api layer's authority to redirect
+  // on the superseded request's behalf.
+  const sessionEpochRef = useRef(0);
+  const restoreProbeAbortRef = useRef<AbortController | null>(null);
+
+  function supersedeRestoreProbe() {
+    sessionEpochRef.current += 1;
+    restoreProbeAbortRef.current?.abort();
+    restoreProbeAbortRef.current = null;
+  }
+
   useEffect(() => {
     setNavigate(navigate);
     return () => setNavigate(() => {});
@@ -64,21 +79,29 @@ export function AuthProvider({
 
   useEffect(() => {
     if (!restoreSession || initialUser) return;
-    let active = true;
+    const epoch = sessionEpochRef.current;
+    const controller = new AbortController();
+    restoreProbeAbortRef.current = controller;
     setIsRestoringSession(true);
     api
-      .get<MeResponse>("/api/auth/me")
+      .get<MeResponse>("/api/auth/me", { signal: controller.signal })
       .then((nextUser) => {
-        if (active) setUser(nextUser);
+        if (sessionEpochRef.current === epoch) setUser(nextUser);
       })
       .catch(() => {
-        if (active) setUser(null);
+        if (sessionEpochRef.current === epoch) setUser(null);
       })
       .finally(() => {
-        if (active) setIsRestoringSession(false);
+        if (sessionEpochRef.current === epoch) setIsRestoringSession(false);
       });
     return () => {
-      active = false;
+      // Unmount or dependency change ends this probe's write eligibility too,
+      // so a StrictMode double-invoke cannot let the first probe write.
+      sessionEpochRef.current += 1;
+      controller.abort();
+      if (restoreProbeAbortRef.current === controller) {
+        restoreProbeAbortRef.current = null;
+      }
     };
   }, [initialUser, restoreSession]);
 
@@ -90,6 +113,8 @@ export function AuthProvider({
         "/api/auth/login",
         { username, password },
       );
+      supersedeRestoreProbe();
+      setIsRestoringSession(false);
       setUser(nextUser);
       navigate(defaultLandingPath(nextUser));
     } catch (e) {
@@ -104,6 +129,8 @@ export function AuthProvider({
     setError(null);
     try {
       await api.post<void>("/api/auth/logout");
+      supersedeRestoreProbe();
+      setIsRestoringSession(false);
       setUser(null);
       navigate("/login");
     } catch (e) {

@@ -177,7 +177,12 @@ chain exists to prevent.
 - **Cookie-based auth.** Every request sets `credentials: "include"`. No
   `Authorization: Bearer` header, no client-side token storage.
 - **401 handling.** On HTTP 401 the client calls a registered
-  `navigateFn?.("/login")`. Error codes come from `@exam/contracts`
+  `navigateFn?.("/login")` unless the request's caller already aborted it
+  (`init.signal?.aborted` — a superseded request must not navigate on the
+  caller's behalf, e.g. the session-restore probe revoked by login/logout)
+  or the current location is an anonymous-legal surface
+  (`ANONYMOUS_LEGAL_PATHS` in `api.ts`: login, launchpad, invite accept,
+  forgot/reset password). Error codes come from `@exam/contracts`
   (`isErrorCode`, `ErrorResponse`); known-code presentation resolves through
   Web i18n (C3 browser message authority) and the server compatibility
   message is only the unknown-code fallback.
@@ -187,7 +192,10 @@ chain exists to prevent.
 
 - **Auth context:** `AuthProvider restoreSession`
   (`apps/web/src/contexts/AuthContext.tsx`) exposes `useAuth()` → `{ user, … }`.
-  `user` carries role + capability set.
+  `user` carries role + capability set. The anonymous `/api/auth/me` restore
+  probe is superseded by login/logout commits and by effect teardown (session
+  epoch + `AbortSignal`); a late probe settlement can never write session
+  state.
 - **Capability-derived shell nav.** `apps/web/src/lib/capabilities.ts` is the
   frontend UX authority. It is **UX-only**: hidden nav entries remain reachable
   by direct URL; the backend 403/404s them. `adminLandingPath(user)` resolves

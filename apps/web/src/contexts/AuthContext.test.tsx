@@ -1,7 +1,7 @@
 import type { MeResponse } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
 import { Role } from "@exam/domain";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -44,11 +44,13 @@ const proctorUser: MeResponse = {
 };
 
 function AuthProbe() {
-  const { user, isLoading, error, login, logout } = useAuthContext();
+  const { user, isLoading, isRestoringSession, error, login, logout } =
+    useAuthContext();
   return (
     <div>
       <span data-testid="user-name">{user?.name ?? "未登录"}</span>
       <span data-testid="is-loading">{String(isLoading)}</span>
+      <span data-testid="is-restoring">{String(isRestoringSession)}</span>
       <span data-testid="error">{error ?? ""}</span>
       <button type="button" onClick={() => void login("admin", "pass")}>
         login
@@ -85,6 +87,16 @@ function renderAuth(route = "/") {
       </AuthProvider>
     </MemoryRouter>,
   );
+}
+
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 afterEach(() => {
@@ -376,6 +388,204 @@ describe("AuthContext", () => {
       });
 
       expect(screen.getByTestId("error")).toHaveTextContent("");
+    });
+  });
+
+  describe("session restore probe", () => {
+    function jsonResponse(body: unknown) {
+      return new Response(JSON.stringify(body), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    function unauthorizedResponse() {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "AUTH_REQUIRED",
+            message: "未登录",
+            requestId: "req-me",
+          },
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    function renderWithRestore() {
+      return render(
+        <MemoryRouter initialEntries={["/login"]}>
+          <AuthProvider restoreSession>
+            <AuthProbe />
+            <LocationProbe />
+            <Routes>
+              <Route path="/admin/dashboard" element={null} />
+              <Route path="/login" element={null} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>,
+      );
+    }
+
+    // R-WD-1 (#1054): the /login form stays interactive while the anonymous
+    // restore probe is in flight, so a stalled probe can lose the race with a
+    // completed login. INVARIANT: once login commits, the anonymous-era probe
+    // loses write eligibility — the late 401 must neither evict the new
+    // session's user nor bounce the committed landing route (the api layer's
+    // global 401 redirect must not fire for this stale request either).
+    it("keeps the committed login session when the anonymous /me probe rejects after login settles", async () => {
+      const meProbe = deferred<Response>();
+      const loginCall = deferred<Response>();
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockImplementation((input: RequestInfo | URL) =>
+            String(input).includes("/api/auth/login")
+              ? loginCall.promise
+              : meProbe.promise,
+          ),
+      );
+
+      renderWithRestore();
+
+      // Anonymous restore probe is in flight; the form remains usable.
+      await waitFor(() => {
+        expect(screen.getByTestId("is-restoring")).toHaveTextContent("true");
+      });
+
+      await act(async () => {
+        await userEvent.click(screen.getByText("login"));
+      });
+      await act(async () => {
+        loginCall.resolve(jsonResponse(adminUser));
+      });
+
+      // Login committed: user set, routed to the admin landing path.
+      expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+      expect(screen.getByTestId("current-path")).toHaveTextContent(
+        "/admin/dashboard",
+      );
+
+      // The stale anonymous probe now settles with 401 — its write must be
+      // dropped, keeping all three session facts (identity, route, restore).
+      await act(async () => {
+        meProbe.resolve(unauthorizedResponse());
+      });
+
+      expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+      expect(screen.getByTestId("current-path")).toHaveTextContent(
+        "/admin/dashboard",
+      );
+      expect(screen.getByTestId("is-restoring")).toHaveTextContent("false");
+    });
+
+    // Counterfactual to the 401 row: the supersession is about WRITE
+    // ELIGIBILITY, not just the failure branch — a stale probe that succeeds
+    // with the pre-login session must not overwrite the newly committed user.
+    it("does not let a stale anonymous probe's success overwrite the committed login user", async () => {
+      const meProbe = deferred<Response>();
+      const loginCall = deferred<Response>();
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockImplementation((input: RequestInfo | URL) =>
+            String(input).includes("/api/auth/login")
+              ? loginCall.promise
+              : meProbe.promise,
+          ),
+      );
+
+      renderWithRestore();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("is-restoring")).toHaveTextContent("true");
+      });
+
+      await act(async () => {
+        await userEvent.click(screen.getByText("login"));
+      });
+      await act(async () => {
+        loginCall.resolve(jsonResponse(adminUser));
+      });
+      expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+
+      // The stale probe answers with the pre-login session (a different user).
+      await act(async () => {
+        meProbe.resolve(jsonResponse(teacherUser));
+      });
+
+      expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+      expect(screen.getByTestId("is-restoring")).toHaveTextContent("false");
+    });
+
+    // The logout acceptance row (#1054): a logout commit supersedes the
+    // anonymous-era probe symmetrically. Its late success must not resurrect
+    // the session — the logout already cleared the cookie, so a resurrected
+    // user would be a cookie-less phantom identity.
+    it("does not let a stale anonymous probe resurrect the session after logout commits", async () => {
+      const meProbe = deferred<Response>();
+      const logoutCall = deferred<Response>();
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockImplementation((input: RequestInfo | URL) =>
+            String(input).includes("/api/auth/logout")
+              ? logoutCall.promise
+              : meProbe.promise,
+          ),
+      );
+
+      renderWithRestore();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("is-restoring")).toHaveTextContent("true");
+      });
+
+      await act(async () => {
+        await userEvent.click(screen.getByText("logout"));
+      });
+      await act(async () => {
+        logoutCall.resolve(new Response(null, { status: 204 }));
+      });
+
+      // Logout committed: anonymous and back on /login.
+      expect(screen.getByTestId("user-name")).toHaveTextContent("未登录");
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/login");
+
+      // The stale probe's success must not restore the session.
+      await act(async () => {
+        meProbe.resolve(jsonResponse(adminUser));
+      });
+
+      expect(screen.getByTestId("user-name")).toHaveTextContent("未登录");
+      expect(screen.getByTestId("is-restoring")).toHaveTextContent("false");
+    });
+
+    it("anonymous first load: probe 401 leaves the visitor logged out with restore settled", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(unauthorizedResponse()));
+
+      renderWithRestore();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("is-restoring")).toHaveTextContent("false");
+      });
+      expect(screen.getByTestId("user-name")).toHaveTextContent("未登录");
+    });
+
+    it("probe 200 restores the session", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(jsonResponse(adminUser)),
+      );
+
+      renderWithRestore();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+      });
+      expect(screen.getByTestId("is-restoring")).toHaveTextContent("false");
     });
   });
 

@@ -21,8 +21,11 @@ import { OperationsPage } from "./OperationsPage";
 // EVIDENCE SCOPE: the executable witness below covers the abort-BEFORE-
 // delivery path. The delivered-then-superseded ordering — a delivered 401
 // navigates while the request is still current — rests on the static
-// microtask argument above, not on a test. Both support the same boundary
-// decision: the shared client stays unchanged for #1032.
+// microtask argument above, not on a test. The shared client separately
+// refuses the redirect for a request whose caller aborted before processing
+// (`init.signal?.aborted`, R-WD-1/#1054); that staleness guard does not
+// weaken the #1032 boundary: the current session's 401 witness below never
+// aborts and still navigates.
 
 interface FetchCall {
   url: string;
