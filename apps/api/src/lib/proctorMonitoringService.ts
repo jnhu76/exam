@@ -213,15 +213,24 @@ const REQUEST_ID_UUID_SHAPE =
 
 /**
  * Projects a raw metadata blob into the allowlisted safe metadata for the
- * given event name. Unknown event names → empty object (default-deny).
- * Exported for unit testing.
+ * given event name. Unknown event names → empty object (default-deny),
+ * including client-supplied names that collide with inherited
+ * Object.prototype members. Exported for unit testing.
  */
 export function projectSafeMetadata(
   eventName: string,
   raw: Record<string, unknown> | null | undefined,
 ): Record<string, SafeMetadataValue> {
+  // INVARIANT (R-PLT-1, #1057): only the allowlist's OWN entries count. The
+  // event name is client-controllable, so inherited Object.prototype members
+  // (`constructor`, `hasOwnProperty`, …) must take the unknown-name path —
+  // plain indexing would hand a non-array value (e.g. the Object function)
+  // to the field loop below and throw, 500-ing the attempt's timeline. The
+  // Array.isArray guard keeps a malformed future entry default-deny instead
+  // of a crash.
+  if (!Object.hasOwn(SAFE_METADATA_ALLOWLIST, eventName)) return {};
   const allowed = SAFE_METADATA_ALLOWLIST[eventName];
-  if (!allowed || allowed.length === 0) return {};
+  if (!Array.isArray(allowed) || allowed.length === 0) return {};
   if (!raw) return {};
   const out: Record<string, SafeMetadataValue> = {};
   for (const key of allowed) {
