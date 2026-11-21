@@ -397,6 +397,14 @@ function SubmitFactRow({
   );
 }
 
+/**
+ * How {@link TakeExamPage}'s apply seam treats local business state:
+ * "load" rebuilds it wholesale from the snapshot; "converge" keeps locally
+ * unacknowledged input when the snapshot is still editable (see the
+ * applySnapshot doc).
+ */
+type ApplySnapshotMode = "load" | "converge";
+
 /** Active exam-taking page. Reads the authoritative CandidateTakeSnapshot. */
 export function TakeExamPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
@@ -578,45 +586,95 @@ export function TakeExamPage() {
 
   /**
    * Applies an authoritative snapshot to page state. Pure state mutation —
-   * no network. Factored out so both the page loader and the restore hook
-   * route the authoritative snapshot through the SAME apply seam.
+   * no network. Factored out so the page loader, the restore hook, and the
+   * convergence re-reads all route the authoritative snapshot through the
+   * SAME apply seam.
+   *
+   * mode "load" (default) rebuilds business state wholesale: the loader
+   * starts from empty local state, and the restore hook reconstructs after
+   * a disruption (ADR-012).
+   *
+   * mode "converge" serves background re-reads of the attempt the page is
+   * already editing (deadline verification, terminal heartbeat / save
+   * signals). A terminal/frozen verdict (!isEditable) still rebuilds
+   * wholesale — the frozen answer wins (B17). An EDITABLE verdict re-bases
+   * the server clock and capabilities but keeps locally UNACKNOWLEDGED
+   * input (pending/in-flight/failed save revisions) over the server draft:
+   * the draft lags such input by construction (a failed save never reached
+   * the server), so applying it would roll the editor back and the
+   * failed-save retry would re-POST the stale draft (R-T4-2/#1051).
+   * Acknowledged questions still converge to the server draft.
    */
-  const applySnapshot = useCallback((data: CandidateTakeSnapshot) => {
-    if (data.serverNow) {
-      serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
-    }
-    setSnapshot(data);
-    trackExamEvent(
-      "exam_page_loaded",
-      { status: data.attemptStatus },
-      { attemptId: data.attemptId, examId: data.examId },
-    );
-
-    const answerMap = new Map<string, unknown>();
-    const versionMap = new Map<string, number>();
-    const clientSeqMap = new Map<string, number>();
-    for (const q of data.questions) {
-      if (q.answerValue != null) {
-        answerMap.set(q.id, q.answerValue);
-        // Restore server version and last clientSeq from snapshot so the
-        // first save after reload uses a correct baseVersion and a fresh
-        // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
-        versionMap.set(q.id, q.currentVersion ?? 0);
-        clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
+  const applySnapshot = useCallback(
+    (data: CandidateTakeSnapshot, mode: ApplySnapshotMode = "load") => {
+      if (data.serverNow) {
+        serverOffsetRef.current =
+          new Date(data.serverNow).getTime() - Date.now();
       }
-    }
-    setAnswers(answerMap);
-    versionsRef.current = versionMap;
-    clientSeqsRef.current = clientSeqMap;
+      setSnapshot(data);
+      trackExamEvent(
+        "exam_page_loaded",
+        { status: data.attemptStatus },
+        { attemptId: data.attemptId, examId: data.examId },
+      );
 
-    const states: QuestionState[] = data.questions.map((q) =>
-      q.answerValue != null ? "answered" : "unanswered",
-    );
-    setQuestionStates(states);
-    setIsDisconnected(false);
-    setSaveServerFault(false);
-    setSaveFaultRequestId(null);
-  }, []);
+      const answerMap = new Map<string, unknown>();
+      const versionMap = new Map<string, number>();
+      const clientSeqMap = new Map<string, number>();
+      for (const q of data.questions) {
+        if (q.answerValue != null) {
+          answerMap.set(q.id, q.answerValue);
+          // Restore server version and last clientSeq from snapshot so the
+          // first save after reload uses a correct baseVersion and a fresh
+          // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
+          versionMap.set(q.id, q.currentVersion ?? 0);
+          clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
+        }
+      }
+      if (mode === "converge" && data.isEditable) {
+        // INVARIANT (R-T4-2/#1051): an editable convergence verdict keeps
+        // locally unacknowledged answers — and their baseVersion/clientSeq,
+        // so a retry continues the same versioned sequence — over the
+        // server draft.
+        const summary = getSaveQueueSummary();
+        const unacknowledged = new Set([
+          ...summary.unconfirmedIds,
+          ...summary.failedIds,
+        ]);
+        for (const questionId of unacknowledged) {
+          const localAnswer = answersRef.current.get(questionId);
+          if (localAnswer === undefined) continue;
+          answerMap.set(questionId, localAnswer);
+          const localVersion = versionsRef.current.get(questionId);
+          if (localVersion === undefined) {
+            versionMap.delete(questionId);
+          } else {
+            versionMap.set(questionId, localVersion);
+          }
+          const localClientSeq = clientSeqsRef.current.get(questionId);
+          if (localClientSeq === undefined) {
+            clientSeqMap.delete(questionId);
+          } else {
+            clientSeqMap.set(questionId, localClientSeq);
+          }
+        }
+      }
+      setAnswers(answerMap);
+      versionsRef.current = versionMap;
+      clientSeqsRef.current = clientSeqMap;
+
+      // Derived from the FINAL answer map so a preserved unacknowledged
+      // answer still renders as answered (and vice versa).
+      const states: QuestionState[] = data.questions.map((q) =>
+        answerMap.has(q.id) ? "answered" : "unanswered",
+      );
+      setQuestionStates(states);
+      setIsDisconnected(false);
+      setSaveServerFault(false);
+      setSaveFaultRequestId(null);
+    },
+    [getSaveQueueSummary],
+  );
 
   /**
    * Page-level loader: fetch + apply, catching errors into `loadError` and
@@ -678,12 +736,15 @@ export function TakeExamPage() {
   /**
    * One authoritative re-read per terminal-signal episode.
    *
-   * Triggered by terminal heartbeat/save signals: re-reads
-   * GET /api/candidate/attempts/:attemptId/take and routes the frozen
-   * snapshot through the SAME applySnapshot seam as the page loader, so the
-   * existing view derivation locks the UI (isLocked ← !snapshot.isEditable).
-   * The signal only triggers the re-read; the snapshot remains the authority
-   * — no client-invented terminal state.
+   * Triggered by terminal heartbeat/save signals and the deadline
+   * auto-submit gate: re-reads GET /api/candidate/attempts/:attemptId/take
+   * and routes the snapshot through the SAME applySnapshot seam as the page
+   * loader, in "converge" mode: a terminal/frozen snapshot locks the UI
+   * (isLocked ← !snapshot.isEditable) and its frozen answers win (B17); an
+   * editable snapshot re-bases the server clock and capabilities while the
+   * page's unacknowledged input is preserved (R-T4-2/#1051). The signal only
+   * triggers the re-read; the snapshot remains the authority — no
+   * client-invented terminal state.
    *
    * Deliberately does NOT flip isLoading (no full-page spinner flash on a
    * background convergence) and does NOT write loadError: a failed re-read
@@ -713,7 +774,7 @@ export function TakeExamPage() {
           ) {
             return null;
           }
-          applySnapshot(data);
+          applySnapshot(data, "converge");
           return data;
         })
         .catch(() => {
