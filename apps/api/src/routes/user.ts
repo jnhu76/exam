@@ -276,6 +276,8 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      // This pre-read only serves the fast 404; it never decides what the
+      // locked transaction below writes (see the INVARIANT in the callback).
       const target = await repo.findByOrganizationAndId(ctx, id);
       if (!target) {
         return reply
@@ -284,25 +286,42 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newRole = data.role;
-      const roleChanged = newRole !== undefined && newRole !== target.role;
-      const activeChanged =
-        data.isActive !== undefined && data.isActive !== target.isActive;
-      const profileChanged =
-        data.name !== undefined && data.name !== target.name;
       // `email` is optional. The contract normalizes blank to
       // undefined; the route treats "field present in body" as an explicit
       // write (blank -> null clears it), and "field absent" as a no-op.
       const emailProvided =
         request.body != null && "email" in (request.body as object);
-      const emailChanged =
-        emailProvided && (data.email ?? null) !== (target.email ?? null);
 
-      const finalUser = await mutateWithEffectiveAdminPostcondition(
+      // INVARIANT (#1042 / R-RT2-1): every change fact (roleChanged,
+      // activeChanged, profileChanged, emailChanged) is computed from the
+      // authoritative row read INSIDE the organization advisory lock, never
+      // from the pre-read above. Computing them from a pre-lock snapshot
+      // lets a concurrent committer under the same lock be second-guessed
+      // by stale decisions: an explicit role write is skipped, the
+      // revocation-grade side effects of a real deactivation (auth epoch
+      // advance, password-reset token burn) are dropped, and audits
+      // describe transitions that never happened. Under the seam's READ
+      // COMMITTED isolation the in-lock read observes the latest committed
+      // state (see adminInvariant.ts).
+      const outcome = await mutateWithEffectiveAdminPostcondition(
         fastify.db,
         ctx,
         async (tx) => {
           const txUserRepo = createUserRepo(tx);
           const txAssignmentRepo = createUserRoleAssignmentRepo(tx);
+
+          const current = await txUserRepo.findByOrganizationAndId(ctx, id);
+          if (!current) {
+            return null;
+          }
+
+          const roleChanged = newRole !== undefined && newRole !== current.role;
+          const activeChanged =
+            data.isActive !== undefined && data.isActive !== current.isActive;
+          const profileChanged =
+            data.name !== undefined && data.name !== current.name;
+          const emailChanged =
+            emailProvided && (data.email ?? null) !== (current.email ?? null);
 
           const updated = await txUserRepo.update(ctx, id, {
             ...(data.name !== undefined ? { name: data.name } : {}),
@@ -352,7 +371,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
               action: "user.role_changed",
               targetType: "user",
               targetId: id,
-              metadata: { oldRole: target.role, newRole },
+              // oldRole is the in-lock authoritative value — the audit must
+              // describe the transition that actually committed, not the
+              // pre-lock snapshot.
+              metadata: { oldRole: current.role, newRole },
             });
           }
           if (activeChanged) {
@@ -362,15 +384,16 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
               targetId: id,
             });
           }
-          return final;
+          return { final, profileChanged, emailChanged };
         },
       );
 
-      if (!finalUser) {
+      if (!outcome) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+      const { final: finalUser, profileChanged, emailChanged } = outcome;
 
       if (profileChanged || emailChanged) {
         recordBestEffortAudit(fastify, request, ctx, {
