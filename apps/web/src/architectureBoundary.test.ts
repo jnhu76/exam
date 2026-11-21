@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,6 +28,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  *     P1 mutants in a disposable `git worktree` and passes the pristine
  *     tree — the unit tests alone would not prove the checker is wired to
  *     the policy.
+ *   - #1074: every documented dotenv admission shape inside the shared db
+ *     mechanism is killed by the real gate that claims that surface
+ *     (check-architecture, check-env-surface), while prose mentions without
+ *     an import position stay clean — F-06 semantics keep env-file
+ *     admission owned by the entrypoints.
  *
  * Placement mirrors codeQualityGate.test.ts: apps/web is the DB-free app
  * suite and already hosts repo-level structural tests. The policy module is
@@ -45,6 +50,8 @@ const BUILD_GRAPH_POLICY_PATH = join(
   "build-graph-policy.mjs",
 );
 const CHECKER_PATH = join(REPO_ROOT, "scripts", "check-architecture.mjs");
+const ENV_SURFACE_PATH = join(REPO_ROOT, "scripts", "check-env-surface.mjs");
+const ENV_FILE_POLICY_PATH = join(REPO_ROOT, "config", "envFilePolicy.ts");
 
 /**
  * The ratified normative sets (#824 Owner dispositions D1/D3, ADR-010 for
@@ -397,16 +404,19 @@ describe("source early-warning pattern characterization (M7)", () => {
 });
 
 /**
- * CLI-level counterfactuals through the REAL gate entry. A disposable
+ * CLI-level counterfactuals through the REAL gate entries. A disposable
  * `git worktree` of this repository carries the mutations — the main
- * working tree is never touched. The checker and policy modules are copied
- * from the WORKING tree into the worktree so local pre-commit runs exercise
- * the current implementation (byte-identical no-op in CI, where HEAD equals
- * the working tree).
+ * working tree is never touched. The gate scripts and their policy modules
+ * are copied from the WORKING tree into the worktree so local pre-commit
+ * runs exercise the current implementation (byte-identical no-op in CI,
+ * where HEAD equals the working tree).
  *
  * INVARIANT: the copy list below must cover every repo-owned module the
- * checker imports. A missing module fails the pristine-green test with a
- * module-not-found error rather than passing vacuously.
+ * gated entries import — check-architecture.mjs loads architecture-policy
+ * and build-graph-policy; check-env-surface.mjs loads envFilePolicy (via
+ * Node type stripping, no other repo-owned imports). A missing module fails
+ * the pristine-green tests with a module-not-found error rather than
+ * passing vacuously.
  */
 describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", () => {
   let worktreeRoot: string;
@@ -427,6 +437,22 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     const result = spawnSync(
       process.execPath,
       [join(worktree, "scripts", "check-architecture.mjs")],
+      { cwd: worktree, encoding: "utf8" },
+    );
+    return {
+      code: result.status ?? -1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  }
+
+  // check-env-surface derives its scan root from its own script location
+  // (`new URL("../", import.meta.url)`), so running the worktree copy scans
+  // the worktree tree — no cwd coupling.
+  function runEnvSurface(): { code: number; stdout: string; stderr: string } {
+    const result = spawnSync(
+      process.execPath,
+      [join(worktree, "scripts", "check-env-surface.mjs")],
       { cwd: worktree, encoding: "utf8" },
     );
     return {
@@ -475,6 +501,16 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
       BUILD_GRAPH_POLICY_PATH,
       join(worktree, "config", "build-graph-policy.mjs"),
     );
+    // The env-surface gate (#1074 cases below) gets the same working-tree
+    // treatment; it loads config/envFilePolicy.ts via Node type stripping.
+    await copyFile(
+      ENV_SURFACE_PATH,
+      join(worktree, "scripts", "check-env-surface.mjs"),
+    );
+    await copyFile(
+      ENV_FILE_POLICY_PATH,
+      join(worktree, "config", "envFilePolicy.ts"),
+    );
   }, 30_000);
 
   afterAll(async () => {
@@ -494,8 +530,27 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     await rm(worktreeRoot, { recursive: true, force: true });
   });
 
+  // INVARIANT: every case below mutates only disposable-worktree files and
+  // restores them before yielding. The in-case checkouts only run on
+  // success, so the afterEach backstop restores the shared #1074 mutation
+  // target even when a case fails mid-way — a RED-state failure must not
+  // leak mutant lines into later cases (checkout of an unmodified file is a
+  // no-op for the cases that never touch it).
+  afterEach(() => {
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  });
+
   it("pristine committed tree passes the real gate", () => {
     const run = runChecker();
+    expect(run.stderr, run.stderr).toBe("");
+    expect(run.code).toBe(0);
+  }, 30_000);
+
+  // Zero-false-positive pin for the env-surface gate on the real tree: the
+  // allowlisted admission readers (loadRootEnv, vite dev config,
+  // vitest.shared, drizzle.config) and every other source file stay clean.
+  it("pristine committed tree passes the env-surface gate", () => {
+    const run = runEnvSurface();
     expect(run.stderr, run.stderr).toBe("");
     expect(run.code).toBe(0);
   }, 30_000);
@@ -546,9 +601,134 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     git(["checkout", "--", "apps/web/src/main.tsx"], worktree);
   }, 30_000);
 
-  it("restored tree passes the real gate again", () => {
+  // ── #1074 (WP-08 R-GATE-02): dotenv admission shapes in packages/db/src ──
+  //
+  // Both gates anchor their dotenv patterns to a quote immediately after
+  // `dotenv`, so every subpath spelling ("dotenv/config") escapes BOTH, and
+  // the checker additionally has no side-effect branch at all (bare
+  // `import "dotenv"` escapes lint:arch while env-surface catches it). F-06
+  // semantics: a module-level admission inside the shared db mechanism
+  // re-admits the developer .env behind the entrypoint's refusal (#733).
+  // INVARIANT: each documented admission shape is killed by the gate that
+  // claims the surface, with its precise diagnostic — these cases fail
+  // while any shape is admitted, and the augmentation must be anchored to
+  // import positions (see the prose negative below).
+
+  it("#1074: lint:arch kills the bare dotenv side-effect import", async () => {
+    await appendImport("packages/db/src/sqlIdent.ts", `import "dotenv";`);
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: lint:arch kills the dotenv/config subpath import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import "dotenv/config";`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: lint:arch kills the dotenv/config from-import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import dotenv from "dotenv/config";`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the dotenv/config subpath import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import "dotenv/config";`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the dotenv/config from-import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import dotenv from "dotenv/config";`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // Guard on the augmentation direction: the subpath closure must extend,
+  // not replace, the bare-specifier coverage these branches already provide.
+  it("#1074: lint:arch keeps killing the bare from/require dotenv shapes", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import { config } from "dotenv";`,
+    );
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const dotenv = require("dotenv");`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface keeps killing the bare dotenv side-effect import", async () => {
+    await appendImport("packages/db/src/sqlIdent.ts", `import "dotenv";`);
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // Minimal negative: the augmented patterns must match admission positions,
+  // not any occurrence of the specifier — otherwise prose in the shared
+  // mechanism becomes a false violation. Same textual posture as the M7
+  // characterization: import-shaped text matches, bare mentions do not.
+  it("#1074: prose mention without an import position stays clean", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `// see "dotenv/config" docs — admission belongs to the entrypoint`,
+    );
+    const archRun = runChecker();
+    expect(archRun.stderr, archRun.stderr).toBe("");
+    expect(archRun.code).toBe(0);
+    const envRun = runEnvSurface();
+    expect(envRun.stderr, envRun.stderr).toBe("");
+    expect(envRun.code).toBe(0);
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("restored tree passes the real gates again", () => {
     const run = runChecker();
     expect(run.stderr, run.stderr).toBe("");
     expect(run.code).toBe(0);
+    const envRun = runEnvSurface();
+    expect(envRun.stderr, envRun.stderr).toBe("");
+    expect(envRun.code).toBe(0);
   }, 30_000);
 });
