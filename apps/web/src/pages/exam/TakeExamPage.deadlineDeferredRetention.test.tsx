@@ -53,7 +53,8 @@ import {
  *     edit (B17 unchanged);
  *   - an ACKNOWLEDGED edit (save accepted) gets no preservation — an
  *     editable re-read still converges the editor to the server draft,
- *     exactly like a page reload would.
+ *     exactly like a page reload would — and the converged state continues
+ *     the server's accepted version/clientSeq sequence on the next save.
  */
 
 const T0 = new Date("2026-07-04T10:00:00.000Z");
@@ -62,16 +63,20 @@ const NEAR_DEADLINE = new Date(T0.getTime() + 3_000).toISOString();
 
 /**
  * The server truth every /take read returns while the attempt is editable:
- * still editable, and q1's confirmed draft is opt-a. When the candidate's
- * opt-b save FAILED, the draft lags the editor (draftVersion stays at the
- * load-time 1); the counterfactuals move the draft forward explicitly.
+ * still editable, and q1's confirmed draft is opt-a. The snapshot contract
+ * reports the accepted save version and the MAX accepted clientSeq for the
+ * question, so both parameters move together with the draft's save history:
+ * at load one accepted save exists (version 1, clientSeq 1); a counterfactual
+ * that stages a later write advances them explicitly.
  */
 function editableDraftSnapshot({
   draftAnswer = "opt-a",
   draftVersion = 1,
+  draftClientSeq = 1,
 }: {
   draftAnswer?: string;
   draftVersion?: number;
+  draftClientSeq?: number;
 } = {}): CandidateTakeSnapshot {
   return buildTakeSnapshot({
     timingMode: "timed_window",
@@ -81,7 +86,7 @@ function editableDraftSnapshot({
         answerValue: draftAnswer,
         answerSource: "draft",
         currentVersion: draftVersion,
-        currentClientSeq: 1,
+        currentClientSeq: draftClientSeq,
       },
     ],
     serverNow: T0_ISO,
@@ -364,15 +369,24 @@ describe("deadline editable-defer keeps unacknowledged edits (R-T4-2)", () => {
     apiGet.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/candidate/attempts/")) {
         takeHandler(path);
-        // draftVersion 2: another client's write landed AFTER this page's
-        // acknowledged opt-b, so the server draft is the newer truth.
-        return editableDraftSnapshot({ draftVersion: 2 });
+        // Another client's write landed AFTER this page's acknowledged opt-b:
+        // its save advanced the draft to version 3, and its clientSeq was the
+        // snapshot-contract max accepted value (2 + 1 = 3).
+        return editableDraftSnapshot({ draftVersion: 3, draftClientSeq: 3 });
       }
       throw new Error(`unexpected GET ${path}`);
     });
+    let answerSaveCalls = 0;
     apiPost.mockImplementation(async (path: string) => {
       if (typeof path === "string" && path.includes("/answers/")) {
-        return { accepted: true, serverVersion: 2, savedAt: T0_ISO };
+        answerSaveCalls += 1;
+        // First ACK is this page's opt-b (serverVersion 2); the save after
+        // the convergence continues the other client's version 3.
+        return {
+          accepted: true,
+          serverVersion: answerSaveCalls === 1 ? 2 : 4,
+          savedAt: T0_ISO,
+        };
       }
       return { ok: true, serverNow: T0_ISO };
     });
@@ -400,13 +414,26 @@ describe("deadline editable-defer keeps unacknowledged edits (R-T4-2)", () => {
     expect(screen.getByRole("radio", { name: "B" })).not.toBeChecked();
     expect(screen.getByRole("radio", { name: "A" })).toBeEnabled();
 
+    // The converged business state is contract-consistent: the next save
+    // continues from the server's accepted version/clientSeq (baseVersion 3,
+    // clientSeq max+1 = 4) — the editable re-read must not leave the page on
+    // a reset or stale versioned sequence (R-T4-2 AC-2).
+    fireEvent.click(screen.getByRole("radio", { name: "B" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(answerSavePosts()).toHaveLength(2);
+    expect(answerSavePosts()[1]!.answer).toBe("opt-b");
+    expect(answerSavePosts()[1]!.baseVersion).toBe(3);
+    expect(answerSavePosts()[1]!.clientSeq).toBe(4);
+
     // No failed saves exist, so no retry path may fire after connectivity
     // returns.
     await act(async () => {
       window.dispatchEvent(new Event("online"));
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(answerSavePosts()).toHaveLength(1);
+    expect(answerSavePosts()).toHaveLength(2);
     expect(submitPostCount()).toBe(0);
   });
 });
