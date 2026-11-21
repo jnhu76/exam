@@ -923,6 +923,85 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     });
   }, 30_000);
 
+  // ── #1074 (review round 1): dynamic import admission shapes ──
+  //
+  // Neither gate's dotenv pattern had an import()-position branch, so a
+  // dynamic admission (`await import("dotenv/config")`) escaped BOTH gates
+  // while the static from/require/side-effect branches were closed (#1074
+  // Known limitations: the dynamic/require shape evidence was truncated in
+  // the batch handoff — the require branch is covered by the augmented
+  // patterns and pinned by the bare from/require guard above; the dynamic
+  // branch is closed and pinned here).
+
+  it("#1074: lint:arch kills the dynamic dotenv/config import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv/config");`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: lint:arch kills the bare dynamic dotenv import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv");`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the dynamic dotenv/config import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv/config");`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the bare dynamic dotenv import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv");`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // Minimal negative for the import()-position anchoring: a dynamic import
+  // of a legitimate module must stay clean in both gates — only the dotenv
+  // specifier is banned, not the import() form itself.
+  it("#1074: dynamic import of a legitimate module stays clean", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("./database");`,
+    );
+    const archRun = runChecker();
+    expect(archRun.stderr, archRun.stderr).toBe("");
+    expect(archRun.code).toBe(0);
+    const envRun = runEnvSurface();
+    expect(envRun.stderr, envRun.stderr).toBe("");
+    expect(envRun.code).toBe(0);
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
   it("restored tree passes the real gates again", () => {
     const run = runChecker();
     expect(run.stderr, run.stderr).toBe("");
