@@ -407,6 +407,7 @@ describe("EA lock-order structural closure", () => {
       "enrollmentRepo.findByExamAndCandidateForUpdate",
       "enrollmentRepo.update",
       "gradingWorksetRepo.findByAttempt",
+      "examRepo.findByIdForShare",
     ];
     for (const op of repoOps) {
       const opIdx = b.indexOf(op);
@@ -578,6 +579,30 @@ describe("EA lock-order structural closure", () => {
       readProductionFile("packages/exam-engine/src/deadlineReconciliation.ts"),
     );
     expect(code).not.toMatch(/findByIdForUpdate/);
+  });
+
+  // #1038 R-T3-1/R-ENG-1: the canonical terminal closure owns the Exam
+  // authority read for the Enrollment terminal decision. Two structural
+  // halves: (1) the read must be the shared-locked one at its decision point
+  // and must not regress to the plain `findById` (the stale-authority gap);
+  // (2) grading.ts never acquires the Exam writer lock — the closure is a
+  // reader seam only (no FOR SHARE → FOR UPDATE upgrade; #668 no-upgrade,
+  // asserted in exam-runtime.md §6.6).
+  it("finalizeTerminalGrading reads the Exam authority FOR SHARE, never plain, and grading.ts never acquires the Exam writer lock (#1038/#668)", () => {
+    const body = functionBody(
+      "packages/exam-engine/src/grading.ts",
+      "finalizeTerminalGrading",
+    );
+    expect(body, "finalizeTerminalGrading body not found").not.toBeNull();
+    expect(body!).toMatch(/examRepo\.findByIdForShare\(/);
+    // A plain `examRepo.findById(` would reintroduce the stale-closeAt gap;
+    // the regex cannot match inside `findByIdForShare(`.
+    expect(body!).not.toMatch(/examRepo\.findById\(/);
+    const code = stripAllComments(
+      readProductionFile("packages/exam-engine/src/grading.ts"),
+    );
+    expect(code).not.toMatch(/findByIdForUpdate/);
+    expect(code).not.toMatch(/examRepo\.update\(/);
   });
 
   // prepareReconciledAttemptMutation composes reconciliation + the save-side

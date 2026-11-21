@@ -10,7 +10,7 @@ import type {
 } from "./attemptCommands.js";
 import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
-import { readGradingSnapshot, finalizeGrading } from "./grading.js";
+import { finalizeGrading } from "./grading.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import {
   assertCapabilityFor,
@@ -264,16 +264,6 @@ export async function ensureAttemptDeadlineReconciled(
 
   if (submittedAttempt.gradingStatus === GradingStatus.PendingManual) {
     return submittedAttempt;
-  }
-
-  const snapshot = await readGradingSnapshot(
-    examRepo,
-    enrollmentRepo,
-    attemptRepo,
-    attemptId,
-  );
-  if (!snapshot) {
-    throw new NotFoundError("Attempt not found after reconciliation");
   }
 
   // finalizeGrading aggregates from the workset. gradingWorksetRepo

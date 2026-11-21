@@ -363,7 +363,6 @@ async function finalizeInTx(
   db: Database,
   ctx: RequestContext,
   attemptId: string,
-  exam: Exam,
 ): Promise<boolean> {
   return executeInTransaction(db, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
@@ -509,7 +508,7 @@ async function runSerializedFinalizerSchedule(
   }
 
   // (3) T2 — independent session, unmodified production composition.
-  const t2 = finalizeInTx(connections.db2, f.adminCtx, secondAttemptId, f.exam);
+  const t2 = finalizeInTx(connections.db2, f.adminCtx, secondAttemptId);
   const blocked = await waitForBackendBlocked(connections.sqlObserver, t2Pid);
   expect(["relation", "transactionid", "tuple"]).toContain(
     blocked.blockedOnLocktype,

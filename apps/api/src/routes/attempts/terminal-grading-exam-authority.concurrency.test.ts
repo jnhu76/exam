@@ -58,7 +58,6 @@ import { createExamRepo } from "@exam/db/repository/examRepo";
 import { createAttemptRepo } from "@exam/db/repository/attemptRepo";
 import { createEnrollmentRepo } from "@exam/db/repository/enrollmentRepo";
 import { createAttemptGradingEntryRepo } from "@exam/db/repository/attemptGradingEntryRepo";
-import { createGradingQueueRepo } from "@exam/db/repository/gradingQueueRepo";
 import {
   executeInTransaction,
   setTransactionRetryLogger,
@@ -386,7 +385,7 @@ describe("terminal grading vs extendExam — Exam authority race (#1038)", () =>
     );
   }, 30_000);
 
-  it("A: extend committed inside the decision window — FOR SHARE serialization keeps the enrollment started (RED on master)", async () => {
+  it("A: extend committed inside the decision window — FOR SHARE serialization keeps the enrollment started", async () => {
     const wallNow = Date.now();
     const closeAtT1 = new Date(wallNow + 60 * MINUTE_MS);
     const closeAtT2 = new Date(wallNow + 90 * MINUTE_MS);

@@ -303,16 +303,6 @@ describe("crash/rollback atomicity", () => {
         },
       ]);
 
-      // Load the exam through the engine adapter (the gradeQuestion command
-      // takes the domain Exam shape).
-      const examRow = await createExamRepoAdapter(
-        createExamRepo(ctx.db),
-        adminCtx(ctx),
-      ).findById(seeded.examId);
-      if (!examRow) {
-        throw new Error("test fixture: exam row missing");
-      }
-
       await expect(
         executeInTransaction(ctx.db, async (tx) => {
           const { exams, enrollments, attempts } = createExamEngineRepos(
