@@ -69,11 +69,11 @@ test.describe("deadline editable-defer keeps unacknowledged edits (R-T4-2)", () 
     await page.clock.install();
     await startExamFromList(page, seeded.examId);
 
-    // The network dropout that fails the answer save also fails heartbeats:
-    // a SUCCESSFUL heartbeat would re-drive the failed saves from local
-    // drafts and race the verification re-read (header note). Fault it as a
-    // transport abort so the window-`online` event is the only retry
-    // trigger observed.
+    // The answer save below is faulted with a route-injected HTTP 500; the
+    // heartbeat is separately transport-aborted: a SUCCESSFUL heartbeat
+    // would re-drive the failed saves from local drafts and race the
+    // verification re-read (header note). Aborting it keeps the
+    // window-`online` event the only retry trigger observed.
     await page.route("**/api/attempts/*/heartbeat", (route) =>
       route.abort("failed"),
     );
