@@ -1,4 +1,4 @@
-import type { AttemptGradingEntry, Exam, ExamAttempt } from "@exam/domain";
+import type { AttemptGradingEntry, ExamAttempt } from "@exam/domain";
 import {
   InvalidStateTransitionError,
   NotFoundError,
@@ -7,6 +7,7 @@ import {
 } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
 import type { EnrollmentRepository } from "./attemptCommands.js";
+import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { finalizeTerminalGrading } from "./grading.js";
 import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
@@ -39,7 +40,10 @@ export interface GradeQuestionResult {
  *   - {@link finalizeTerminalGrading} owns: terminal score projection
  *     (Attempt + Enrollment) for BOTH auto and manual paths. It is
  *     provenance-agnostic: its sole precondition is a fully terminal
- *     workset, which the canonical aggregator validates.
+ *     workset, which the canonical aggregator validates. It also owns the
+ *     Exam authority read (FOR SHARE, in this transaction) for the
+ *     Enrollment terminal decision — callers do not supply an Exam snapshot
+ *     (#1038 R-T3-1/R-ENG-1).
  *
  * The flow is therefore:
  *
@@ -89,6 +93,7 @@ export interface GradeQuestionResult {
 export async function gradeQuestion(
   attemptRepo: AttemptRepository,
   enrollmentRepo: EnrollmentRepository,
+  examRepo: ExamRepository,
   worksetRepo: GradingWorksetRepository,
   capability: LockedEnrollmentAttemptIdentity,
   questionId: string,
@@ -96,7 +101,6 @@ export async function gradeQuestion(
   comment: string,
   graderId: string,
   now: Date,
-  exam: Exam,
 ): Promise<GradeQuestionResult> {
   const { attemptId } = capability;
   const attempt = await attemptRepo.findById(attemptId);
@@ -208,9 +212,9 @@ export async function gradeQuestion(
     const closed = await finalizeTerminalGrading(
       enrollmentRepo,
       attemptRepo,
+      examRepo,
       worksetRepo,
       capability,
-      exam,
       now,
     );
     if (!closed) {

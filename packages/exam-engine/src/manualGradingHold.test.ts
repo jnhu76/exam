@@ -460,9 +460,9 @@ describe("pure-objective inline auto-grade regression", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.examRepo,
       repos.gradingWorksetRepo,
       cap,
-      makeExam(),
       NOW,
     );
 
@@ -541,9 +541,9 @@ describe("finalizeGrading terminal guard on pending_manual", () => {
       finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.examRepo,
         repos.gradingWorksetRepo,
         cap,
-        makeExam(),
         NOW,
       ),
     ).rejects.toThrow(InvalidStateTransitionError);

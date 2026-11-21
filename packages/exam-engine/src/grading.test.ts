@@ -766,9 +766,9 @@ describe("grading transactional boundary", () => {
       return finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
+        harness.examRepo,
         makeResultWorksetRepo(attempt, exam, gradedAt),
         cap,
-        exam,
         gradedAt,
       );
     });
@@ -1018,9 +1018,9 @@ describe("finalizeGrading — idempotent replay and retake policy", () => {
     const result = await finalizeGrading(
       trackingEnrollmentRepo,
       trackingAttemptRepo,
+      repos.examRepo,
       repos.worksetRepo,
       cap,
-      exam,
       now,
     );
 
@@ -1049,9 +1049,9 @@ describe("finalizeGrading — idempotent replay and retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.examRepo,
       makeWorksetRepoFromResult(gradingResult),
       cap,
-      exam,
       now,
     );
 
@@ -1078,9 +1078,9 @@ describe("finalizeGrading — idempotent replay and retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.examRepo,
       makeWorksetRepoFromResult(gradingResult),
       cap,
-      exam,
       now,
     );
 
@@ -1103,9 +1103,9 @@ describe("finalizeGrading — idempotent replay and retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.examRepo,
       makeWorksetRepoFromResult(gradingResult),
       cap,
-      exam,
       now,
     );
 
@@ -1143,9 +1143,9 @@ describe("finalizeGrading — idempotent replay and retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.examRepo,
       makeWorksetRepoFromResult(failResult),
       cap,
-      exam,
       now,
     );
 

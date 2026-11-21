@@ -11,7 +11,6 @@ import { createAttemptInterruptionRepo } from "@exam/db/repository/attemptInterr
 import { createAttemptInterruptionEventRepo } from "@exam/db/repository/attemptInterruptionEventRepo";
 import {
   submitAttempt,
-  readGradingSnapshot,
   finalizeGrading,
   ensureAttemptDeadlineReconciled,
   lockEnrollmentAndAttempt,
@@ -243,9 +242,8 @@ export async function submitAndGradeAttempt(
           );
           const reconciledStatus = reconciled.status;
           // If reconciliation already froze the attempt, skip the remaining
-          // submit+grade work. This avoids redundant readGradingSnapshot,
-          // computeGradingResult, and finalizeGrading calls that would extend
-          // the FOR UPDATE lock unnecessarily.
+          // submit+grade work. This avoids a redundant finalizeGrading call
+          // that would extend the FOR UPDATE lock unnecessarily.
           if (
             reconciledStatus === "graded" ||
             reconciledStatus === "submitted"
@@ -294,21 +292,6 @@ export async function submitAndGradeAttempt(
           return "pending_manual" as const;
         }
 
-        // Re-read the grading snapshot from the SAME transaction so the answers
-        // feeding the score are the locked, post-submit answers. This is the
-        // freeze barrier: the score is derived from exactly the answer set that
-        // existed when the submit lock was held. (For the crash-recovery
-        // `submitted` path this re-runs objective auto-grading deterministically.)
-        const snapshot = await readGradingSnapshot(
-          exams,
-          enrollments,
-          attempts,
-          attemptId,
-        );
-        if (!snapshot) {
-          throw new NotFoundError("Attempt not found after submit");
-        }
-
         // FinalizeGrading is the single terminal authority — it loads
         // the grading workset and aggregates via `aggregateGradingEntries`. No
         // externally computed result is supplied (that would be a second score
@@ -319,9 +302,9 @@ export async function submitAndGradeAttempt(
         await finalizeGrading(
           enrollments,
           attempts,
+          exams,
           gradingWorksetRepo,
           cap,
-          snapshot.exam,
           now,
         );
         // Entry `submitted` means this transaction recovered a crash-landed

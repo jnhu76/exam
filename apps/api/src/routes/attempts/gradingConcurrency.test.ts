@@ -363,11 +363,10 @@ async function finalizeInTx(
   db: Database,
   ctx: RequestContext,
   attemptId: string,
-  exam: Exam,
 ): Promise<boolean> {
   return executeInTransaction(db, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
-    const { enrollments, attempts } = createExamEngineRepos(
+    const { exams, enrollments, attempts } = createExamEngineRepos(
       {
         examRepo: createExamRepo(tx),
         attemptRepo: txAttemptRepo,
@@ -387,9 +386,9 @@ async function finalizeInTx(
     return finalizeGrading(
       enrollments,
       attempts,
+      exams,
       gradingWorksetRepo,
       cap,
-      exam,
       new Date(),
     );
   });
@@ -463,7 +462,7 @@ async function runSerializedFinalizerSchedule(
 
   const t1 = executeInTransaction(connections.db1, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
-    const { enrollments, attempts } = createExamEngineRepos(
+    const { exams, enrollments, attempts } = createExamEngineRepos(
       {
         examRepo: createExamRepo(tx),
         attemptRepo: txAttemptRepo,
@@ -486,9 +485,9 @@ async function runSerializedFinalizerSchedule(
     return finalizeGrading(
       parked,
       attempts,
+      exams,
       gradingWorksetRepo,
       cap,
-      f.exam,
       new Date(),
     );
   });
@@ -509,7 +508,7 @@ async function runSerializedFinalizerSchedule(
   }
 
   // (3) T2 — independent session, unmodified production composition.
-  const t2 = finalizeInTx(connections.db2, f.adminCtx, secondAttemptId, f.exam);
+  const t2 = finalizeInTx(connections.db2, f.adminCtx, secondAttemptId);
   const blocked = await waitForBackendBlocked(connections.sqlObserver, t2Pid);
   expect(["relation", "transactionid", "tuple"]).toContain(
     blocked.blockedOnLocktype,

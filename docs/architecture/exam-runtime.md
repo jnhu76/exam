@@ -751,6 +751,8 @@ P3-FORMAL-P0-A 收敛（2026-07-07）：`aggregateGradingEntries` 现在只有 *
 
 历史调用点计数（2）在此修订前有效；本节描述的「终态分数聚合权威」语义不变，只是收敛到单一 closure seam 以修复 manual 路径下 `enrollment` 投影从未被写入的缺陷。
 
+closure 同时拥有 Enrollment 终态判定（`shouldEnrollmentComplete`）的 Exam 权威读：它在自身事务内以 `findByIdForShare`（FOR SHARE，#668 锁模式）读取 Exam，不再接受调用方传入的 Exam 快照（#1038 R-T3-1/R-ENG-1——事务外/无锁快照可能把已被合法 `extendExam` 替换的 `closeAt` 固化成不可逆 `completed`）。FOR SHARE 读是终态判定对考试窗口写者的线性化点：REPEATABLE READ 下快照之后的 closeAt 变更在此处触发 40001 并整事务重试到新权威；写者晚于该锁提交则排队在判定之后（reader-wins，与 `ensureAttemptDeadlineReconciled` seam 同一契约）。锁序 Enrollment → Attempt → Exam；closure 在该共享读之后不得升级 Exam 写锁（#668 no-upgrade）。
+
 **输入**：
 
 ```text

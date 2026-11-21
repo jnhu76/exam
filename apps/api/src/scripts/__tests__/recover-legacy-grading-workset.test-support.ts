@@ -352,11 +352,10 @@ export async function gradeManualViaGradingSurface(
     );
     const attempt = await attempts.findById(attemptId);
     if (!attempt) throw new Error("attempt disappeared");
-    const exam = await exams.findById(attempt.examId);
-    if (!exam) throw new Error("exam disappeared");
     return gradeQuestion(
       attempts,
       enrollments,
+      exams,
       createGradingWorksetRepoAdapter(txEntryRepo, ctx),
       cap,
       questionId,
@@ -364,7 +363,6 @@ export async function gradeManualViaGradingSurface(
       "",
       ctx.actorId,
       new Date(),
-      exam,
     );
   });
 }

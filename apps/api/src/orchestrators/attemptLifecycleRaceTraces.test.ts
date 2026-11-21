@@ -65,7 +65,6 @@ import {
   finalizeGrading,
   lockEnrollmentAndAttempt,
   prepareReconciledAttemptMutation,
-  readGradingSnapshot,
   saveAnswer,
   submitAttempt,
 } from "@exam/exam-engine";
@@ -563,21 +562,12 @@ describe("attempt lifecycle deterministic race traces (EXAM-341)", () => {
         await args.hold();
         return;
       }
-      const snapshot = await readGradingSnapshot(
-        repos.exams,
-        repos.enrollments,
-        repos.attempts,
-        attemptId,
-      );
-      if (!snapshot) {
-        throw new NotFoundError("Attempt not found after submit");
-      }
       await finalizeGrading(
         repos.enrollments,
         repos.attempts,
+        repos.exams,
         repos.gradingWorkset,
         cap,
-        snapshot.exam,
         args.now,
       );
       await args.hold();

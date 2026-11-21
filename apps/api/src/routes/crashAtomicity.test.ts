@@ -303,19 +303,9 @@ describe("crash/rollback atomicity", () => {
         },
       ]);
 
-      // Load the exam through the engine adapter (the gradeQuestion command
-      // takes the domain Exam shape).
-      const examRow = await createExamRepoAdapter(
-        createExamRepo(ctx.db),
-        adminCtx(ctx),
-      ).findById(seeded.examId);
-      if (!examRow) {
-        throw new Error("test fixture: exam row missing");
-      }
-
       await expect(
         executeInTransaction(ctx.db, async (tx) => {
-          const { attempts, enrollments } = createExamEngineRepos(
+          const { exams, enrollments, attempts } = createExamEngineRepos(
             {
               examRepo: createExamRepo(tx),
               attemptRepo: createAttemptRepo(tx),
@@ -335,6 +325,7 @@ describe("crash/rollback atomicity", () => {
           await gradeQuestion(
             attempts,
             enrollments,
+            exams,
             workset,
             cap,
             qId,
@@ -342,7 +333,6 @@ describe("crash/rollback atomicity", () => {
             "ok",
             ctx.admin.id,
             new Date(),
-            examRow,
           );
           throw new Error("SIMULATED_CRASH_AFTER_MUTATION");
         }),
@@ -364,7 +354,7 @@ describe("crash/rollback atomicity", () => {
       // Retry: terminal closure succeeds (attempt graded + enrollment
       // projection via finalizeTerminalGrading).
       await executeInTransaction(ctx.db, async (tx) => {
-        const { attempts, enrollments } = createExamEngineRepos(
+        const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
             attemptRepo: createAttemptRepo(tx),
@@ -384,6 +374,7 @@ describe("crash/rollback atomicity", () => {
         await gradeQuestion(
           attempts,
           enrollments,
+          exams,
           workset,
           cap,
           qId,
@@ -391,7 +382,6 @@ describe("crash/rollback atomicity", () => {
           "ok",
           ctx.admin.id,
           new Date(),
-          examRow,
         );
       });
       const finalRow = (await attemptRow(seeded.attemptId)) as {

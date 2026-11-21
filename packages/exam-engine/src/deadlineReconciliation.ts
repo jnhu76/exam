@@ -10,7 +10,7 @@ import type {
 } from "./attemptCommands.js";
 import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
-import { readGradingSnapshot, finalizeGrading } from "./grading.js";
+import { finalizeGrading } from "./grading.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import {
   assertCapabilityFor,
@@ -266,16 +266,6 @@ export async function ensureAttemptDeadlineReconciled(
     return submittedAttempt;
   }
 
-  const snapshot = await readGradingSnapshot(
-    examRepo,
-    enrollmentRepo,
-    attemptRepo,
-    attemptId,
-  );
-  if (!snapshot) {
-    throw new NotFoundError("Attempt not found after reconciliation");
-  }
-
   // finalizeGrading aggregates from the workset. gradingWorksetRepo
   // is the caller's tx-scoped repo (same one submitAttempt materialized into).
   // The caller-minted capability is threaded through to
@@ -283,9 +273,9 @@ export async function ensureAttemptDeadlineReconciled(
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    examRepo,
     gradingWorksetRepo,
     capability,
-    snapshot.exam,
     now,
   );
 
