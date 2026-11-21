@@ -48,7 +48,6 @@ import {
 } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import type {
-  ControlFlags,
   RequestContext,
   Exam,
   ExamProfile,
@@ -1040,10 +1039,51 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               return { exam: existing, draftObservation: false };
             }
           }
+          // #1040 PATCH presence semantics: resolve the two policy fields
+          // the repo persists as whole columns BEFORE the same-value guard,
+          // so the guard evaluates exactly the values that would be written.
+          // INVARIANT: an omitted field is never "reset to default" —
+          // `controlFlags` is a jsonb whole-column update, so a partial
+          // payload must merge with the current authoritative flags and
+          // re-satisfy the FULL canonical schema (the request schema's
+          // `.partial()` shape is wire-only); `resultPublicationMode`
+          // resolves from caller presence only (explicit mode > explicitly
+          // sent legacy showResultImmediately > keep the persisted mode).
+          // Draft only: published is schedule-only (guard above).
+          const mergedControlFlags =
+            exam.status === "draft" && data.controlFlags !== undefined
+              ? ExamSchema.shape.controlFlags.parse({
+                  ...exam.controlFlags,
+                  ...data.controlFlags,
+                })
+              : undefined;
+          const resolvedResultPublicationMode =
+            data.resultPublicationMode !== undefined
+              ? data.resultPublicationMode
+              : exam.status === "draft"
+                ? resolveResultPublicationMode(
+                    request.body,
+                    exam.resultPublicationMode,
+                  )
+                : undefined;
           // Same-value draft guard: skip mutation and audit when no field
-          // actually differs from the current exam.
+          // actually differs from the current exam. The guard input carries
+          // the resolved policy values (merged flags / resolved mode), so a
+          // patch that only re-sends current values stays a no-op.
           if (exam.status === "draft") {
-            const changedFields = determineChangedExamFields(data, existing);
+            const guardData = {
+              ...data,
+              ...(mergedControlFlags !== undefined
+                ? { controlFlags: mergedControlFlags }
+                : {}),
+              ...(resolvedResultPublicationMode !== undefined
+                ? { resultPublicationMode: resolvedResultPublicationMode }
+                : {}),
+            };
+            const changedFields = determineChangedExamFields(
+              guardData,
+              existing,
+            );
             if (changedFields.length === 0) {
               return { exam: existing, draftObservation: false };
             }
@@ -1089,25 +1129,36 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             }
           }
 
-          // 4. Mutate.
-          const updateData: Record<string, unknown> = { ...data };
-          if (data.openAt) updateData.openAt = new Date(data.openAt);
-          if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
-
-          // Coerce resultPublicationMode from the legacy flag when
-          // the caller set controlFlags.showResultImmediately but not the
-          // mode. Mirrors the create-handler shim.
-          if (data.resultPublicationMode !== undefined) {
-            updateData.resultPublicationMode = data.resultPublicationMode;
-          } else if (exam.status === "draft") {
-            // Always apply the coerced value so that legacy
-            // showResultImmediately: true (→ "immediate") is persisted,
-            // matching the create-handler behavior.
-            updateData.resultPublicationMode = resolveResultPublicationMode(
-              request.body,
-              data.resultPublicationMode ?? "immediate",
-            );
-          }
+          // 4. Mutate. Built field-wise into the narrowed repo input (no
+          // whole-object cast): openAt/closeAt coerce to Date, controlFlags
+          // carries the merged canonical object, and resultPublicationMode
+          // only carries caller-resolved input (#1040: "not provided" and
+          // "resolved to the persisted value" both mean no column write).
+          const {
+            openAt: patchOpenAt,
+            closeAt: patchCloseAt,
+            controlFlags: _partialControlFlags,
+            ...patchRest
+          } = data;
+          const updateData: ExamUpdateInput = {
+            ...definedPatchEntries(patchRest),
+            ...(patchOpenAt !== undefined
+              ? { openAt: new Date(patchOpenAt) }
+              : {}),
+            ...(patchCloseAt !== undefined
+              ? {
+                  closeAt:
+                    patchCloseAt === null ? null : new Date(patchCloseAt),
+                }
+              : {}),
+            ...(mergedControlFlags !== undefined
+              ? { controlFlags: mergedControlFlags }
+              : {}),
+            ...(resolvedResultPublicationMode !== undefined &&
+            resolvedResultPublicationMode !== exam.resultPublicationMode
+              ? { resultPublicationMode: resolvedResultPublicationMode }
+              : {}),
+          };
           // ADR-013 §3: interruption policy is a substantive authoring field,
           // mutable only while the exam is `draft` (the published guard above
           // already rejected any non-schedule field). When any interruption
@@ -1261,20 +1312,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
                       | number
                       | null)
                   : (exam.interruptionGracePerAttemptSeconds ?? null),
-              controlFlags: {
-                ...exam.controlFlags,
-                ...(updateData.controlFlags as
-                  | Partial<ControlFlags>
-                  | undefined),
-              },
+              controlFlags: mergedControlFlags ?? exam.controlFlags,
             });
           }
-          // The patch payload is schema-shaped (Record<string, unknown> after
-          // the Date coercions above), never a lifecycle write: `status` is
-          // not an UpdateExamRequest field, and transitions run through the
-          // engine funnel (reconcileExamForMutation / lifecycle commands).
-          // This is the only place it becomes the narrowed repo input; assert
-          // the lifecycle column cannot ride through the cast. Initial state
+          // The patch payload is schema-shaped, never a lifecycle write:
+          // `status` is not an UpdateExamRequest field, and transitions run
+          // through the engine funnel (reconcileExamForMutation / lifecycle
+          // commands). The narrowed ExamUpdateInput type already excludes the
+          // lifecycle columns at compile time; this runtime assert keeps the
+          // boundary fail-closed against future schema drift. Initial state
           // belongs to create commands.
           if ("status" in updateData || "gradingStatus" in updateData) {
             throw new Error(
@@ -1284,7 +1330,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const updated = (await repo.update(
             ctx,
             id,
-            updateData as ExamUpdateInput,
+            updateData,
           )) as Exam | null;
           if (!updated) return null;
           if (exam.status === "published") {
@@ -2382,6 +2428,56 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 };
 
 /**
+ * Zod types every optional output field as `T | undefined`, but the narrowed
+ * repo update input is compiled with `exactOptionalPropertyTypes` — a key is
+ * acceptable only when it carries a real value. A JSON request body never
+ * materializes explicit `undefined` entries, so dropping them is a pure
+ * narrowing of the same runtime patch value ahead of the field-wise
+ * `ExamUpdateInput` construction.
+ */
+type DefinedPatchEntries<T> = {
+  [K in keyof T]: Exclude<T[K], undefined>;
+};
+
+/**
+ * Strips `undefined`-valued entries from a parsed PATCH body (see
+ * {@link DefinedPatchEntries}). `null` survives: on nullish wire fields it is
+ * explicit business semantics, never absence.
+ */
+function definedPatchEntries<T extends Record<string, unknown>>(
+  source: T,
+): DefinedPatchEntries<T> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out as DefinedPatchEntries<T>;
+}
+
+/**
+ * Key-order-insensitive JSON serialization: PostgreSQL jsonb canonicalizes
+ * key order (length, then bytes) while zod output keeps schema order, so a
+ * naive `JSON.stringify` equality would flag structurally-equal values (e.g.
+ * a re-parsed `controlFlags`) as changed.
+ */
+function stableJsonStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJsonStringify).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const record = value as Record<string, unknown>;
+    const body = Object.keys(record)
+      .sort()
+      .map(
+        (key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`,
+      )
+      .join(",");
+    return `{${body}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
  * Returns the subset of request fields whose value differs from the current
  * exam. Fields not present in `data` are ignored. Used to skip no-op PATCH
  * mutations and their audits.
@@ -2403,7 +2499,7 @@ function determineChangedExamFields(
         typeof current === "object" &&
         current !== null
       ) {
-        return JSON.stringify(value) !== JSON.stringify(current);
+        return stableJsonStringify(value) !== stableJsonStringify(current);
       }
       return value !== current;
     })
