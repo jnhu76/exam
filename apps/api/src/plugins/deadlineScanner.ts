@@ -27,6 +27,7 @@ import {
   createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { raceLoopShutdown } from "../lib/loopShutdown.js";
 
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
 
@@ -465,6 +466,9 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   deadlineScannerMetrics.startedAt = fastify.now();
 
   let activeScan: Promise<void> | null = null;
+  // #1055: identity of the in-flight tick, kept beside its promise so the
+  // close hook can name the tick it abandons when the shutdown budget expires.
+  let activeTickId: string | null = null;
   let closing = false;
   const interval = setInterval(() => {
     if (closing || activeScan) return;
@@ -477,6 +481,7 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
     // tick-level error line. A background identity, never an HTTP requestId;
     // skipped ticks (the early return above) mint none.
     const tickId = randomUUID();
+    activeTickId = tickId;
     activeScan = (async () => {
       // #547 stall facts: in-flight window; settle clears activeSince and
       // stamps lastSettledAt in .finally (success or error alike).
@@ -557,6 +562,7 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
       }
     })().finally(() => {
       activeScan = null;
+      activeTickId = null;
       deadlineScannerMetrics.activeSince = null;
       deadlineScannerMetrics.consecutiveThrowTicks = threw
         ? deadlineScannerMetrics.consecutiveThrowTicks + 1
@@ -569,7 +575,21 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onClose", async () => {
     closing = true;
     clearInterval(interval);
-    await activeScan;
+    // #1055: never await an in-flight tick unbounded — a tick blocked on a
+    // DB lock would hold app.close() past the compose stop grace (SIGKILL /
+    // 137). The shared loop budget bounds the wait; an abandoned tick keeps
+    // running and its transaction still settles under executeInTransaction.
+    await raceLoopShutdown({
+      fastify,
+      inFlight: activeScan,
+      messages: {
+        clean: "Deadline scanner stopped cleanly",
+        failed: "Deadline scanner failed during shutdown",
+        abandoned:
+          "Deadline scanner shutdown timeout; in-flight tick abandoned and will settle under its own transaction owner",
+      },
+      abandonedFields: activeTickId === null ? {} : { tickId: activeTickId },
+    });
   });
 };
 
