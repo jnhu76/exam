@@ -15,6 +15,7 @@ import {
   createInterruptionEventRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { raceLoopShutdown } from "../lib/loopShutdown.js";
 import { reconcileSystemIncidents } from "../orchestrators/systemIncidentDelivery.js";
 
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.Heartbeat;
@@ -419,7 +420,19 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onClose", async () => {
     closing = true;
     clearInterval(interval);
-    await activeScan;
+    // #1055: bound the wait on an in-flight scan. A tick blocked on a DB lock
+    // must not hold app.close() past the compose stop grace; the shared loop
+    // budget abandons it and its transaction settles under its own owner.
+    await raceLoopShutdown({
+      fastify,
+      inFlight: activeScan,
+      messages: {
+        clean: "Heartbeat scanner stopped cleanly",
+        failed: "Heartbeat scanner failed during shutdown",
+        abandoned:
+          "Heartbeat scanner shutdown timeout; in-flight scan abandoned and will settle under its own transaction owner",
+      },
+    });
   });
 };
 

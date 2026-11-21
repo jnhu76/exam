@@ -81,8 +81,14 @@ function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
     // is NOT the old unconditional process.exit(): it fires only after
     // graceful close has settled, it is bounded, and it names what it cuts.
     // INVARIANT: BOUNDED_EXIT_ASSIST_MS is a term of the #351 shutdown
-    // budget contract (loop 8s + audit 10s + DB 10s + this 2s = 30s <
-    // compose stop_grace_period 45s, docker-compose.yml).
+    // budget contract. Serial worst case after #1055: ALL background loop
+    // hooks — the email outbox and the four scanners — share ONE 8s window
+    // (lib/loopShutdown.ts; the email loop's bound is the smaller of
+    // EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS and the remaining window), plus audit
+    // 10s + DB 10s + this 2s = 30s < compose stop_grace_period 45s
+    // (docker-compose.yml). The loops MUST keep sharing that window —
+    // independent per-loop 8s budgets plus the email 8s would total
+    // 4×8 + 8 + 10 + 10 + 2 = 62s.
     const assist = setTimeout(() => {
       app.log.warn(
         { activeResources: process.getActiveResourcesInfo() },

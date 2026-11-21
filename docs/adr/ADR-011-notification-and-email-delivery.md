@@ -546,21 +546,27 @@ Process-boundary differences by design:
   the poll interval instead of crashing the API process. The API is NOT
   the loop's failure container.
 - **Bounded shutdown** (revised by #351): on SIGTERM the loop stops within
-  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 8s). Rows left `processing`
-  past the bound are redelivered via lock-timeout recovery (documented
-  at-least-once). The standalone worker instead finishes its current batch
-  unbounded; the in-process bound prevents SIGTERM latency from scaling
-  with batch size × SMTP latency.
+  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` (default 8s) — and never past the app's
+  shared 8s loop window when other loop hooks are also draining (#1055).
+  Rows left `processing` past the bound are redelivered via lock-timeout
+  recovery (documented at-least-once). The standalone worker instead
+  finishes its current batch unbounded; the in-process bound prevents
+  SIGTERM latency from scaling with batch size × SMTP latency.
 
   The loop budget is one term of the deployment shutdown budget contract
-  (#351): Fastify onClose hooks run serially in reverse registration
-  order, so the app's whole graceful-shutdown worst case is
-  **email loop drain (8s) + audit drain (`AUDIT_DRAIN_TIMEOUT_MS`, 10s) +
-  DB pool close (`sql.end`, 10s) + bounded exit assist
-  (`BOUNDED_EXIT_ASSIST_MS`, 2s) = 30s**, and the app container's
+  (#351, extended by #1055): Fastify onClose hooks run serially in reverse
+  registration order, so the app's whole graceful-shutdown worst case is
+  **background loop hooks (8s — ONE window shared by the email outbox and
+  deadlineScanner / heartbeat / clientEventRetention / operabilityMonitor,
+  `lib/loopShutdown.ts`; the email loop's effective bound is the smaller of
+  `EMAIL_WORKER_SHUTDOWN_TIMEOUT_MS` and the remaining window) + audit drain
+  (`AUDIT_DRAIN_TIMEOUT_MS`, 10s) + DB pool close (`sql.end`, 10s) + bounded
+  exit assist (`BOUNDED_EXIT_ASSIST_MS`, 2s) = 30s**, and the app container's
   `stop_grace_period` (45s) must strictly dominate that sum — otherwise a
-  stuck in-flight send turns SIGTERM into SIGKILL (exit 137). The exit
-  assist exists because work ABANDONED by the bounded shutdown (the
+  stuck in-flight send or loop tick turns SIGTERM into SIGKILL (exit 137).
+  The loop hooks MUST keep sharing that single window: independent per-loop
+  8s budgets plus the email 8s would total 4×8 + 8 + 10 + 10 + 2 = 62s. The
+  exit assist exists because work ABANDONED by the bounded shutdown (the
   in-flight send itself) keeps ref'ed timers/sockets that would hold the
   process open past the grace after `app.close()` has settled; it waits
   briefly for natural exit, then logs the remaining owners and exits with

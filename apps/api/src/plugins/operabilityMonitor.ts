@@ -3,6 +3,7 @@ import fp from "fastify-plugin";
 import { createSystemStatsRepo } from "@exam/db/repository/systemStatsRepo";
 import type { Database } from "@exam/db/types";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { raceLoopShutdown } from "../lib/loopShutdown.js";
 import { heartbeatMetrics } from "./heartbeat.js";
 import { deadlineScannerMetrics } from "./deadlineScanner.js";
 import {
@@ -629,7 +630,20 @@ const operabilityMonitorPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onClose", async () => {
     closing = true;
     clearInterval(interval);
-    await activeTick;
+    // #1055: same bounded-close contract as the other loop hooks. The probe
+    // is already bounded by READINESS_PROBE_BUDGET_MS, but the onClose await
+    // itself must not be unbounded — any future tick dependency would
+    // otherwise hold app.close() open.
+    await raceLoopShutdown({
+      fastify,
+      inFlight: activeTick,
+      messages: {
+        clean: "Operability monitor stopped cleanly",
+        failed: "Operability monitor failed during shutdown",
+        abandoned:
+          "Operability monitor shutdown timeout; in-flight tick abandoned",
+      },
+    });
   });
 };
 
