@@ -537,7 +537,25 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
   // leak mutant lines into later cases (checkout of an unmodified file is a
   // no-op for the cases that never touch it).
   afterEach(() => {
-    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+    git(
+      [
+        "checkout",
+        "--",
+        "packages/db/src/sqlIdent.ts",
+        "packages/domain/src/errors.ts",
+        "packages/authz/src/systemActor.ts",
+        "packages/contracts/src/common.ts",
+        "packages/auth/src/tokens.ts",
+        "apps/api/src/config/runtimeConfig.ts",
+        "packages/exam-engine/src/answerProtocol.ts",
+        "packages/exam-engine/src/admissionCommands.ts",
+        "apps/api/src/demo-seed-grader.ts",
+        "apps/api/src/routes/attempts.ts",
+        "packages/db/src/repository/attemptRepo.ts",
+        "apps/api/src/scripts/recover-legacy-grading-workset.ts",
+      ],
+      worktree,
+    );
   });
 
   it("pristine committed tree passes the real gate", () => {
@@ -721,6 +739,188 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     expect(envRun.stderr, envRun.stderr).toBe("");
     expect(envRun.code).toBe(0);
     git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // ── #1074 scope 1 — one kill-case per inline architecture ban that no
+  // existing probe consumes. Each case pins ONE real invariant: it first
+  // appends the LEGAL shape for that boundary (the minimal negative — the
+  // pattern must not swallow legitimate code) and then the documented
+  // violation shape, asserting the REAL gate kills the latter with its
+  // precise diagnostic. Deleting the corresponding inline block from
+  // scripts/check-architecture.mjs fails exactly that case, so rule death
+  // is visible in the suite (E0: deleting all nine inline blocks left every
+  // gate green). Mutants exist only in the disposable worktree.
+  interface InlineBanProbe {
+    readonly target: string;
+    readonly legalTarget?: string;
+    readonly legal: string;
+    readonly violation: string;
+    readonly diagnostics: readonly string[];
+  }
+
+  async function expectInlineBan(probe: InlineBanProbe): Promise<void> {
+    const legalTarget = probe.legalTarget ?? probe.target;
+    await appendImport(legalTarget, probe.legal);
+    const legalRun = runChecker();
+    expect(legalRun.stderr, legalRun.stderr).toBe("");
+    expect(legalRun.code).toBe(0);
+    git(["checkout", "--", legalTarget], worktree);
+
+    await appendImport(probe.target, probe.violation);
+    const killRun = runChecker();
+    expect(killRun.code, killRun.stderr).toBe(1);
+    expect(killRun.stderr).toContain(probe.target);
+    for (const diagnostic of probe.diagnostics) {
+      expect(killRun.stderr).toContain(diagnostic);
+    }
+    git(["checkout", "--", probe.target], worktree);
+  }
+
+  it("#1074: domain stays a leaf package (no fastify/react/drizzle/@exam)", async () => {
+    // packages/domain is the transport-independent domain core; importing
+    // any runtime dependency there would couple the domain vocabulary to a
+    // delivery mechanism (repo boundary rule, AGENTS.md §5).
+    await expectInlineBan({
+      target: "packages/domain/src/errors.ts",
+      legal: `import { ExamErrorCode } from "./enums";`,
+      violation: `export * from "@exam/db";`,
+      diagnostics: ["domain must remain a leaf package"],
+    });
+  }, 30_000);
+
+  it("#1074: authz stays a leaf package (no fastify/react/drizzle)", async () => {
+    // authz is the RBAC leaf (ADR-010): the permission vocabulary must stay
+    // portable, reaching only @exam/domain.
+    await expectInlineBan({
+      target: "packages/authz/src/systemActor.ts",
+      legal: `import { permission } from "@exam/domain";`,
+      violation: `import { FastifyInstance } from "fastify";`,
+      diagnostics: [
+        "authz must stay a leaf package (no fastify/React/Drizzle)",
+      ],
+    });
+  }, 30_000);
+
+  it("#1074: contracts cannot depend on fastify", async () => {
+    // @exam/contracts is the shared wire-format authority; transport types
+    // would leak server plumbing into every consumer of the contract.
+    await expectInlineBan({
+      target: "packages/contracts/src/common.ts",
+      legal: `import { ExamError } from "@exam/domain";`,
+      violation: `import type { FastifyRequest } from "fastify";`,
+      diagnostics: ["contracts cannot depend on fastify"],
+    });
+  }, 30_000);
+
+  it("#1074: auth package must not read process.env", async () => {
+    // #733 R3: @exam/auth owns the JWT/password mechanism only; application
+    // mode and secret policy enter as explicit arguments, never from the
+    // process environment (the canonical authority is settings/runtimeConfig).
+    await expectInlineBan({
+      target: "packages/auth/src/tokens.ts",
+      legal: `export interface TokenConfig { issuer: string; }`,
+      violation: `const mode = process.env.NODE_ENV;`,
+      diagnostics: ["auth package must not read process.env"],
+    });
+  }, 30_000);
+
+  it("#1074: apps/api must not read the raw APP_MODE env var", async () => {
+    // #733 R4 (F-05/F-08): runtime mode is resolved ONLY by @exam/db
+    // parseAppMode; a consumer reading the raw env re-implements the
+    // precedence policy (APP_MODE authoritative, NODE_ENV fallback) and
+    // silently drifts. Other process.env reads stay legal — the pattern
+    // pins the two mode variables only.
+    await expectInlineBan({
+      target: "apps/api/src/config/runtimeConfig.ts",
+      legal: `const port = Number(process.env.PORT ?? 3000);`,
+      violation: `const rawMode = process.env.APP_MODE;`,
+      diagnostics: ["runtime mode comes from @exam/db parseAppMode"],
+    });
+  }, 30_000);
+
+  it("#1074: packages/db must not read the raw NODE_ENV env var", async () => {
+    // Same rule as above, second scan root (apps/api/src and packages/db/src
+    // are the modules owning runtime-mode consumers).
+    await expectInlineBan({
+      target: "packages/db/src/sqlIdent.ts",
+      legal: `const debug = process.env.DEBUG === "1";`,
+      violation: `const rawEnv = process.env.NODE_ENV;`,
+      diagnostics: ["runtime mode comes from @exam/db parseAppMode"],
+    });
+  }, 30_000);
+
+  it("#1074: exam-engine cannot depend on fastify", async () => {
+    // The exam state machine is transport-independent; a fastify import
+    // would bind the engine to the HTTP delivery layer (repo boundary rule).
+    await expectInlineBan({
+      target: "packages/exam-engine/src/answerProtocol.ts",
+      legal: `import { ExamError } from "@exam/domain";`,
+      violation: `import { FastifyPluginAsync } from "fastify";`,
+      diagnostics: ["exam-engine cannot depend on fastify"],
+    });
+  }, 30_000);
+
+  it("#1074: no cast to LockedEnrollmentAttemptIdentity in exam-engine", async () => {
+    // Lock-order capability: the brand symbols are module-private and the
+    // only legitimate mint is lockEnrollmentAndAttempt — a cast forges the
+    // repo-affinity proof. The legal shape is the type annotation the real
+    // mint seam uses (lockSeam.ts), not a cast.
+    await expectInlineBan({
+      target: "packages/exam-engine/src/admissionCommands.ts",
+      legal: `const minted: LockedEnrollmentAttemptIdentity = capability;`,
+      violation: `const forged = {} as LockedEnrollmentAttemptIdentity;`,
+      diagnostics: ["do not cast to LockedEnrollmentAttemptIdentity"],
+    });
+  }, 30_000);
+
+  it("#1074: no cast to ReconciledAttemptMutationContext in apps/api", async () => {
+    // Same forgery defense for the opaque Attempt mutation context: the
+    // only legitimate provenance is prepareReconciledAttemptMutation. This
+    // case pins the apps/api/src scan root (the cast ban is enforced in
+    // both the engine and the API application).
+    await expectInlineBan({
+      target: "apps/api/src/demo-seed-grader.ts",
+      legal: `const prepared: ReconciledAttemptMutationContext = context;`,
+      violation: `const forged = {} as ReconciledAttemptMutationContext;`,
+      diagnostics: ["do not cast to ReconciledAttemptMutationContext"],
+    });
+  }, 30_000);
+
+  it("#1074: routes must use repositories, not db.select", async () => {
+    // Repository funnel (repo boundary rule): route handlers reach data
+    // through repositories; a direct db builder call inside a route bypasses
+    // the query ownership boundary. The legal shape is the same builder
+    // chain inside the repository layer, where db access is owned.
+    await expectInlineBan({
+      target: "apps/api/src/routes/attempts.ts",
+      legalTarget: "packages/db/src/repository/attemptRepo.ts",
+      legal: `const rows = await db.select().from(users);`,
+      violation: `const rows = await db.select().from(examAttempts);`,
+      diagnostics: ["routes must use repositories"],
+    });
+  }, 30_000);
+
+  it("#1074: routes must not import drizzle-orm directly", async () => {
+    await expectInlineBan({
+      target: "apps/api/src/routes/attempts.ts",
+      legalTarget: "packages/db/src/repository/attemptRepo.ts",
+      legal: `import { sql } from "drizzle-orm";`,
+      violation: `import { sql } from "drizzle-orm";`,
+      diagnostics: ["routes must not import drizzle-orm directly"],
+    });
+  }, 30_000);
+
+  it("#1074: routes must not import the DB schema directly", async () => {
+    // The schema export is reachable outside routes (e.g. api scripts), so
+    // the ban is anchored to the routes scan root only — the legal shape
+    // imports the same specifier from a non-route api module.
+    await expectInlineBan({
+      target: "apps/api/src/routes/attempts.ts",
+      legalTarget: "apps/api/src/scripts/recover-legacy-grading-workset.ts",
+      legal: `import { examAttempts } from "@exam/db/schema";`,
+      violation: `import { examAttempts } from "@exam/db/schema";`,
+      diagnostics: ["routes must not import DB schema directly"],
+    });
   }, 30_000);
 
   it("restored tree passes the real gates again", () => {
