@@ -321,6 +321,10 @@ async function requestWithMeta<T>(
     if (!response.ok) {
       if (
         response.status === 401 &&
+        // A caller that aborted this request already superseded it; a late 401
+        // that still arrives (e.g. already in flight) must not navigate on the
+        // superseded request's behalf (R-WD-1, #1054).
+        !init?.signal?.aborted &&
         !ANONYMOUS_LEGAL_PATHS.has(window.location.pathname)
       ) {
         navigateFn?.("/login");

@@ -178,6 +178,27 @@ describe("api client", () => {
       expect(navigateMock).toHaveBeenCalledWith("/login");
     });
 
+    it("does not redirect when the caller superseded the request (aborted signal)", async () => {
+      const navigateMock = vi.fn();
+      setNavigate(navigateMock);
+      const controller = new AbortController();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(() => {
+          // The 401 is already on the wire when the caller aborts: the abort
+          // cannot cancel delivery, only withdraw the interceptor's authority
+          // to navigate on the superseded request's behalf.
+          controller.abort();
+          return Promise.resolve(new Response(null, { status: 401 }));
+        }),
+      );
+
+      await expect(
+        api.get("/api/me", { signal: controller.signal }),
+      ).rejects.toThrow("401");
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
     it("does not throw if navigate is not set on 401", async () => {
       setNavigate(null as never);
       vi.stubGlobal(
