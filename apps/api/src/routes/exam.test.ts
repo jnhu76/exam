@@ -1950,20 +1950,24 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
       new URL("./exam.test.ts", import.meta.url),
       "utf8",
     );
-    const caseStart = source.indexOf(
-      '"rejected cancel (active attempts) writes NO audit event"',
+    // Anchor on the `it(` declaration: the bare title literal also occurs in
+    // this self-check's own source, so searching for it would match here when
+    // the target case is renamed or deleted.
+    const caseStart = source.search(
+      /^[ \t]*it\("rejected cancel \(active attempts\) writes NO audit event"/m,
     );
-    expect(caseStart, "target test case present in this file").toBeGreaterThan(
-      -1,
-    );
+    expect(
+      caseStart,
+      "target test case declaration present in this file",
+    ).toBeGreaterThan(-1);
     const caseBody = source.slice(
       caseStart,
       source.indexOf("\n  });", caseStart),
     );
-    expect(
-      caseBody,
-      "audit read must be guarded by expect(auditRes.statusCode).toBe(200) before asserting zero events",
-    ).toContain("expect(auditRes.statusCode).toBe(200)");
+    // Line-anchored executable form: a commented-out guard must not count.
+    expect(caseBody).toMatch(
+      /^[ \t]*expect\(auditRes\.statusCode\)\.toBe\(200\);[ \t]*$/m,
+    );
     expect(
       caseBody,
       "read failure must not be folded to an empty list",
