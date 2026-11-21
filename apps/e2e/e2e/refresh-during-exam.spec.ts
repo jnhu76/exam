@@ -1,12 +1,9 @@
-import {
-  test,
-  expect,
-  type APIRequestContext,
-  type Response,
-} from "@playwright/test";
+import { test, expect, type Response } from "@playwright/test";
 import { seedExam } from "../lib/seed";
 import {
+  candidateApiToken,
   candidateLogin,
+  getAnswer,
   startExamFromList,
   answerTrueFalse,
   submitExam,
@@ -24,33 +21,6 @@ import {
 //   submit → correct score
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-
-async function apiToken(
-  request: APIRequestContext,
-  username: string,
-  password: string,
-): Promise<string> {
-  const r = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: { username, password },
-  });
-  if (!r.ok()) throw new Error(`login failed: ${r.status()}`);
-  const t = r.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-  if (!t) throw new Error("no auth-token cookie");
-  return t;
-}
-
-async function getAnswer(
-  request: APIRequestContext,
-  token: string,
-  attemptId: string,
-): Promise<unknown> {
-  const r = await request.get(`${BASE_URL}/api/attempts/${attemptId}`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
-  if (!r.ok()) throw new Error(`GET attempt failed: ${await r.text()}`);
-  const b = (await r.json()) as { answers: Array<{ answer: unknown }> };
-  return b.answers[0]?.answer;
-}
 
 interface SaveResult {
   clientSeq: number;
@@ -110,11 +80,7 @@ test.describe("refresh during exam", () => {
     await candidateLogin(page, seeded.candidate);
     await startExamFromList(page, seeded.examId);
 
-    const token = await apiToken(
-      request,
-      seeded.candidate.username,
-      seeded.candidate.password,
-    );
+    const token = await candidateApiToken(request, seeded.candidate);
 
     const detailRes = await request.get(
       `${BASE_URL}/api/candidate/exams/${seeded.examId}`,
