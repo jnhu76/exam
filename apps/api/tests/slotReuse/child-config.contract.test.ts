@@ -88,7 +88,8 @@ function listedFiles(output: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.includes(".test.ts"))
-    .map((line) => line.split(" > ")[0]);
+    .map((line) => line.split(" > ")[0])
+    .filter((path): path is string => path !== undefined);
   return [...new Set(paths)];
 }
 

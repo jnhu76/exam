@@ -50,8 +50,9 @@ const parallelism = resolveParallelism(process.env);
 export default defineConfig(() => ({
   // #741: per-package implicit envDir admission is OFF — package-local
   // .env* files can never reach import.meta.env. Pinned by
-  // scripts/check-env-surface.mjs.
-  envDir: false,
+  // scripts/check-env-surface.mjs. `as const` keeps the literal `false`
+  // (vite envDir: string | false) from widening to `boolean`.
+  envDir: false as const,
   // #794: every @exam/* import — root, deep subpath, direct or transitive,
   // including this project's globalSetup file loaded by the main-process
   // runner — resolves to workspace SOURCES via the shared resolution plugin

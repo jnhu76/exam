@@ -65,7 +65,12 @@ export async function runBootstrapLifetimeFixture(
 ): Promise<void> {
   const isFirstFile = await electFirstFile();
   const workerDb = resolveTestScope(process.env).postgresDatabaseName;
-  expect(workerDb).not.toBeNull();
+  if (workerDb === null) {
+    throw new Error(
+      "bootstrap-lifetime fixture requires worker-database isolation: " +
+        "postgresDatabaseName resolved to null (TEST_DB_ISOLATION=worker-database expected)",
+    );
+  }
   const poolId = process.env.VITEST_POOL_ID ?? null;
   const lockAcquisitions = getTestInfraLockAcquisitionCount();
 
