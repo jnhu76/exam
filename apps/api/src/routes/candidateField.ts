@@ -23,7 +23,7 @@ const idParamsSchema = z.object({ id: z.string().uuid() });
  * the at-most-one identity field invariant. Any other 23505 on this table
  * (e.g. the per-org field-name unique index) keeps its existing behavior.
  */
-function isIdentityFieldIndexViolation(err: unknown): boolean {
+export function isIdentityFieldIndexViolation(err: unknown): boolean {
   if (!hasPostgresErrorCode(err, "23505")) return false;
   let current: unknown = err;
   const visited = new Set<unknown>();

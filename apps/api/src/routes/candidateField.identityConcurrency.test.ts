@@ -36,7 +36,9 @@ import { eq, sql } from "drizzle-orm";
 import postgres from "postgres";
 import { hashPassword } from "@exam/auth/password";
 import { signJWT } from "@exam/auth/session";
-import candidateFieldRoutes from "./candidateField.js";
+import candidateFieldRoutes, {
+  isIdentityFieldIndexViolation,
+} from "./candidateField.js";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp, uniquePrefix, type TestContext } from "./testHelpers.js";
 import { createPostgresDatabase } from "@exam/db/postgres";
@@ -568,6 +570,9 @@ describe("candidate identity invariants — deterministic concurrency (#1066)", 
         pgErr = err;
       });
       expect(hasPostgresErrorCode(pgErr, "23505")).toBe(true);
+      // The route's index-violation mapping must classify this REAL 23505:
+      // postgres.js v3 exposes the violated constraint as `constraint_name`.
+      expect(isIdentityFieldIndexViolation(pgErr)).toBe(true);
     } finally {
       // Unpark T1 even when an evidence assertion already failed.
       if (!releaseT1.isSettled()) releaseT1.resolve(undefined);
