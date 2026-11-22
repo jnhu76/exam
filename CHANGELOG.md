@@ -8,6 +8,103 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-11-22
+
+### Added
+
+- Native observability V1 signal contracts and diagnostics (#999–#1003,
+  #1006–#1009, PRs #1015–#1031): system diagnostics expose heartbeat
+  incident counters and `oldestDuePendingAgeSeconds` with exact null
+  semantics (legacy `oldestPendingAge` deprecated behind a
+  compatibility window), commit-authoritative submit/grade outcome
+  events, admin command outcome events with rejection correlation, and
+  deadline-scanner tick settlement causality; DB retry warns are
+  correlated with request identity.
+- Database migration `0047_candidate_fields_org_identity_uidx` (#1066,
+  PR #1069): a partial unique index enforcing at most one unique
+  candidate identity field per organization, with a fail-closed
+  pre-audit that aborts before any DDL when an organization already
+  carries duplicates.
+
+### Changed
+
+- The OpenTelemetry migration plan is rejected and superseded by native
+  observability (ADR-028 → ADR-029): the post-v0.0.15 OTel waves (PRs
+  #973–#980, #994) were fully reverted by PR #997 before the native V1
+  landed (#964 closed as superseded). No OTel SDK or observability
+  compose stack ships in this release.
+- Conventional commit messages are enforced by policy and a CI gate on
+  all pull requests (PR #995).
+- Container runtimes are standardized on glibc; the web healthcheck
+  switched to curl; the Node.js base image moved 24.22.1 → 24.22.3
+  (PR #1018).
+- pnpm fails closed on stale dependencies before run/exec, and deploy
+  installs full workspace manifests before the frozen install (PR
+  #1033).
+
+### Fixed
+
+- Pino error logs no longer leak data-derived SQL and bound parameters,
+  non-Error marker fields, or prototype-chain label keys (#998, PR
+  #1014); raw email worker errors no longer reach logs, heartbeat
+  storage or diagnostics (#1012, PR #1016).
+- Duplicate `questionIds` are rejected at the authoring request
+  boundary and re-checked on persisted/merged policy (#1039, PR #1043).
+- Terminal grading reads the Exam authority with FOR SHARE inside the
+  grading transaction, so concurrent `extendExam` can no longer commit
+  an Enrollment against a stale snapshot (#1041, PR #1046).
+- PATCH user change facts are computed inside the authority lock
+  (#1042, PR #1044); PATCH draft policy fields are presence-based
+  instead of implicitly overwriting `resultPublicationMode` and control
+  flags (#1040, PR #1045).
+- Publish resolves its content snapshot under the exam row lock inside
+  the publish transaction (#1065, PR #1070).
+- The deadline scanner bounds its per-candidate transaction lock waits
+  (#1071, PR #1075); background-loop `onClose` no longer awaits
+  in-flight ticks unboundedly (#1055, PR #1061).
+- The candidate identity-field invariant now has code guards, a
+  candidate-identity advisory lock and the `0047` database backstop;
+  removing the unique field while candidates exist is rejected
+  fail-closed (#1066, PR #1069).
+- Cross-organization join reads are scoped to the caller organization
+  (#1067, PR #1068).
+- Web: deadline re-read preserves unconfirmed answers (#1051, PR
+  #1063); proctor/attempt detail routes re-key their page instance on
+  `:id` changes (#1052, PR #1059); late session-restore probes are
+  superseded after login (#1054, PR #1060); proctor timeline metadata
+  is projected through an allowlist of own keys, fixing the
+  prototype-chain 500 (#1057, PR #1058); operations overview polling is
+  isolated per source (PR #1034).
+- Published exam PATCH schedule windows are validated by the canonical
+  rules before persistence (#1053, PR #1064); E2E failed-login
+  diagnostics redact credentials (#1048, PR #1049).
+
+### Security
+
+- Node.js base image updated to 24.22.3 (PR #1018).
+
+### Deployment / operations
+
+- One database migration ships (`0047`). Each persistent target
+  environment must run the read-only duplicate-identity precheck from
+  #1079 Track C before deploying; any offending row is a HOLD DEPLOY
+  and an owner data decision (the migration also self-aborts
+  fail-closed before DDL). Rollback of the migration is a reversible
+  `DROP INDEX`.
+
+### Internal / infrastructure
+
+- Architecture gates hardened: the route DB ban moved to a policy
+  table closing 12 classes of syntax escape (#1072, PR #1078); dotenv
+  admission holes closed with counterfactual kill-cases (#1074, PR
+  #1076); API test sources and root vitest files brought inside the
+  typecheck fileset (#1073, PR #1077).
+- Node 26 test-host compatibility resolved (#1024, PR #1033);
+  TypeScript code-review skill documented (PR #1037); login/submit
+  capacity research archived (#1021, PR #1036).
+- Dev-only dependency additions `@commitlint/lint`, `@commitlint/load`
+  (PR #995); the runtime dependency set is unchanged.
+
 ## [0.0.15] - 2026-11-14
 
 ### Changed
