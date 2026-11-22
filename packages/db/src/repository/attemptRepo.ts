@@ -735,6 +735,12 @@ export function createAttemptRepo(db: Database) {
         eq(examAttempts.examId, examId),
         eq(examAttempts.status, "graded"),
         isNotNull(examAttempts.score),
+        // Same-org predicates on the joined profile/User (same shape as
+        // listByExam): exam_attempts.candidate_id and
+        // candidate_profiles.user_id are global FKs, so a caller-org attempt
+        // could otherwise project a foreign-org candidate identity.
+        eq(candidateProfiles.organizationId, orgId),
+        eq(users.organizationId, orgId),
       );
 
       if (options.passFilter === "passed") {

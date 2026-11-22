@@ -51,6 +51,11 @@ export function createGradingQueueRepo(db: Database) {
           and(
             eq(candidateProfiles.organizationId, orgId),
             eq(candidateProfiles.id, candidateId),
+            // Same-org predicate on the User join: candidate_profiles.user_id
+            // is a global FK, so a caller-org profile can reference another
+            // org's User. Without it the join projects the foreign user's
+            // name and password hash into the caller's process.
+            eq(users.organizationId, orgId),
           ),
         );
       return (
