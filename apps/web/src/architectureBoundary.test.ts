@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,6 +28,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  *     P1 mutants in a disposable `git worktree` and passes the pristine
  *     tree — the unit tests alone would not prove the checker is wired to
  *     the policy.
+ *   - #1074: every documented dotenv admission shape inside the shared db
+ *     mechanism is killed by the real gate that claims that surface
+ *     (check-architecture, check-env-surface), while prose mentions without
+ *     an import position stay clean — F-06 semantics keep env-file
+ *     admission owned by the entrypoints.
  *
  * Placement mirrors codeQualityGate.test.ts: apps/web is the DB-free app
  * suite and already hosts repo-level structural tests. The policy module is
@@ -45,6 +50,8 @@ const BUILD_GRAPH_POLICY_PATH = join(
   "build-graph-policy.mjs",
 );
 const CHECKER_PATH = join(REPO_ROOT, "scripts", "check-architecture.mjs");
+const ENV_SURFACE_PATH = join(REPO_ROOT, "scripts", "check-env-surface.mjs");
+const ENV_FILE_POLICY_PATH = join(REPO_ROOT, "config", "envFilePolicy.ts");
 
 /**
  * The ratified normative sets (#824 Owner dispositions D1/D3, ADR-010 for
@@ -397,16 +404,19 @@ describe("source early-warning pattern characterization (M7)", () => {
 });
 
 /**
- * CLI-level counterfactuals through the REAL gate entry. A disposable
+ * CLI-level counterfactuals through the REAL gate entries. A disposable
  * `git worktree` of this repository carries the mutations — the main
- * working tree is never touched. The checker and policy modules are copied
- * from the WORKING tree into the worktree so local pre-commit runs exercise
- * the current implementation (byte-identical no-op in CI, where HEAD equals
- * the working tree).
+ * working tree is never touched. The gate scripts and their policy modules
+ * are copied from the WORKING tree into the worktree so local pre-commit
+ * runs exercise the current implementation (byte-identical no-op in CI,
+ * where HEAD equals the working tree).
  *
  * INVARIANT: the copy list below must cover every repo-owned module the
- * checker imports. A missing module fails the pristine-green test with a
- * module-not-found error rather than passing vacuously.
+ * gated entries import — check-architecture.mjs loads architecture-policy
+ * and build-graph-policy; check-env-surface.mjs loads envFilePolicy (via
+ * Node type stripping, no other repo-owned imports). A missing module fails
+ * the pristine-green tests with a module-not-found error rather than
+ * passing vacuously.
  */
 describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", () => {
   let worktreeRoot: string;
@@ -427,6 +437,22 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     const result = spawnSync(
       process.execPath,
       [join(worktree, "scripts", "check-architecture.mjs")],
+      { cwd: worktree, encoding: "utf8" },
+    );
+    return {
+      code: result.status ?? -1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  }
+
+  // check-env-surface derives its scan root from its own script location
+  // (`new URL("../", import.meta.url)`), so running the worktree copy scans
+  // the worktree tree — no cwd coupling.
+  function runEnvSurface(): { code: number; stdout: string; stderr: string } {
+    const result = spawnSync(
+      process.execPath,
+      [join(worktree, "scripts", "check-env-surface.mjs")],
       { cwd: worktree, encoding: "utf8" },
     );
     return {
@@ -475,6 +501,16 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
       BUILD_GRAPH_POLICY_PATH,
       join(worktree, "config", "build-graph-policy.mjs"),
     );
+    // The env-surface gate (#1074 cases below) gets the same working-tree
+    // treatment; it loads config/envFilePolicy.ts via Node type stripping.
+    await copyFile(
+      ENV_SURFACE_PATH,
+      join(worktree, "scripts", "check-env-surface.mjs"),
+    );
+    await copyFile(
+      ENV_FILE_POLICY_PATH,
+      join(worktree, "config", "envFilePolicy.ts"),
+    );
   }, 30_000);
 
   afterAll(async () => {
@@ -494,8 +530,45 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     await rm(worktreeRoot, { recursive: true, force: true });
   });
 
+  // INVARIANT: every case below mutates only disposable-worktree files and
+  // restores them before yielding. The in-case checkouts only run on
+  // success, so the afterEach backstop restores the shared #1074 mutation
+  // target even when a case fails mid-way — a RED-state failure must not
+  // leak mutant lines into later cases (checkout of an unmodified file is a
+  // no-op for the cases that never touch it).
+  afterEach(() => {
+    git(
+      [
+        "checkout",
+        "--",
+        "packages/db/src/sqlIdent.ts",
+        "packages/domain/src/errors.ts",
+        "packages/authz/src/systemActor.ts",
+        "packages/contracts/src/common.ts",
+        "packages/auth/src/tokens.ts",
+        "apps/api/src/config/runtimeConfig.ts",
+        "packages/exam-engine/src/answerProtocol.ts",
+        "packages/exam-engine/src/admissionCommands.ts",
+        "apps/api/src/demo-seed-grader.ts",
+        "apps/api/src/routes/attempts.ts",
+        "packages/db/src/repository/attemptRepo.ts",
+        "apps/api/src/scripts/recover-legacy-grading-workset.ts",
+      ],
+      worktree,
+    );
+  });
+
   it("pristine committed tree passes the real gate", () => {
     const run = runChecker();
+    expect(run.stderr, run.stderr).toBe("");
+    expect(run.code).toBe(0);
+  }, 30_000);
+
+  // Zero-false-positive pin for the env-surface gate on the real tree: the
+  // allowlisted admission readers (loadRootEnv, vite dev config,
+  // vitest.shared, drizzle.config) and every other source file stay clean.
+  it("pristine committed tree passes the env-surface gate", () => {
+    const run = runEnvSurface();
     expect(run.stderr, run.stderr).toBe("");
     expect(run.code).toBe(0);
   }, 30_000);
@@ -546,9 +619,395 @@ describe("real lint:arch entry rejects the P1 mutants (disposable worktree)", ()
     git(["checkout", "--", "apps/web/src/main.tsx"], worktree);
   }, 30_000);
 
-  it("restored tree passes the real gate again", () => {
+  // ── #1074 (WP-08 R-GATE-02): dotenv admission shapes in packages/db/src ──
+  //
+  // Both gates anchor their dotenv patterns to a quote immediately after
+  // `dotenv`, so every subpath spelling ("dotenv/config") escapes BOTH, and
+  // the checker additionally has no side-effect branch at all (bare
+  // `import "dotenv"` escapes lint:arch while env-surface catches it). F-06
+  // semantics: a module-level admission inside the shared db mechanism
+  // re-admits the developer .env behind the entrypoint's refusal (#733).
+  // INVARIANT: each documented admission shape is killed by the gate that
+  // claims the surface, with its precise diagnostic — these cases fail
+  // while any shape is admitted, and the augmentation must be anchored to
+  // import positions (see the prose negative below).
+
+  it("#1074: lint:arch kills the bare dotenv side-effect import", async () => {
+    await appendImport("packages/db/src/sqlIdent.ts", `import "dotenv";`);
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: lint:arch kills the dotenv/config subpath import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import "dotenv/config";`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: lint:arch kills the dotenv/config from-import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import dotenv from "dotenv/config";`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the dotenv/config subpath import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import "dotenv/config";`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the dotenv/config from-import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import dotenv from "dotenv/config";`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // Guard on the augmentation direction: the subpath closure must extend,
+  // not replace, the bare-specifier coverage these branches already provide.
+  it("#1074: lint:arch keeps killing the bare from/require dotenv shapes", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `import { config } from "dotenv";`,
+    );
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const dotenv = require("dotenv");`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface keeps killing the bare dotenv side-effect import", async () => {
+    await appendImport("packages/db/src/sqlIdent.ts", `import "dotenv";`);
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // Minimal negative: the augmented patterns must match admission positions,
+  // not any occurrence of the specifier — otherwise prose in the shared
+  // mechanism becomes a false violation. Same textual posture as the M7
+  // characterization: import-shaped text matches, bare mentions do not.
+  it("#1074: prose mention without an import position stays clean", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `// see "dotenv/config" docs — admission belongs to the entrypoint`,
+    );
+    const archRun = runChecker();
+    expect(archRun.stderr, archRun.stderr).toBe("");
+    expect(archRun.code).toBe(0);
+    const envRun = runEnvSurface();
+    expect(envRun.stderr, envRun.stderr).toBe("");
+    expect(envRun.code).toBe(0);
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // ── #1074 scope 1 — one kill-case per inline architecture ban that no
+  // existing probe consumes. Each case pins ONE real invariant: it first
+  // appends the LEGAL shape for that boundary (the minimal negative — the
+  // pattern must not swallow legitimate code) and then the documented
+  // violation shape, asserting the REAL gate kills the latter with its
+  // precise diagnostic. Deleting the corresponding inline block from
+  // scripts/check-architecture.mjs fails exactly that case, so rule death
+  // is visible in the suite (E0: deleting all nine inline blocks left every
+  // gate green). Mutants exist only in the disposable worktree.
+  interface InlineBanProbe {
+    readonly target: string;
+    readonly legalTarget?: string;
+    readonly legal: string;
+    readonly violation: string;
+    readonly diagnostics: readonly string[];
+  }
+
+  async function expectInlineBan(probe: InlineBanProbe): Promise<void> {
+    const legalTarget = probe.legalTarget ?? probe.target;
+    await appendImport(legalTarget, probe.legal);
+    const legalRun = runChecker();
+    expect(legalRun.stderr, legalRun.stderr).toBe("");
+    expect(legalRun.code).toBe(0);
+    git(["checkout", "--", legalTarget], worktree);
+
+    await appendImport(probe.target, probe.violation);
+    const killRun = runChecker();
+    expect(killRun.code, killRun.stderr).toBe(1);
+    expect(killRun.stderr).toContain(probe.target);
+    for (const diagnostic of probe.diagnostics) {
+      expect(killRun.stderr).toContain(diagnostic);
+    }
+    git(["checkout", "--", probe.target], worktree);
+  }
+
+  it("#1074: domain stays a leaf package (no fastify/react/drizzle/@exam)", async () => {
+    // packages/domain is the transport-independent domain core; importing
+    // any runtime dependency there would couple the domain vocabulary to a
+    // delivery mechanism (repo boundary rule, AGENTS.md §5).
+    await expectInlineBan({
+      target: "packages/domain/src/errors.ts",
+      legal: `import { ExamErrorCode } from "./enums";`,
+      violation: `export * from "@exam/db";`,
+      diagnostics: ["domain must remain a leaf package"],
+    });
+  }, 30_000);
+
+  it("#1074: authz stays a leaf package (no fastify/react/drizzle)", async () => {
+    // authz is the RBAC leaf (ADR-010): the permission vocabulary must stay
+    // portable, reaching only @exam/domain.
+    await expectInlineBan({
+      target: "packages/authz/src/systemActor.ts",
+      legal: `import { permission } from "@exam/domain";`,
+      violation: `import { FastifyInstance } from "fastify";`,
+      diagnostics: [
+        "authz must stay a leaf package (no fastify/React/Drizzle)",
+      ],
+    });
+  }, 30_000);
+
+  it("#1074: contracts cannot depend on fastify", async () => {
+    // @exam/contracts is the shared wire-format authority; transport types
+    // would leak server plumbing into every consumer of the contract.
+    await expectInlineBan({
+      target: "packages/contracts/src/common.ts",
+      legal: `import { ExamError } from "@exam/domain";`,
+      violation: `import type { FastifyRequest } from "fastify";`,
+      diagnostics: ["contracts cannot depend on fastify"],
+    });
+  }, 30_000);
+
+  it("#1074: auth package must not read process.env", async () => {
+    // #733 R3: @exam/auth owns the JWT/password mechanism only; application
+    // mode and secret policy enter as explicit arguments, never from the
+    // process environment (the canonical authority is settings/runtimeConfig).
+    await expectInlineBan({
+      target: "packages/auth/src/tokens.ts",
+      legal: `export interface TokenConfig { issuer: string; }`,
+      violation: `const mode = process.env.NODE_ENV;`,
+      diagnostics: ["auth package must not read process.env"],
+    });
+  }, 30_000);
+
+  it("#1074: apps/api must not read the raw APP_MODE env var", async () => {
+    // #733 R4 (F-05/F-08): runtime mode is resolved ONLY by @exam/db
+    // parseAppMode; a consumer reading the raw env re-implements the
+    // precedence policy (APP_MODE authoritative, NODE_ENV fallback) and
+    // silently drifts. Other process.env reads stay legal — the pattern
+    // pins the two mode variables only.
+    await expectInlineBan({
+      target: "apps/api/src/config/runtimeConfig.ts",
+      legal: `const port = Number(process.env.PORT ?? 3000);`,
+      violation: `const rawMode = process.env.APP_MODE;`,
+      diagnostics: ["runtime mode comes from @exam/db parseAppMode"],
+    });
+  }, 30_000);
+
+  it("#1074: packages/db must not read the raw NODE_ENV env var", async () => {
+    // Same rule as above, second scan root (apps/api/src and packages/db/src
+    // are the modules owning runtime-mode consumers).
+    await expectInlineBan({
+      target: "packages/db/src/sqlIdent.ts",
+      legal: `const debug = process.env.DEBUG === "1";`,
+      violation: `const rawEnv = process.env.NODE_ENV;`,
+      diagnostics: ["runtime mode comes from @exam/db parseAppMode"],
+    });
+  }, 30_000);
+
+  it("#1074: exam-engine cannot depend on fastify", async () => {
+    // The exam state machine is transport-independent; a fastify import
+    // would bind the engine to the HTTP delivery layer (repo boundary rule).
+    await expectInlineBan({
+      target: "packages/exam-engine/src/answerProtocol.ts",
+      legal: `import { ExamError } from "@exam/domain";`,
+      violation: `import { FastifyPluginAsync } from "fastify";`,
+      diagnostics: ["exam-engine cannot depend on fastify"],
+    });
+  }, 30_000);
+
+  it("#1074: no cast to LockedEnrollmentAttemptIdentity in exam-engine", async () => {
+    // Lock-order capability: the brand symbols are module-private and the
+    // only legitimate mint is lockEnrollmentAndAttempt — a cast forges the
+    // repo-affinity proof. The legal shape is the type annotation the real
+    // mint seam uses (lockSeam.ts), not a cast.
+    await expectInlineBan({
+      target: "packages/exam-engine/src/admissionCommands.ts",
+      legal: `const minted: LockedEnrollmentAttemptIdentity = capability;`,
+      violation: `const forged = {} as LockedEnrollmentAttemptIdentity;`,
+      diagnostics: ["do not cast to LockedEnrollmentAttemptIdentity"],
+    });
+  }, 30_000);
+
+  it("#1074: no cast to ReconciledAttemptMutationContext in apps/api", async () => {
+    // Same forgery defense for the opaque Attempt mutation context: the
+    // only legitimate provenance is prepareReconciledAttemptMutation. This
+    // case pins the apps/api/src scan root (the cast ban is enforced in
+    // both the engine and the API application).
+    await expectInlineBan({
+      target: "apps/api/src/demo-seed-grader.ts",
+      legal: `const prepared: ReconciledAttemptMutationContext = context;`,
+      violation: `const forged = {} as ReconciledAttemptMutationContext;`,
+      diagnostics: ["do not cast to ReconciledAttemptMutationContext"],
+    });
+  }, 30_000);
+
+  it("#1074: routes must use repositories, not db.select", async () => {
+    // Repository funnel (repo boundary rule): route handlers reach data
+    // through repositories; a direct db builder call inside a route bypasses
+    // the query ownership boundary. The legal shape is the same builder
+    // chain inside the repository layer, where db access is owned.
+    await expectInlineBan({
+      target: "apps/api/src/routes/attempts.ts",
+      legalTarget: "packages/db/src/repository/attemptRepo.ts",
+      legal: `const rows = await db.select().from(users);`,
+      violation: `const rows = await db.select().from(examAttempts);`,
+      diagnostics: ["routes must use repositories"],
+    });
+  }, 30_000);
+
+  it("#1074: routes must not import drizzle-orm directly", async () => {
+    await expectInlineBan({
+      target: "apps/api/src/routes/attempts.ts",
+      legalTarget: "packages/db/src/repository/attemptRepo.ts",
+      legal: `import { sql } from "drizzle-orm";`,
+      violation: `import { sql } from "drizzle-orm";`,
+      diagnostics: ["routes must not import drizzle-orm directly"],
+    });
+  }, 30_000);
+
+  it("#1074: routes must not import the DB schema directly", async () => {
+    // The schema export is reachable outside routes (e.g. api scripts), so
+    // the ban is anchored to the routes scan root only — the legal shape
+    // imports the same specifier from a non-route api module.
+    await expectInlineBan({
+      target: "apps/api/src/routes/attempts.ts",
+      legalTarget: "apps/api/src/scripts/recover-legacy-grading-workset.ts",
+      legal: `import { examAttempts } from "@exam/db/schema";`,
+      violation: `import { examAttempts } from "@exam/db/schema";`,
+      diagnostics: ["routes must not import DB schema directly"],
+    });
+  }, 30_000);
+
+  // ── #1074 (review round 1): dynamic import admission shapes ──
+  //
+  // Neither gate's dotenv pattern had an import()-position branch, so a
+  // dynamic admission (`await import("dotenv/config")`) escaped BOTH gates
+  // while the static from/require/side-effect branches were closed (#1074
+  // Known limitations: the dynamic/require shape evidence was truncated in
+  // the batch handoff — the require branch is covered by the augmented
+  // patterns and pinned by the bare from/require guard above; the dynamic
+  // branch is closed and pinned here).
+
+  it("#1074: lint:arch kills the dynamic dotenv/config import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv/config");`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: lint:arch kills the bare dynamic dotenv import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv");`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain(
+      "shared db mechanism must not admit dotenv sources",
+    );
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the dynamic dotenv/config import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv/config");`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("#1074: env-surface kills the bare dynamic dotenv import", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("dotenv");`,
+    );
+    const run = runEnvSurface();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("packages/db/src/sqlIdent.ts");
+    expect(run.stderr).toContain("imports dotenv outside the reader allowlist");
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  // Minimal negative for the import()-position anchoring: a dynamic import
+  // of a legitimate module must stay clean in both gates — only the dotenv
+  // specifier is banned, not the import() form itself.
+  it("#1074: dynamic import of a legitimate module stays clean", async () => {
+    await appendImport(
+      "packages/db/src/sqlIdent.ts",
+      `const m = await import("./database");`,
+    );
+    const archRun = runChecker();
+    expect(archRun.stderr, archRun.stderr).toBe("");
+    expect(archRun.code).toBe(0);
+    const envRun = runEnvSurface();
+    expect(envRun.stderr, envRun.stderr).toBe("");
+    expect(envRun.code).toBe(0);
+    git(["checkout", "--", "packages/db/src/sqlIdent.ts"], worktree);
+  }, 30_000);
+
+  it("restored tree passes the real gates again", () => {
     const run = runChecker();
     expect(run.stderr, run.stderr).toBe("");
     expect(run.code).toBe(0);
+    const envRun = runEnvSurface();
+    expect(envRun.stderr, envRun.stderr).toBe("");
+    expect(envRun.code).toBe(0);
   }, 30_000);
 });
