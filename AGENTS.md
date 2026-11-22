@@ -166,7 +166,7 @@ OPEN Issue 是施工合同，不是运行时事实 authority。开始施工前�
 命令以根 `package.json` 为唯一来源。常用入口包括：
 
 ```bash
-pnpm format:check          # prettier --check .（.prettierignore 忽略 *.md，文档一致性靠 review）
+pnpm format:check          # prettier --check .（.prettierignore 忽略其余 *.md，文档一致性靠 review；docs/releases/ 例外，强制 proseWrap never）
 pnpm lint
 pnpm lint:eslint
 pnpm lint:arch

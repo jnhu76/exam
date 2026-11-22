@@ -7,6 +7,11 @@ docs/SPEC.md
 pnpm-lock.yaml
 coverage/
 *.md
+# Release notes are the one markdown surface with a hard formatting gate
+# (.prettierrc override: proseWrap "never" + scripts/check-release-notes.mjs):
+# GitHub renders release-body newlines as line breaks, so hard-wrapped prose
+# publishes as stacked short lines with split links.
+!docs/releases/**
 .venv/
 .mcp.json
 opencode.jsonc

@@ -48,6 +48,17 @@ jobs:
             exit 1
           fi
 
+          # GitHub renders release bodies with a hard line break on every
+          # newline, so hard-wrapped prose publishes as stacked short lines
+          # with split link sequences (the v0.0.1..v0.0.16 defect). Gate the
+          # notes BEFORE any build, push, tag or release step, and fail
+          # closed if node is unavailable to run the check.
+          if ! command -v node >/dev/null 2>&1; then
+            echo "node is required to run the release-notes prose gate" >&2
+            exit 1
+          fi
+          node scripts/check-release-notes.mjs
+
           # The README badges are static to avoid false "no releases" responses
           # from third-party GitHub API badge lookups. Keep them version-bound.
           expected_badge="[![Release](https://img.shields.io/badge/release-${version}-blue.svg)](https://github.com/jnhu76/exam/releases)"
