@@ -787,9 +787,8 @@ describe("QuestionPage URL query state (#784 A3)", () => {
   // pins the other order CI run 43030066262 actually hit: the navigation is
   // COMMITTED (the history entry has switched) but the three-stage cancel
   // chain — navigation detector effect → setSearchInput → hook reset effect —
-  // has not flushed when the deadline expires. A bare dispatch commits the
-  // navigation without flushing effects, which is exactly that moment; the
-  // commit boundary itself, not the effect chain, must reject the draft.
+  // has not flushed when the deadline expires. Run navigation and the timer
+  // synchronously in the same act callback, before React flushes effects.
   it("A12(c-race): the deadline rejects a draft when Back has committed but the cancel chain has not flushed", async () => {
     mockPaginated(61);
     // Entry 1 is the bare list; entry 2 (current) carries the committed search.
@@ -810,9 +809,10 @@ describe("QuestionPage URL query state (#784 A3)", () => {
       // Bare dispatch: navigate(-1) commits the history switch inside the click
       // task, and the transition render + passive effects stay queued — the
       // window a loaded machine lets the deadline expire into.
-      screen.getByRole("button", { name: "后退" }).click();
-      vi.advanceTimersByTime(1);
-      await act(async () => {});
+      await act(async () => {
+        screen.getByRole("button", { name: "后退" }).click();
+        vi.advanceTimersByTime(1);
+      });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(400);
       });
@@ -850,9 +850,10 @@ describe("QuestionPage URL query state (#784 A3)", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(299);
       });
-      screen.getByRole("button", { name: "后退" }).click();
-      vi.advanceTimersByTime(1);
-      await act(async () => {});
+      await act(async () => {
+        screen.getByRole("button", { name: "后退" }).click();
+        vi.advanceTimersByTime(1);
+      });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(400);
       });
@@ -883,9 +884,10 @@ describe("QuestionPage URL query state (#784 A3)", () => {
         await vi.advanceTimersByTimeAsync(299);
       });
       const callsBeforeNav = questionsCalls().length;
-      screen.getByRole("button", { name: "前进" }).click();
-      vi.advanceTimersByTime(1);
-      await act(async () => {});
+      await act(async () => {
+        screen.getByRole("button", { name: "前进" }).click();
+        vi.advanceTimersByTime(1);
+      });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(400);
       });
@@ -922,9 +924,10 @@ describe("QuestionPage URL query state (#784 A3)", () => {
       const callsBeforeNav = questionsCalls().length;
       // A push from outside this page (a link elsewhere in the app): the route
       // stays mounted, only the query changes.
-      screen.getByRole("button", { name: "外部导航" }).click();
-      vi.advanceTimersByTime(1);
-      await act(async () => {});
+      await act(async () => {
+        screen.getByRole("button", { name: "外部导航" }).click();
+        vi.advanceTimersByTime(1);
+      });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(400);
       });

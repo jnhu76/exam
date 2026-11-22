@@ -1,17 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ContentDocumentV1 } from "@exam/domain";
 import { RichTextAnswerInput } from "./RichTextAnswerInput";
 
-// #858 / OBS-2026-10-08-003 / OBS-2026-10-24-001: the editor chunk's cold
-// dynamic import (RichContentEditorLazy → the whole Tiptap graph) costs
-// ~0.85–1.1s on an idle host and ~4x that under CI coverage contention —
-// at or beyond the vi.waitFor default budget (1000ms) that every editor
-// wait below inherits. The chunk transport is not the contract under test
-// here (production shows the Suspense fallback while it loads); paying it
-// once at module load (top-level await) moves that cost out of every test
-// body so the waits below measure only the mount itself.
+// Preload Tiptap's chunk outside the test body (#858). The actual Suspense
+// retry and editor mount run through RichTextAnswerInput below.
 await import("@/components/shared/content/RichContentEditor");
+
+async function renderWithEditor(element: ReactElement) {
+  let view!: ReturnType<typeof render>;
+  // Keep Suspense's retry and the editor/toolbar mount in this render scope.
+  await act(async () => {
+    view = render(element);
+  });
+  return view;
+}
 
 /**
  * Read-trust regressions (#669).
@@ -135,28 +139,14 @@ describe("RichTextAnswerInput — typed read adoption", () => {
   }, 15000);
 
   it("R1 positive control: a string on a plain-mode slot upgrades into the editor (authorized mapping)", async () => {
-    render(
+    await renderWithEditor(
       <RichTextAnswerInput
         value={"普通文本草稿"}
         answerMode="plain"
         onChange={() => {}}
       />,
     );
-    // Budgeted wait (#858): this is the FILE'S FIRST editor mount, so it
-    // still bears Tiptap's residual mount cost (~0.9s under 2-core coverage
-    // contention even with the chunk preloaded at module load above). The
-    // assertion is "the editor mounts and adopts the content", not
-    // "mount under one second"; the default 1000ms waitFor budget sat inside
-    // the cost distribution and was the direct cause of the repeat failures.
-    const surface = await vi.waitFor(
-      () => {
-        const el = document.querySelector<HTMLElement>(".ProseMirror");
-        if (!el) throw new Error("editor not mounted");
-        return el;
-      },
-      { timeout: 5000 },
-    );
-    expect(surface.textContent).toContain("普通文本草稿");
+    expect(screen.getByRole("textbox")).toHaveTextContent("普通文本草稿");
   }, 15000);
 
   it("R2: an unsupported docVersion never mounts as an editable empty document and emits nothing", async () => {
@@ -218,91 +208,76 @@ describe("RichTextAnswerInput — typed read adoption", () => {
 
   it("R5: a corrupt/unsupported STALE_VERSION serverAnswer adoption replaces the editor with the integrity state and never emits synthetic content", async () => {
     const onChange = vi.fn();
-    const { rerender } = render(
+    const { rerender } = await renderWithEditor(
       <RichTextAnswerInput
         value={VALID}
         answerMode="rich"
         onChange={onChange}
       />,
     );
-    await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(".ProseMirror");
-      if (!el) throw new Error("editor not mounted");
-      return el;
-    });
-    expect(document.querySelector(".ProseMirror")!.textContent).toContain(
-      "答案",
-    );
-    // The valid mount's own transaction legitimately emitted; snapshot the
-    // count so the corrupt adoptions can be held to "nothing further".
+    expect(screen.getByRole("textbox")).toHaveTextContent("答案");
+    // Any valid-mount emissions must not be repeated when the incoming
+    // persisted value fails read classification.
     const callsAtValidMount = onChange.mock.calls.length;
 
     // Server reconciliation arrives with a value the read authority cannot
     // interpret: the editor unmounts into the integrity state — the local
     // editor is never replaced by synthetic empty content, and nothing is
     // emitted that an autosave could persist over the server truth.
-    rerender(
-      <RichTextAnswerInput
-        value={UNSUPPORTED_VERSION}
-        answerMode="rich"
-        onChange={onChange}
-      />,
-    );
+    await act(async () => {
+      rerender(
+        <RichTextAnswerInput
+          value={UNSUPPORTED_VERSION}
+          answerMode="rich"
+          onChange={onChange}
+        />,
+      );
+    });
     await expectIntegrityState(onChange, callsAtValidMount);
 
-    rerender(
-      <RichTextAnswerInput
-        value={CORRUPT_ENVELOPE}
-        answerMode="rich"
-        onChange={onChange}
-      />,
-    );
+    await act(async () => {
+      rerender(
+        <RichTextAnswerInput
+          value={CORRUPT_ENVELOPE}
+          answerMode="rich"
+          onChange={onChange}
+        />,
+      );
+    });
     await expectIntegrityState(onChange, callsAtValidMount);
   }, 15000);
 
   it("R5 positive control: a valid canonical serverAnswer still adopts normally", async () => {
     const onChange = vi.fn();
-    const { rerender } = render(
+    const { rerender } = await renderWithEditor(
       <RichTextAnswerInput
         value={VALID}
         answerMode="rich"
         onChange={onChange}
       />,
     );
-    await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(".ProseMirror");
-      if (!el) throw new Error("editor not mounted");
-      return el;
+    expect(screen.getByRole("textbox")).toHaveTextContent("答案");
+    await act(async () => {
+      rerender(
+        <RichTextAnswerInput
+          value={VALID_REPLACEMENT}
+          answerMode="rich"
+          onChange={onChange}
+        />,
+      );
     });
-    rerender(
-      <RichTextAnswerInput
-        value={VALID_REPLACEMENT}
-        answerMode="rich"
-        onChange={onChange}
-      />,
-    );
-    await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(".ProseMirror");
-      if (!el || !el.textContent!.includes("服务器最新答案")) {
-        throw new Error("authoritative replacement not adopted yet");
-      }
-      return el;
-    });
+    expect(screen.getByRole("textbox")).toHaveTextContent("服务器最新答案");
   }, 15000);
 
   it("an explicitly empty (unanswered) value still mounts an ordinary editor", async () => {
     const onChange = vi.fn();
-    render(
+    await renderWithEditor(
       <RichTextAnswerInput
         value={null}
         answerMode="rich"
         onChange={onChange}
       />,
     );
-    await vi.waitFor(() => {
-      const el = document.querySelector<HTMLElement>(".ProseMirror");
-      if (!el) throw new Error("editor not mounted");
-      return el;
-    });
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   }, 15000);
 });

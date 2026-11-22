@@ -287,7 +287,12 @@ describe("authoritative snapshot read path", () => {
       expect(submits.length).toBe(1);
     });
 
-    resolveSubmit({ ok: true });
+    await act(async () => {
+      resolveSubmit({ ok: true });
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/exam/att-1/result",
+    );
   });
 
   it("save_failed transient does not modify answer source / lock / visibility semantics", async () => {

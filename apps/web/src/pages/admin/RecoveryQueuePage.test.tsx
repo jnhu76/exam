@@ -251,8 +251,12 @@ describe("RecoveryQueuePage", () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     // Two entries in one document: the bare queue, then a filtered one. The
     // router starts on the filtered entry; the draft is typed there.
-    renderPage(["/admin/recovery", "/admin/recovery?examId=exam-1"]);
-    await act(async () => {});
+    await act(async () => {
+      renderPage(["/admin/recovery", "/admin/recovery?examId=exam-1"]);
+    });
+    expect(screen.getByRole("textbox", { name: "考试 ID" })).toHaveValue(
+      "exam-1",
+    );
     const callsBeforeNav = getMock.mock.calls.length;
 
     fireEvent.change(screen.getByRole("textbox", { name: "考试 ID" }), {
@@ -268,17 +272,22 @@ describe("RecoveryQueuePage", () => {
     // toolbar unmount → debounce cleanup) and has not flushed. The deadline
     // expires inside that gap — the same interleaving class as the
     // QuestionPage search race (#953).
-    screen.getByRole("button", { name: "后退" }).click();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
+      screen.getByRole("button", { name: "后退" }).click();
+      vi.advanceTimersByTime(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_999);
     });
 
     // URL: the restored entry keeps exactly what it committed — nothing.
     expect(screen.getByTestId("location-search").textContent).toBe("");
     // Field: the foreign-entry reset re-seeds it from the restored URL.
     expect(screen.getByRole("textbox", { name: "考试 ID" })).toHaveValue("");
-    // API: no request from the Back onward carries the departed draft.
-    for (const call of getMock.mock.calls.slice(callsBeforeNav)) {
+    // The restored entry actually reloads, without ever issuing a stale query.
+    const afterNav = getMock.mock.calls.slice(callsBeforeNav);
+    expect(afterNav.length).toBeGreaterThan(0);
+    for (const call of afterNav) {
       expect(String(call[0])).not.toContain("exam-stale");
     }
   });

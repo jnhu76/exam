@@ -1832,6 +1832,7 @@ const zhCN = {
       },
       timeline: {
         title: "事件时间线 — {{name}}",
+        description: "查看本次作答期间记录的监考操作和前端事件。",
         button: "时间线",
         noEvents: "暂无事件",
         auditLog: "操作",

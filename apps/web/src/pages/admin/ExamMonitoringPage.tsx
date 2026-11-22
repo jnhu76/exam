@@ -27,6 +27,7 @@ import { History } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -429,6 +430,9 @@ export function ExamMonitoringPage() {
                 name: selectedAttempt?.candidateName ?? "",
               })}
             </DialogTitle>
+            <DialogDescription>
+              {t("admin.examMonitoring.timeline.description")}
+            </DialogDescription>
           </DialogHeader>
           {/* dialog-body owns the vertical scroll; the header stays fixed. */}
           <div data-slot="dialog-body" className="flex flex-col gap-1">

@@ -1680,6 +1680,8 @@ describe("ProctorDashboardPage", () => {
         // must keep the stronger cleanup_failed state (dismiss-only).
         await act(async () => {
           await i18n.changeLanguage("en");
+        });
+        await act(async () => {
           await i18n.changeLanguage("zh-CN");
         });
         expect(
@@ -1695,7 +1697,11 @@ describe("ProctorDashboardPage", () => {
         // Restore even on failure so a broken guard cannot poison the rest
         // of the suite (spy + global i18n language).
         removerSpy.mockRestore();
-        await i18n.changeLanguage("zh-CN");
+        if (i18n.language !== "zh-CN") {
+          await act(async () => {
+            await i18n.changeLanguage("zh-CN");
+          });
+        }
       }
     });
 

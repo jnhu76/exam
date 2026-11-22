@@ -301,6 +301,10 @@ describe("ExamMonitoringPage", () => {
     await screen.findByText("张三");
     await user.click(screen.getByRole("button", { name: "时间线" }));
 
+    expect(
+      screen.getByRole("dialog", { name: "事件时间线 — 张三" }),
+    ).toHaveAccessibleDescription("查看本次作答期间记录的监考操作和前端事件。");
+
     // Client telemetry row: badge from real source + unverified group label
     // around the (visible) forged requestId/status correlation claims.
     expect(await screen.findByText("answer_autosave_failed")).toBeVisible();
