@@ -12,6 +12,7 @@
     "format:check": "prettier --check .",
     "commit:check": "node scripts/check-commit-messages.mjs",
     "test:commit-messages": "node --test scripts/check-commit-messages.test.mjs",
+    "test:routes-gate": "node --test scripts/check-architecture.routes-gate.test.mjs",
     "lint": "node scripts/check-code-quality.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",
     "lint:container-runtime": "node scripts/check-container-runtime.mjs",
