@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
   LIFECYCLE_STATE_WRITE_SCAN_ROOTS,
+  ROUTE_DB_GATE_PATTERNS,
   RUNTIME_DEPENDENCY_BOUNDARIES,
   forbiddenImportPattern,
   forbiddenRuntimeDependencies,
@@ -153,17 +154,12 @@ await forbid("apps/web/src", [
     "web must not depend on server-side packages (WEB_RUNTIME_BOUNDARY)",
   ],
 ]);
-await forbid("apps/api/src/routes", [
-  [
-    /\bdb\.(?:select|insert|update|delete)\s*\(/,
-    "routes must use repositories",
-  ],
-  [/from ["']drizzle-orm/, "routes must not import drizzle-orm directly"],
-  [
-    /from ["']@exam\/db\/schema(\/|["'])/,
-    "routes must not import DB schema directly",
-  ],
-]);
+// #1072 (R-GATE-01): route modules reach the database only through
+// repositories — the scan's pattern table, subpath allowlist and diagnostic
+// texts are the single authority export in config/architecture-policy.mjs;
+// this file holds no second copy. The three baseline diagnostic texts are
+// pinned by #1076's kill-cases (apps/web/src/architectureBoundary.test.ts).
+await forbid("apps/api/src/routes", ROUTE_DB_GATE_PATTERNS);
 
 // EXSEM-014 lifecycle-state write funnels (#927 F43). The repo layer makes
 // the boundary typable (narrowed `update` inputs; the named

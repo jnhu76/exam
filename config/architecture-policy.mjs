@@ -94,6 +94,11 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Every specifier-position ban in this module (and everything derived from
+// it) anchors the same import positions: `from "…"`, bare `import "…"`,
+// `import("…")` and `require("…")`. One anchor, no per-rule spelling drift.
+const IMPORT_POSITION_ANCHOR = String.raw`(?:\bfrom\s*|\bimport\s*(?:[(]\s*)?|\brequire\s*[(]\s*)`;
+
 /**
  * Early-warning specifier pattern for one importer's forbidden set, derived
  * from the same table as the manifest audit. Matches the forbidden package
@@ -121,9 +126,114 @@ export function forbiddenImportPattern(importer) {
   }
   const names = boundary.forbidden.map(escapeRegExp).join("|");
   return new RegExp(
-    String.raw`(?:\bfrom\s*|\bimport\s*(?:[(]\s*)?|\brequire\s*[(]\s*)["'](?:${names})(?:\/[^"']*)?["']`,
+    `${IMPORT_POSITION_ANCHOR}["'](?:${names})(?:\\/[^"']*)?["']`,
   );
 }
+
+// ── #1072 (R-GATE-01) — route DB-access ban ───────────────────────────────
+//
+// Route handlers reach the database only through repositories (AGENTS.md §5;
+// docs/standards/code-quality.md §7 Repository Guard): drizzle builder
+// chains, raw execute, the relational query API, transactions and the
+// $client escape hatch are repository-owned, and so is every drizzle-orm /
+// @exam/db entry outside the seam subpaths listed below. This table is the
+// single authority for the apps/api/src/routes scan in
+// scripts/check-architecture.mjs — the checker imports it verbatim and holds
+// no second copy — and the counterfactual witness
+// scripts/check-architecture.routes-gate.test.mjs pins its kill set and
+// zero-false-positive faces. Same documented textual posture as the import
+// scan above: comment or template text carrying the shape matches, bare
+// prose does not; computed receivers and computed specifiers stay out of
+// reach (#1072 Known limitations).
+//
+// INVARIANT (diagnostic texts): "routes must use repositories", "routes must
+// not import drizzle-orm directly" and "routes must not import DB schema
+// directly" are pinned by #1076's kill-cases
+// (apps/web/src/architectureBoundary.test.ts); rewording them requires
+// updating that suite in the same change.
+
+/**
+ * @exam/db subpaths a route module may import: the repository seam and the
+ * route-facing type/test-scope helpers. The root entry (self-built
+ * connections) and every other subpath — schema first among them — are
+ * repository territory (#1072).
+ */
+const ROUTE_ALLOWED_DB_SUBPATHS = Object.freeze([
+  "repository/*",
+  "types",
+  "databaseUrl",
+  "testWorkerDatabase",
+  "testScope",
+  "testIsolation",
+]);
+
+function routeAllowedDbImportAlternatives() {
+  return ROUTE_ALLOWED_DB_SUBPATHS.map((allowed) =>
+    allowed.endsWith("/*")
+      ? `${escapeRegExp(allowed.slice(0, -2))}\\/[^"']*`
+      : `${escapeRegExp(allowed)}["']`,
+  ).join("|");
+}
+
+/**
+ * Root + non-whitelisted @exam/db specifiers at any import position. The
+ * negative lookahead sits directly after the subpath slash and consumes the
+ * whole allowlist, so `repository/…` and the exact helper entries can never
+ * match; `@exam/db/schema…` is excluded here because it carries its own
+ * diagnostic in the table below.
+ */
+function routeForbiddenDbImportPattern() {
+  return new RegExp(
+    `${IMPORT_POSITION_ANCHOR}["']@exam\\/db(?:\\/(?!${routeAllowedDbImportAlternatives()}|schema(?:\\/[^"']*)?["'])[^"']*)?["']`,
+  );
+}
+
+/**
+ * forbid() table for apps/api/src/routes (#1072). The builder-chain pattern
+ * anchors the chain SHAPE — `(select|insert|update|delete)(…)` continued by
+ * `(from|values|set|where|returning)(` — not the receiver spelling, so
+ * aliased receivers, destructured builders, optional chains and Prettier
+ * reflow are all in scope. `executeInTransaction(fastify.db, …)` stays
+ * green by construction: the transaction ban matches `.`-qualified
+ * `transaction(` only. Import faces anchor every specifier position via the
+ * same anchor forbiddenImportPattern() uses.
+ */
+export const ROUTE_DB_GATE_PATTERNS = Object.freeze([
+  Object.freeze([
+    /\b(?:select|insert|update|delete)\s*\([^()]*\)\s*\.\s*(?:from|values|set|where|returning)\s*\(/,
+    "routes must use repositories",
+  ]),
+  Object.freeze([
+    /\.execute\s*\(/,
+    "routes must use repositories — raw SQL execution is repository-owned",
+  ]),
+  Object.freeze([
+    /\.query\s*\.\s*[\w$]+\s*\.\s*find\w*\s*\(/,
+    "routes must use repositories — the relational query API is repository-owned",
+  ]),
+  Object.freeze([
+    /\.transaction\s*\(/,
+    "routes must use repositories — transactions go through executeInTransaction",
+  ]),
+  Object.freeze([
+    /\.\$client\b/,
+    "routes must use repositories — the $client escape hatch is repository-owned",
+  ]),
+  Object.freeze([
+    new RegExp(`${IMPORT_POSITION_ANCHOR}["']drizzle-orm(?:\\/[^"']*)?["']`),
+    "routes must not import drizzle-orm directly",
+  ]),
+  Object.freeze([
+    new RegExp(
+      `${IMPORT_POSITION_ANCHOR}["']@exam\\/db\\/schema(?:\\/[^"']*)?["']`,
+    ),
+    "routes must not import DB schema directly",
+  ]),
+  Object.freeze([
+    routeForbiddenDbImportPattern(),
+    "routes must not import @exam/db directly — only the repository seam and route-facing helper subpaths are allowed",
+  ]),
+]);
 
 // ── EXSEM-014 lifecycle-state write funnels ──────────────────────────────
 //

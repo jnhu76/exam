@@ -407,6 +407,20 @@ test("route DB gate flags every counterfactual escape form and nothing else", as
       if (file.endsWith(".ts")) flagged.add(file);
     }
 
+    // Zero false positives BEFORE kill completeness (#1076 recheck F1): with
+    // the missed assertion first, a RED run (scan incomplete) failed there
+    // and never proved the flagged ⊆ kill-set half — the field had to be
+    // filled by a manual gate run. This order keeps both halves of the
+    // oracle reachable in RED: the subset check passes or fails on its own
+    // evidence first, then the kill-set check reports the escape forms.
+    const killFiles = new Set(KILL_MUTANTS.map(({ file }) => file));
+    const falsePositives = [...flagged].filter((file) => !killFiles.has(file));
+    assert.deepEqual(
+      falsePositives,
+      [],
+      `route DB gate flags files outside the kill set — false positives (the exemption witness and legit caller shapes must stay green):\n  ${falsePositives.join("\n  ")}`,
+    );
+
     const missed = KILL_MUTANTS.filter(({ file }) => !flagged.has(file)).map(
       ({ file, form }) => `${file} (${form})`,
     );
@@ -414,14 +428,6 @@ test("route DB gate flags every counterfactual escape form and nothing else", as
       missed,
       [],
       `route DB gate MISSES these escape forms — they must be flagged:\n  ${missed.join("\n  ")}`,
-    );
-
-    const killFiles = new Set(KILL_MUTANTS.map(({ file }) => file));
-    const falsePositives = [...flagged].filter((file) => !killFiles.has(file));
-    assert.deepEqual(
-      falsePositives,
-      [],
-      `route DB gate flags files outside the kill set — false positives (the exemption witness and legit caller shapes must stay green):\n  ${falsePositives.join("\n  ")}`,
     );
   } finally {
     await rm(base, { recursive: true, force: true });
