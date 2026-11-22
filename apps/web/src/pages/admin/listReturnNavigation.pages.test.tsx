@@ -150,6 +150,8 @@ function renderAt(
         <BrandProvider>
           <Routes>
             <Route path={routePath} element={element} />
+            <Route path="/admin/exams" element={null} />
+            <Route path="/admin/questions" element={null} />
           </Routes>
           <LocationProbe />
         </BrandProvider>

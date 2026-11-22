@@ -25,15 +25,6 @@ function makeControllableLoader() {
   return { loader, calls };
 }
 
-/**
- * Flushes pending microtasks so the hook's async work settles. With REAL
- * timers, a resolved/rejected controllable-loader promise needs a microtask
- * flush + a waitFor on the hook output.
- */
-function flushMicros() {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 describe("useRecoveryProjection (promise flow — real timers)", () => {
   it("isInitialLoading is true until the first load resolves, then false", async () => {
     const { loader, calls } = makeControllableLoader();
@@ -50,10 +41,11 @@ describe("useRecoveryProjection (promise flow — real timers)", () => {
     expect(result.current.isInitialLoading).toBe(true);
     expect(result.current.data).toBeNull();
 
-    calls[0]!.resolve({ value: "first", snapshotAt: "2025-01-01T00:00:00Z" });
-    await flushMicros();
+    await act(async () => {
+      calls[0]!.resolve({ value: "first", snapshotAt: "2025-01-01T00:00:00Z" });
+    });
 
-    await waitFor(() => expect(result.current.data?.value).toBe("first"));
+    expect(result.current.data?.value).toBe("first");
     expect(result.current.isInitialLoading).toBe(false);
     expect(loader).toHaveBeenCalledTimes(1);
   });
@@ -79,9 +71,13 @@ describe("useRecoveryProjection (promise flow — real timers)", () => {
     expect(calls[0]!.signal.aborted).toBe(true);
 
     // The new (owning) request commits; the aborted one cannot.
-    calls[1]!.resolve({ value: "second", snapshotAt: "2025-01-02T00:00:00Z" });
-    await flushMicros();
-    await waitFor(() => expect(result.current.data?.value).toBe("second"));
+    await act(async () => {
+      calls[1]!.resolve({
+        value: "second",
+        snapshotAt: "2025-01-02T00:00:00Z",
+      });
+    });
+    expect(result.current.data?.value).toBe("second");
   });
 
   it("a background-refresh failure keeps existing data (no full-screen error)", async () => {
@@ -95,18 +91,20 @@ describe("useRecoveryProjection (promise flow — real timers)", () => {
     );
 
     await waitFor(() => expect(calls.length).toBe(1));
-    calls[0]!.resolve({ value: "first", snapshotAt: "2025-01-01T00:00:00Z" });
-    await flushMicros();
-    await waitFor(() => expect(result.current.data?.value).toBe("first"));
+    await act(async () => {
+      calls[0]!.resolve({ value: "first", snapshotAt: "2025-01-01T00:00:00Z" });
+    });
+    expect(result.current.data?.value).toBe("first");
 
     act(() => {
       result.current.refresh();
     });
     await waitFor(() => expect(calls.length).toBe(2));
-    calls[1]!.reject(new Error("boom"));
-    await flushMicros();
+    await act(async () => {
+      calls[1]!.reject(new Error("boom"));
+    });
 
-    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.error).not.toBeNull();
     // Data preserved on a background failure.
     expect(result.current.data?.value).toBe("first");
   });
@@ -144,9 +142,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(loader).toHaveBeenCalledTimes(1);
 
     // Initial request resolves — the response commits.
-    calls[0]!.resolve({ value: "first", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.resolve({ value: "first", snapshotAt: "2025-01-01T00:00:00Z" });
     });
     expect(loader).toHaveBeenCalledTimes(1);
   });
@@ -168,9 +165,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     });
     // Fresh right after resolve.
     expect(result.current.isStale).toBe(false);
@@ -201,9 +197,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(calls.length).toBe(1);
-    calls[0]!.reject(new Error("boom"));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.reject(new Error("boom"));
     });
     expect(calls.length).toBe(1);
 
@@ -218,9 +213,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(calls.length).toBe(2);
-    calls[1]!.reject(new Error("boom"));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[1]!.reject(new Error("boom"));
     });
 
     // Two consecutive failures → next delay 5s * 2^2 = 20s (capped at maxMs).
@@ -250,9 +244,11 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    calls[0]!.resolve({ value: "A-data", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.resolve({
+        value: "A-data",
+        snapshotAt: "2025-01-01T00:00:00Z",
+      });
     });
     expect(result.current.data?.value).toBe("A-data");
 
@@ -268,9 +264,11 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(calls.length).toBe(2);
 
     // Only B's response commits.
-    calls[1]!.resolve({ value: "B-data", snapshotAt: "2025-01-02T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[1]!.resolve({
+        value: "B-data",
+        snapshotAt: "2025-01-02T00:00:00Z",
+      });
     });
     expect(result.current.data?.value).toBe("B-data");
     expect(result.current.isInitialLoading).toBe(false);
@@ -289,9 +287,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     });
     expect(loader).toHaveBeenCalledTimes(1);
 
@@ -304,9 +301,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(loader).toHaveBeenCalledTimes(2);
-    calls[1]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[1]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     });
 
     // The manual completion must have re-armed the cadence: the poll fires
@@ -331,9 +327,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     });
     expect(loader).toHaveBeenCalledTimes(1);
 
@@ -369,9 +364,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     expect(calls[0]!.signal.aborted).toBe(true);
 
     // Resolve the aborted request — it must not schedule a new poll.
-    calls[0]!.reject(new DOMException("Aborted", "AbortError"));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.reject(new DOMException("Aborted", "AbortError"));
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
@@ -393,9 +387,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[0]!.resolve({ value: "v", snapshotAt: "2025-01-01T00:00:00Z" });
     });
 
     act(() => {
@@ -405,9 +398,8 @@ describe("useRecoveryProjection (timer flow — fake timers)", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(loader).toHaveBeenCalledTimes(2);
-    calls[1]!.reject(new Error("boom"));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      calls[1]!.reject(new Error("boom"));
     });
 
     // Old data preserved + error recorded (background failure).

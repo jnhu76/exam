@@ -405,10 +405,23 @@ describe("CandidateFieldsPage", () => {
     });
     renderPage();
     await within(await screen.findByRole("table")).findByText("employeeId");
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: /下载模板/ }));
-    expect(apiGet).toHaveBeenCalledWith("/api/candidate-fields/template");
+    // jsdom cannot perform the browser download. Observe the detached
+    // anchor that requests it, before handing over to the browser.
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    try {
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: /下载模板/ }));
+      expect(apiGet).toHaveBeenCalledWith("/api/candidate-fields/template");
+      expect(click).toHaveBeenCalledTimes(1);
+      const anchor = click.mock.contexts[0];
+      expect(anchor).toHaveAttribute("download", "候选人导入模板.csv");
+      expect(anchor).toHaveAttribute("href", expect.stringMatching(/^blob:/));
+    } finally {
+      click.mockRestore();
+    }
   });
 
   it("toggles required and unique checkboxes in dialog", async () => {

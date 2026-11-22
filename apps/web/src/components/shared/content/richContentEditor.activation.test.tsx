@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Editor } from "@tiptap/core";
 import { describe, expect, it, vi } from "vitest";
@@ -145,10 +145,12 @@ describe("formula open-time context — re-edit activation follows the target at
     // LOAD-BEARING DIRECTION: the caret sits at top level while the clicked
     // atom lives inside the list item. The pre-fix code judged the caret here
     // and offered 独立显示 — a choice the persisted document then downgrades.
-    editor.commands.setTextSelection(pos.topLevel + 1);
-    expect(editor.isActive("listItem")).toBe(false);
-    activateClickedAtom(pos.inList);
-    await screen.findByTestId("formula-dialog");
+    await act(async () => {
+      editor.commands.setTextSelection(pos.topLevel + 1);
+      expect(editor.isActive("listItem")).toBe(false);
+      activateClickedAtom(pos.inList);
+    });
+    expect(screen.getByTestId("formula-dialog")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "独立显示" })).toBeDisabled();
     expect(screen.getByRole("radio", { name: "行内" })).toBeChecked();
 
@@ -161,10 +163,12 @@ describe("formula open-time context — re-edit activation follows the target at
     // INVERSE CONTROL: the caret sits inside the list while the clicked atom
     // is top level — the target's context still decides, and it allows
     // 独立显示 (the pre-fix caret judgment would have disabled it).
-    editor.commands.setTextSelection(pos.inList + 1);
-    expect(editor.isActive("listItem")).toBe(true);
-    activateClickedAtom(pos.topLevel);
-    await screen.findByTestId("formula-dialog");
+    await act(async () => {
+      editor.commands.setTextSelection(pos.inList + 1);
+      expect(editor.isActive("listItem")).toBe(true);
+      activateClickedAtom(pos.topLevel);
+    });
+    expect(screen.getByTestId("formula-dialog")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "独立显示" })).toBeEnabled();
     expect(screen.getByRole("radio", { name: "行内" })).toBeChecked();
   });

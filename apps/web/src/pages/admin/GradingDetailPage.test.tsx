@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -429,10 +429,10 @@ describe("GradingDetailPage", () => {
       screen.getAllByText("提交中...")[0]!.closest("button"),
     ).toBeDisabled();
 
-    resolvePost!(mockGradeResponse);
-    await vi.waitFor(() => {
-      expect(screen.queryByText("提交中...")).not.toBeInTheDocument();
+    await act(async () => {
+      resolvePost!(mockGradeResponse);
     });
+    expect(screen.queryByText("提交中...")).not.toBeInTheDocument();
   });
 });
 
@@ -567,26 +567,22 @@ describe("GradingDetailPage — one-time submission UX", () => {
         page: 1,
         pageSize: 20,
       })
-      .mockResolvedValueOnce(mockDetailData); // next attempt's detail load
+      .mockResolvedValueOnce({ ...mockDetailData, candidateName: "李四" });
     renderPage();
     await screen.findByText(/期末考试 — 张三/);
 
     const nextBtn = screen.getByRole("button", { name: "下一份待阅卷" });
-    await userEvent.click(nextBtn);
+    await act(async () => {
+      fireEvent.click(nextBtn);
+    });
 
-    // The navigation target is resolved by the server's own queue projection,
-    // never by a client-side queue mirror.
-    await vi.waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith(
-        "/api/admin/grading-queue?page=1&pageSize=20",
-      );
-    });
-    // Navigating remounts the page for the next attempt id.
-    await vi.waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith(
-        "/api/admin/attempts/att-next/grading-details",
-      );
-    });
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/admin/grading-queue?page=1&pageSize=20",
+    );
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/admin/attempts/att-next/grading-details",
+    );
+    expect(screen.getByText(/期末考试 — 李四/)).toBeInTheDocument();
   });
 
   it("does not offer next-pending while the attempt still has pending questions", async () => {

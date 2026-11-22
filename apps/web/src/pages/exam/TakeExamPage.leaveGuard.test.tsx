@@ -210,15 +210,6 @@ function clickDialogButton(testId: string, text: string): void {
   fireEvent.click(button);
 }
 
-/** Waits (real timers) until the element with the given testid is gone. */
-async function waitForGone(testId: string): Promise<void> {
-  for (let i = 0; i < 100; i += 1) {
-    if (!document.querySelector(`[data-testid="${testId}"]`)) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  expect(document.querySelector(`[data-testid="${testId}"]`)).toBeNull();
-}
-
 beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
@@ -430,20 +421,24 @@ describe("controlled leave-page save (#971 F-01)", () => {
     renderShell();
     const input = await screen.findByLabelText("第1空答案");
     fireEvent.change(input, { target: { value: "答案甲" } });
-    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    });
 
     // The rejection surfaces: page retained, explicit abandon decision.
-    expect(
-      await screen.findByTestId("leave-abandon-dialog"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("leave-abandon-dialog")).toBeInTheDocument();
     expect(screen.getByTestId("current-path")).toHaveTextContent(
       "/exam/exam-1/take/att-1",
     );
     expect(screen.getByText(/1 道题的修改未获服务器确认/)).toBeInTheDocument();
 
     // 留在本页: stay; the per-question retry banner remains reachable.
-    clickDialogButton("leave-abandon-dialog", "留在本页");
-    await waitForGone("leave-abandon-dialog");
+    await act(async () => {
+      clickDialogButton("leave-abandon-dialog", "留在本页");
+    });
+    expect(
+      screen.queryByTestId("leave-abandon-dialog"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("current-path")).toHaveTextContent(
       "/exam/exam-1/take/att-1",
     );
@@ -452,15 +447,19 @@ describe("controlled leave-page save (#971 F-01)", () => {
     ).toBeInTheDocument();
 
     rejectNext = false;
-    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
-    await waitFor(() => {
-      expect(screen.getByText("已保存")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
     });
-    await waitForGone("save-rejection-alert");
+    expect(screen.getByText("已保存")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("save-rejection-alert"),
+    ).not.toBeInTheDocument();
 
     // A confirmed exit now succeeds without the abandon dialog.
-    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
-    expect(await screen.findByText("列表页")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    });
+    expect(screen.getByText("列表页")).toBeInTheDocument();
     expect(
       screen.queryByTestId("leave-abandon-dialog"),
     ).not.toBeInTheDocument();
@@ -912,12 +911,25 @@ describe("controlled leave-page save (#971 F-01)", () => {
     fireEvent.change(input, { target: { value: "答案甲" } });
     const link = screen.getByRole("link", { name: "我的考试" });
 
-    // Ctrl/Cmd/Shift/Alt click means "open elsewhere" — the shell must let
-    // the native link behavior run instead of intercepting navigation.
-    expect(fireEvent.click(link, { ctrlKey: true })).toBe(true);
-    expect(fireEvent.click(link, { metaKey: true })).toBe(true);
-    expect(fireEvent.click(link, { shiftKey: true })).toBe(true);
-    expect(fireEvent.click(link, { altKey: true })).toBe(true);
+    // Observe cancellation after the React router handler, then stop jsdom's
+    // unsupported native navigation at the browser boundary.
+    const prevented: boolean[] = [];
+    const stopNavigation = (event: MouseEvent) => {
+      if (event.target === link) {
+        prevented.push(event.defaultPrevented);
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("click", stopNavigation);
+    try {
+      fireEvent.click(link, { ctrlKey: true });
+      fireEvent.click(link, { metaKey: true });
+      fireEvent.click(link, { shiftKey: true });
+      fireEvent.click(link, { altKey: true });
+    } finally {
+      document.removeEventListener("click", stopNavigation);
+    }
+    expect(prevented).toEqual([false, false, false, false]);
 
     expect(answerPostCalls()).toHaveLength(0);
     expect(screen.queryByTestId("leave-saving-dialog")).not.toBeInTheDocument();
@@ -961,13 +973,13 @@ describe("controlled leave-page save (#971 F-01)", () => {
     renderShell();
     const input = await screen.findByLabelText("第1空答案");
     fireEvent.change(input, { target: { value: "答案甲" } });
-    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    });
 
     // STALE_VERSION is a business NON-acceptance: the leave wait does not
     // release silently — the candidate must decide explicitly.
-    expect(
-      await screen.findByTestId("leave-abandon-dialog"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("leave-abandon-dialog")).toBeInTheDocument();
     expect(screen.getByTestId("current-path")).toHaveTextContent(
       "/exam/exam-1/take/att-1",
     );
@@ -977,16 +989,22 @@ describe("controlled leave-page save (#971 F-01)", () => {
     expect(screen.getByText("保存失败")).toBeInTheDocument();
 
     // Stay, retry the preserved edit, then leave: only the ACK releases.
-    clickDialogButton("leave-abandon-dialog", "留在本页");
-    await waitForGone("leave-abandon-dialog");
-    acceptAnswers = true;
-    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
-    await waitFor(() => {
-      expect(screen.getByText("已保存")).toBeInTheDocument();
+    await act(async () => {
+      clickDialogButton("leave-abandon-dialog", "留在本页");
     });
+    expect(
+      screen.queryByTestId("leave-abandon-dialog"),
+    ).not.toBeInTheDocument();
+    acceptAnswers = true;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    });
+    expect(screen.getByText("已保存")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
-    expect(await screen.findByText("列表页")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "我的考试" }));
+    });
+    expect(screen.getByText("列表页")).toBeInTheDocument();
     const [, retryBody] = answerPostCalls()[1]!;
     expect(retryBody.answer).toBe("答案甲");
     expect(retryBody.baseVersion).toBe(1);

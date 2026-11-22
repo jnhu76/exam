@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   type DialogSize,
@@ -10,6 +11,7 @@ import {
 import {
   AlertDialog,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -43,6 +45,7 @@ function renderDialog(size?: DialogSize) {
       <DialogContent size={size}>
         <DialogHeader>
           <DialogTitle>对话框</DialogTitle>
+          <DialogDescription>尺寸测试</DialogDescription>
         </DialogHeader>
       </DialogContent>
     </Dialog>,
@@ -56,6 +59,7 @@ function renderAlertDialog(size?: "sm" | "md" | "lg") {
       <AlertDialogContent size={size}>
         <AlertDialogHeader>
           <AlertDialogTitle>确认框</AlertDialogTitle>
+          <AlertDialogDescription>尺寸测试</AlertDialogDescription>
         </AlertDialogHeader>
       </AlertDialogContent>
     </AlertDialog>,
