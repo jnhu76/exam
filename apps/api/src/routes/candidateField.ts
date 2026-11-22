@@ -32,7 +32,9 @@ export function isIdentityFieldIndexViolation(err: unknown): boolean {
     if (
       typeof current === "object" &&
       current !== null &&
-      (current as { constraint?: unknown }).constraint ===
+      // postgres.js v3 reports the violated constraint as `constraint_name`
+      // (Drizzle preserves it on the error's cause chain).
+      (current as { constraint_name?: unknown }).constraint_name ===
         "candidate_fields_org_identity_uidx"
     ) {
       return true;
