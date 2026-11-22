@@ -607,6 +607,13 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             continue;
           }
 
+          // Hash BEFORE the locked transaction: argon2id is ~70ms of pure
+          // CPU per row and touches no database state, so computing it
+          // inside the per-row candidate-identity lock would serialize the
+          // whole organization behind each digest. Same placement as the
+          // single-create path above.
+          const passwordHash = password ? await hashPassword(password) : null;
+
           // Per-row locked transaction: config reads, validation, identity
           // resolution and the write all observe org state serialized
           // against concurrent candidate-field mutations (they hold the
@@ -643,10 +650,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
                 await createUserRepo(tx).update(ctx, existing.userId, { name });
                 return { kind: "updated" as const, userId: existing.userId };
               }
-              if (!password) {
+              if (!passwordHash) {
                 return { kind: "missing-password" as const };
               }
-              const passwordHash = await hashPassword(password);
               const txUserRepo = createUserRepo(tx);
               const createdUser = await txUserRepo.createUnique(ctx, {
                 username,
