@@ -448,6 +448,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         response: {
           204: z.null(),
+          503: ErrorResponseSchema,
         },
       },
     },
@@ -456,67 +457,91 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
      * auth-token cookie (#325).
      *
      * Logout is intentionally callable with an absent/invalid/expired cookie
-     * so the browser cookie can always be cleared: 204 in every path. Only a
-     * VALID token performs durable revocation, and revocation is a CAS on
-     * `users.auth_epoch` — a stale already-revoked token cannot advance the
-     * authority over a newer login session. Revocation is all-tab /
+     * so the browser cookie can always be cleared: 204 in every such path.
+     * Only a VALID token performs durable revocation, and revocation is a CAS
+     * on `users.auth_epoch` — a stale already-revoked token cannot advance
+     * the authority over a newer login session. Revocation is all-tab /
      * all-device: every JWT sharing the revoked epoch becomes invalid.
      *
+     * INVARIANT (revoke-first / fail-closed, #1079 WP-01): when the epoch
+     * CAS cannot be durably written (PG error, timeout, connection loss),
+     * the route answers 503 and does NOT clear the cookie. Claiming success
+     * (204 + cleared cookie) while the server-side credential is still
+     * valid would misrepresent the security state; the client must surface
+     * the failure and let the user retry.
+     *
      * Audit records the event best-effort (valid-token paths); audit
-     * availability never blocks clearing the browser cookie.
+     * availability never blocks the logout outcome, and `revoked` in the
+     * audit metadata always reflects whether the CAS actually advanced.
      */
     async (request, reply) => {
+      // Phase 1 — credential validation. Failures (absent/invalid/expired
+      // token) are idempotent 204: the browser cookie still gets cleared.
+      // INVARIANT: the revocation phase below deliberately lives OUTSIDE
+      // this try, so no revocation failure can ever be re-interpreted by
+      // this catch into a fail-open 204 (#1079 WP-01).
+      let payload: ReturnType<typeof verifyJWT> | null = null;
       const token = request.cookies["auth-token"];
       if (token) {
         try {
-          const payload = verifyJWT(
-            token,
-            getRuntimeConfig().authSecret.jwtSecret,
-          );
-          // Conditional mutation: only a credential that is CURRENT at this
-          // instant may advance the authority (stale-token replay against
-          // /logout must not invalidate a newer session).
-          let revokedEpoch: number | null = null;
-          try {
-            revokedEpoch = await createUserRepo(
-              fastify.db,
-            ).advanceAuthEpochIfCurrent(
-              {
-                actorId: payload.actorId,
-                organizationId: payload.organizationId,
-                role: payload.role,
-                permissions: [],
-                sessionId: "logout",
-              },
-              payload.actorId,
-              payload.authEpoch,
-            );
-          } catch (err) {
-            fastify.log.error(
-              { err, requestId: request.id },
-              "logout: epoch revocation failed",
-            );
-          }
-          const ctx: RequestContext = {
-            actorId: payload.actorId,
-            organizationId: payload.organizationId,
-            targetOrganizationId: payload.organizationId,
-            role: payload.role,
-            permissions: [],
-            sessionId: "logout",
-          };
-          recordBestEffortAudit(fastify, request, ctx, {
-            action: "logout",
-            targetType: "user",
-            targetId: payload.actorId,
-            metadata: { revoked: revokedEpoch !== null },
-          });
+          payload = verifyJWT(token, getRuntimeConfig().authSecret.jwtSecret);
         } catch (err) {
           fastify.log.warn(
             { err, event: "logout.invalid_token" },
             "logout: invalid or expired token",
           );
         }
+      }
+      if (payload) {
+        const ctx: RequestContext = {
+          actorId: payload.actorId,
+          organizationId: payload.organizationId,
+          targetOrganizationId: payload.organizationId,
+          role: payload.role,
+          permissions: [],
+          sessionId: "logout",
+        };
+        // Phase 2 — durable revocation. Conditional mutation: only a
+        // credential that is CURRENT at this instant may advance the
+        // authority (stale-token replay against /logout must not
+        // invalidate a newer session).
+        let revokedEpoch: number | null;
+        try {
+          revokedEpoch = await createUserRepo(
+            fastify.db,
+          ).advanceAuthEpochIfCurrent(ctx, payload.actorId, payload.authEpoch);
+        } catch (err) {
+          // Fail closed: the revocation state is unknown-to-unwritten, so
+          // no success is claimed and the cookie survives for the retry.
+          fastify.log.error(
+            {
+              err,
+              requestId: request.id,
+              event: "logout.revocation_failed",
+              actorId: payload.actorId,
+              organizationId: payload.organizationId,
+            },
+            "logout: epoch revocation failed — failing closed with 503",
+          );
+          // Audit vocabulary is strict ({revoked} only, auditPolicy #325):
+          // the failure reason travels on the error log event above, never
+          // as an ad-hoc audit metadata key.
+          recordBestEffortAudit(fastify, request, ctx, {
+            action: "logout",
+            targetType: "user",
+            targetId: payload.actorId,
+            metadata: { revoked: false },
+          });
+          return reply
+            .code(503)
+            .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+        }
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "logout",
+          targetType: "user",
+          targetId: payload.actorId,
+          metadata: { revoked: revokedEpoch !== null },
+        });
       }
       reply.clearCookie("auth-token", { path: "/" });
       return reply.code(204).send();

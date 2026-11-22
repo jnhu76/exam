@@ -112,19 +112,25 @@
 
 ### POST /auth/logout
 
-**权限**: 需要认证
+**权限**: 可匿名调用（无 token / 无效 / 过期 token 均为幂等 204）
 
 **请求体**: `{}`
 
-**响应** (200):
+**响应** (204): 无响应体。撤销成功或无需撤销时清除 `auth-token` Cookie。
+
+**响应** (503): 有效 token 的服务端 epoch 撤销写入失败（fail-closed，#1079 WP-01）。返回标准错误体（`AUTHZ_UNAVAILABLE`），**不清除 Cookie**、不宣称登出成功；客户端应呈现失败并允许用户重试。
 
 ```json
 {
-  "success": true
+  "error": {
+    "code": "AUTHZ_UNAVAILABLE",
+    "message": "授权服务暂不可用，请稍后重试",
+    "requestId": "req-xxxx"
+  }
 }
 ```
 
-**Cookie**: 清除 `auth-token`
+**Cookie**: 204 时清除 `auth-token`；503 时保留
 
 ---
 
