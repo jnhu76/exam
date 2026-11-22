@@ -76,7 +76,10 @@ import {
 } from "./resultsAccessPolicy.js";
 import { resolveTeacherCourseScope } from "./teacherScope.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
-import { executeAdminExamTransition } from "./examTransitionExecutor.js";
+import {
+  executeAdminExamTransition,
+  type TransitionResult,
+} from "./examTransitionExecutor.js";
 import {
   recordAtomicHttpAudit,
   recordBestEffortAudit,
@@ -1424,47 +1427,65 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** Publish a draft exam, transitioning it to published status and snapshotting questions. Throws ExamAlreadyPublishedError if not in draft state. */
+    /**
+     * Publish a draft exam, transitioning it to published status and
+     * snapshotting questions. ADR-005 construction hard rule: lock ->
+     * reconcile -> assert -> mutate -> audit, via the shared admin
+     * transition executor. Throws ExamAlreadyPublishedError if not in draft
+     * state.
+     */
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      const examRepo = createExamRepo(fastify.db);
-      const questionRepo = createQuestionRepo(fastify.db);
 
-      const exam = (await examRepo.findById(ctx, id)) as Exam | null;
-      if (!exam) {
-        return reply
-          .code(404)
-          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-      }
-
-      const questions = (
-        await Promise.all(
-          exam.questionIds.map((qid) => questionRepo.findById(ctx, qid)),
-        )
-      ).filter((q): q is NonNullable<typeof q> => q !== null) as Question[];
-
+      let result: TransitionResult<Exam> | null;
       try {
-        const updated = await executeInTransaction(fastify.db, async (tx) => {
-          const published = await publishExam(
-            createExamRepoAdapter(createExamRepo(tx), ctx),
-            id,
-            questions,
-          );
-          await recordAtomicHttpAudit(tx, request, ctx, {
-            action: "exam.publish",
-            targetType: "exam",
-            targetId: id,
-          });
-          return published;
-        });
-        return toExamResponse(updated);
+        result = await executeAdminExamTransition(
+          fastify.db,
+          ctx,
+          id,
+          fastify.now(),
+          async ({ tx, repo, exam }) => {
+            // INVARIANT: the frozen question set is resolved INSIDE the
+            // locked transaction from the in-transaction exam.questionIds.
+            // An out-of-transaction pre-read is stale against a concurrent
+            // draft PATCH committing under the row lock, which diverges the
+            // persisted snapshot from the exam's committed questionIds.
+            // EXSEM-004: a dangling draft reference still fails closed —
+            // the dropped null is rejected by publishExam's snapshot build.
+            const questionRepo = createQuestionRepo(tx);
+            const questions = (
+              await Promise.all(
+                exam.questionIds.map((qid) => questionRepo.findById(ctx, qid)),
+              )
+            ).filter(
+              (q): q is NonNullable<typeof q> => q !== null,
+            ) as Question[];
+            return publishExam(repo, id, questions);
+          },
+          request,
+          () => [
+            {
+              action: "exam.publish",
+              targetType: "exam",
+              targetId: id,
+            },
+          ],
+        );
       } catch (err) {
         if (err instanceof InvalidStateTransitionError) {
           throw new ExamAlreadyPublishedError();
         }
         throw err;
       }
+
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      return toExamResponse(result.data);
     },
   );
 
