@@ -102,7 +102,25 @@ async function buildFixture(db: Database): Promise<Fixture> {
     totalScore: 100,
     questionSelectionMode: "manual",
     questionIds: [questionId],
-    questionSnapshot: [{ originalQuestionId: questionId, score: 10 }],
+    questionSnapshot: [
+      {
+        originalQuestionId: questionId,
+        type: "true_false",
+        content: "Test question",
+        contentDocument: null,
+        answerMode: null,
+        attachments: [],
+        options: [],
+        standardAnswer: true,
+        score: 10,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        order: 0,
+        rubric: null,
+      },
+    ],
     controlFlags: {
       shuffleQuestions: false,
       shuffleOptions: false,
@@ -118,7 +136,6 @@ async function buildFixture(db: Database): Promise<Fixture> {
     retakePolicy: "unlimited",
     scoreStrategy: "highest",
     maxAttempts: 3,
-    publishedAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -182,7 +199,7 @@ function makeCtx(fx: Fixture) {
 async function insertAttempt(
   fx: Fixture,
   attemptNo: number,
-  status: string,
+  status: import("@exam/domain").AttemptStatus,
   extra?: Record<string, unknown>,
 ) {
   const rows = await fx.db
@@ -201,6 +218,17 @@ async function insertAttempt(
           score: 10,
           type: "true_false",
           content: "Test",
+          contentDocument: null,
+          answerMode: null,
+          attachments: [],
+          options: [],
+          standardAnswer: true,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: null,
         },
       ],
       answers: [],
@@ -234,10 +262,7 @@ async function lockedReadModifyWrite(
       park.lockedAndRead.resolve();
       await park.release.promise;
     }
-    const current = (locked.answers ?? []) as Array<{
-      questionId: string;
-      version: number;
-    }>;
+    const current = locked.answers ?? [];
     const existing = current.find((a) => a.questionId === fx.questionId);
     const nextVersion = (existing?.version ?? 0) + 1;
     const updated = current.filter((a) => a.questionId !== fx.questionId);

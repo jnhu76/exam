@@ -122,7 +122,25 @@ async function buildFixture(db: Database): Promise<Fixture> {
     totalScore: 100,
     questionSelectionMode: "manual",
     questionIds: [questionId],
-    questionSnapshot: [{ originalQuestionId: questionId, score: 10 }],
+    questionSnapshot: [
+      {
+        originalQuestionId: questionId,
+        type: "true_false",
+        content: "EA lock-order question",
+        contentDocument: null,
+        answerMode: null,
+        attachments: [],
+        options: [],
+        standardAnswer: true,
+        score: 10,
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        order: 0,
+        rubric: null,
+      },
+    ],
     controlFlags: {
       shuffleQuestions: false,
       shuffleOptions: false,
@@ -138,7 +156,6 @@ async function buildFixture(db: Database): Promise<Fixture> {
     retakePolicy: "unlimited",
     scoreStrategy: "highest",
     maxAttempts: 3,
-    publishedAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -194,6 +211,17 @@ async function buildFixture(db: Database): Promise<Fixture> {
           score: 10,
           type: "true_false",
           content: "Test",
+          contentDocument: null,
+          answerMode: null,
+          attachments: [],
+          options: [],
+          standardAnswer: true,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: null,
         },
       ],
       answers: [],
@@ -222,6 +250,7 @@ function makeCtx(fx: Fixture) {
     actorId: fx.candidateUserId,
     role: "Candidate" as const,
     permissions: [] as import("@exam/domain").Permission[],
+    sessionId: "ea-lock-order",
     targetOrganizationId: fx.orgId,
   };
 }

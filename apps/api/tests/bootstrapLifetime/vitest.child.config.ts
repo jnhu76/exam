@@ -54,8 +54,9 @@ seedProcessEnvFromFiles(fileEnv);
 
 export default defineConfig(() => ({
   // #741: per-package implicit envDir admission is OFF (pinned by
-  // scripts/check-env-surface.mjs).
-  envDir: false,
+  // scripts/check-env-surface.mjs). `as const` keeps the literal `false`
+  // (vite envDir: string | false) from widening to `boolean`.
+  envDir: false as const,
   plugins: [workspaceSourceResolutionPlugin()],
   test: {
     root: apiRoot,

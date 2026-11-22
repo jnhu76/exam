@@ -7,6 +7,11 @@
     // .d.ts. Production build keeps tsconfig.json (dist types are the
     // production type authority, guaranteed fresh by turbo ^build).
     "noEmit": true,
-    "customConditions": ["@exam/test-source"]
-  }
+    "customConditions": ["@exam/test-source"],
+    // #1073: the A-type fileset must also cover test sources. rootDir widens
+    // past the package because child vitest configs import repo-root config/
+    // helpers; under noEmit rootDir has no emit effect.
+    "rootDir": "../.."
+  },
+  "include": ["src", "tests", "vitest.*.ts"]
 }

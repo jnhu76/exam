@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import Fastify from "fastify";
+import type { FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import authPlugin from "../../src/plugins/auth.js";
@@ -83,7 +84,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
       {
         preHandler: [app.authenticate],
       },
-      async (request) => ({ actorId: request.ctx?.actorId }),
+      async (request: FastifyRequest) => ({ actorId: request.ctx?.actorId }),
     );
     await app.ready();
   });
