@@ -560,6 +560,265 @@ describe("cross-org join reads stay tenant-scoped", () => {
     }
   });
 
+  it("countPendingManualQueue agrees with listPendingManualQueue when a caller-org entry links a fully foreign attempt", async () => {
+    const repo = createAttemptGradingEntryRepo(db);
+    const foreignOrgId = randomUUID();
+    await insertOrganization(db, foreignOrgId, "Foreign Queue Org");
+    const foreignCourseId = await insertCourse(db, {
+      organizationId: foreignOrgId,
+    });
+    const foreignExamId = await insertExam(
+      db,
+      { organizationId: foreignOrgId, courseId: foreignCourseId },
+      { title: "FOREIGN-EXAM-X" },
+    );
+    const foreignUserId = await insertUser(db, {
+      organizationId: foreignOrgId,
+      name: "FOREIGN-CANDIDATE-X",
+      role: "Candidate",
+    });
+    const foreignProfileId = randomUUID();
+    await db.insert(schema.candidateProfiles).values({
+      id: foreignProfileId,
+      organizationId: foreignOrgId,
+      userId: foreignUserId,
+      fields: { studentNo: "FOREIGN-IDENTITY-X" },
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    const foreignEnrollmentId = await insertEnrollment(db, {
+      organizationId: foreignOrgId,
+      examId: foreignExamId,
+      candidateId: foreignProfileId,
+    });
+    const foreignAttemptId = await insertAttempt(db, {
+      organizationId: foreignOrgId,
+      examId: foreignExamId,
+      enrollmentId: foreignEnrollmentId,
+      candidateId: foreignProfileId,
+    });
+    const foreignEntryId = await insertPendingManualEntry(db, {
+      organizationId: fx.organizationId,
+      attemptId: foreignAttemptId,
+      questionId: "q-x",
+    });
+    const healthyEntryId = await insertPendingManualEntry(db, {
+      organizationId: fx.organizationId,
+      attemptId: fx.pendingAttemptId,
+      questionId: "q-x-control",
+    });
+    try {
+      const groups = await repo.listPendingManualQueue(fx.ctx);
+      const total = await repo.countPendingManualQueue(fx.ctx);
+
+      // The list drops the foreign-linked entry (identity joins fail closed).
+      expect(
+        groups.find((g) => g.attempt.id === foreignAttemptId),
+      ).toBeUndefined();
+      expect(groups.map((g) => g.attempt.id)).toEqual([fx.pendingAttemptId]);
+      // The pagination total MUST equal the unpaginated filtered row count:
+      // count and list receive the same filter BY CONTRACT, so a count that
+      // still sees the dropped attempt makes total disagree with the page.
+      expect(total).toBe(groups.length);
+
+      // Non-empty examIds scope: list and count still agree.
+      const scopedRows = await repo.listPendingManualQueue(fx.ctx, {
+        examIds: [fx.examId],
+      });
+      const scopedTotal = await repo.countPendingManualQueue(fx.ctx, {
+        examIds: [fx.examId],
+      });
+      expect(scopedTotal).toBe(scopedRows.length);
+      const foreignScopedRows = await repo.listPendingManualQueue(fx.ctx, {
+        examIds: [foreignExamId],
+      });
+      const foreignScopedTotal = await repo.countPendingManualQueue(fx.ctx, {
+        examIds: [foreignExamId],
+      });
+      expect(foreignScopedTotal).toBe(foreignScopedRows.length);
+      expect(foreignScopedTotal).toBe(0);
+
+      // Empty scope contract: zero rows AND zero total.
+      const emptyRows = await repo.listPendingManualQueue(fx.ctx, {
+        examIds: [],
+      });
+      const emptyTotal = await repo.countPendingManualQueue(fx.ctx, {
+        examIds: [],
+      });
+      expect(emptyRows).toHaveLength(0);
+      expect(emptyTotal).toBe(0);
+    } finally {
+      await db
+        .delete(schema.attemptGradingEntries)
+        .where(eq(schema.attemptGradingEntries.id, foreignEntryId));
+      await db
+        .delete(schema.attemptGradingEntries)
+        .where(eq(schema.attemptGradingEntries.id, healthyEntryId));
+      await db
+        .delete(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, foreignAttemptId));
+      await db
+        .delete(schema.examEnrollments)
+        .where(eq(schema.examEnrollments.id, foreignEnrollmentId));
+      await db.delete(schema.exams).where(eq(schema.exams.id, foreignExamId));
+      await db
+        .delete(schema.courses)
+        .where(eq(schema.courses.id, foreignCourseId));
+      await db
+        .delete(schema.candidateProfiles)
+        .where(eq(schema.candidateProfiles.id, foreignProfileId));
+      await db.delete(schema.users).where(eq(schema.users.id, foreignUserId));
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+
+  it("countPendingManualQueue agrees with listPendingManualQueue when a caller-org attempt links a foreign candidate", async () => {
+    const repo = createAttemptGradingEntryRepo(db);
+    const foreignOrgId = randomUUID();
+    const foreignUserId = randomUUID();
+    await insertOrganization(db, foreignOrgId, "Foreign Candidate Org Y");
+    await insertUser(db, {
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      name: "FOREIGN-CANDIDATE-Y",
+      role: "Candidate",
+    });
+    const foreignProfileId = randomUUID();
+    await db.insert(schema.candidateProfiles).values({
+      id: foreignProfileId,
+      organizationId: foreignOrgId,
+      userId: foreignUserId,
+      fields: { studentNo: "FOREIGN-IDENTITY-Y" },
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    // FK-legitimate anomaly: the attempt is the caller org's, but its
+    // candidateId points at another org's profile (global FK, no org
+    // composite) — the list drops the attempt, so the count must drop it too.
+    const brokenEnrollmentId = await insertEnrollment(db, {
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      candidateId: foreignProfileId,
+    });
+    const brokenAttemptId = await insertAttempt(db, {
+      organizationId: fx.organizationId,
+      examId: fx.examId,
+      enrollmentId: brokenEnrollmentId,
+      candidateId: foreignProfileId,
+    });
+    const brokenEntryId = await insertPendingManualEntry(db, {
+      organizationId: fx.organizationId,
+      attemptId: brokenAttemptId,
+      questionId: "q-y",
+    });
+    const healthyEntryId = await insertPendingManualEntry(db, {
+      organizationId: fx.organizationId,
+      attemptId: fx.pendingAttemptId,
+      questionId: "q-y-control",
+    });
+    try {
+      const rows = await repo.listPendingManualQueue(fx.ctx, {
+        examId: fx.examId,
+      });
+      const total = await repo.countPendingManualQueue(fx.ctx, {
+        examId: fx.examId,
+      });
+
+      expect(
+        rows.find((r) => r.attempt.id === brokenAttemptId),
+      ).toBeUndefined();
+      expect(rows.map((r) => r.attempt.id)).toEqual([fx.pendingAttemptId]);
+      expect(total).toBe(rows.length);
+    } finally {
+      await db
+        .delete(schema.attemptGradingEntries)
+        .where(eq(schema.attemptGradingEntries.id, brokenEntryId));
+      await db
+        .delete(schema.attemptGradingEntries)
+        .where(eq(schema.attemptGradingEntries.id, healthyEntryId));
+      await db
+        .delete(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, brokenAttemptId));
+      await db
+        .delete(schema.examEnrollments)
+        .where(eq(schema.examEnrollments.id, brokenEnrollmentId));
+      await db
+        .delete(schema.candidateProfiles)
+        .where(eq(schema.candidateProfiles.id, foreignProfileId));
+      await db.delete(schema.users).where(eq(schema.users.id, foreignUserId));
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, foreignOrgId));
+    }
+  });
+
+  it("listPendingManualQueue does not project a foreign-org attempt whose exam and candidate resolve in the caller org", async () => {
+    const repo = createAttemptGradingEntryRepo(db);
+    const rogueOrgId = randomUUID();
+    await insertOrganization(db, rogueOrgId, "Rogue Attempt Org");
+    // FK-legitimate anomaly: the attempt ROW itself belongs to another org,
+    // but its examId and candidateId point back into the caller org (global
+    // FKs). The entry/exam/profile/user same-org predicates all pass, so
+    // only the attempt's own organizationId can stop the projection.
+    const rogueEnrollmentId = await insertEnrollment(db, {
+      organizationId: rogueOrgId,
+      examId: fx.examId,
+      candidateId: fx.candidateId,
+    });
+    const rogueAttemptId = await insertAttempt(db, {
+      organizationId: rogueOrgId,
+      examId: fx.examId,
+      enrollmentId: rogueEnrollmentId,
+      candidateId: fx.candidateId,
+    });
+    const rogueEntryId = await insertPendingManualEntry(db, {
+      organizationId: fx.organizationId,
+      attemptId: rogueAttemptId,
+      questionId: "q-z",
+    });
+    const healthyEntryId = await insertPendingManualEntry(db, {
+      organizationId: fx.organizationId,
+      attemptId: fx.pendingAttemptId,
+      questionId: "q-z-control",
+    });
+    try {
+      const groups = await repo.listPendingManualQueue(fx.ctx);
+      const total = await repo.countPendingManualQueue(fx.ctx);
+
+      // The foreign-org attempt row must not surface in the caller's queue
+      // at all, under any join path.
+      expect(
+        groups.find((g) => g.attempt.id === rogueAttemptId),
+      ).toBeUndefined();
+      for (const group of groups) {
+        expect(group.attempt.organizationId).toBe(fx.organizationId);
+      }
+      // Healthy in-org control row keeps working.
+      expect(
+        groups.find((g) => g.attempt.id === fx.pendingAttemptId),
+      ).toBeDefined();
+      expect(total).toBe(groups.length);
+    } finally {
+      await db
+        .delete(schema.attemptGradingEntries)
+        .where(eq(schema.attemptGradingEntries.id, rogueEntryId));
+      await db
+        .delete(schema.attemptGradingEntries)
+        .where(eq(schema.attemptGradingEntries.id, healthyEntryId));
+      await db
+        .delete(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, rogueAttemptId));
+      await db
+        .delete(schema.examEnrollments)
+        .where(eq(schema.examEnrollments.id, rogueEnrollmentId));
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, rogueOrgId));
+    }
+  });
+
   it("listIncidentQueue fails closed when an anchored candidate's user is foreign (RECOVERY_QUEUE_CANDIDATE_BROKEN)", async () => {
     const repo = createRecoveryRepo(db);
     const foreignOrgId = randomUUID();
