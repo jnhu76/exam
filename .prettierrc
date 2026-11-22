@@ -1,0 +1,10 @@
+{
+  "overrides": [
+    {
+      "files": ["docs/releases/**/*.md"],
+      "options": {
+        "proseWrap": "never"
+      }
+    }
+  ]
+}
