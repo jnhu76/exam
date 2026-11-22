@@ -729,7 +729,7 @@ describe("auth routes", () => {
 });
 
 /**
- * #325 — auth epoch revocation regressions (R1-R7).
+ * #325 — auth epoch revocation regressions (R1-R9).
  *
  * The authority model: users.auth_epoch is the durable per-user credential
  * generation; JWTs carry the epoch they were issued under; authentication
@@ -1119,6 +1119,125 @@ describe("auth epoch revocation (#325)", () => {
       }
     } finally {
       await r7Ctx.cleanup();
+    }
+  });
+
+  it("R8: revocation-store failure fails closed — 503, cookie kept, token honestly still valid (#1079 WP-01)", async () => {
+    const r8Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const { username, userId } = await createCandidateForEpochTest(
+        r8Ctx,
+        "r8",
+      );
+      const login = await loginAndGetToken(r8Ctx.app, username);
+      expect(login.token).toBeTruthy();
+
+      // Deterministic PG-outage injection: the logout route's only durable
+      // write for a valid token is the epoch CAS on users. Shadowing
+      // db.update makes that CAS fail without touching reads, so /me keeps
+      // answering during the "outage" — exactly the honest non-revocation
+      // state the response must not paper over.
+      type DbUpdateHandle = { update: (...args: never[]) => unknown };
+      const dbHandle = r8Ctx.db as unknown as DbUpdateHandle;
+      const originalUpdate = dbHandle.update.bind(r8Ctx.db);
+      let failing = false;
+      dbHandle.update = (...args: never[]) => {
+        if (failing) {
+          throw new Error("simulated postgres outage during logout CAS");
+        }
+        return originalUpdate(...args);
+      };
+      try {
+        failing = true;
+        const out = await r8Ctx.app.inject({
+          method: "POST",
+          url: "/api/auth/logout",
+          cookies: { "auth-token": login.token! },
+        });
+        // FAIL-CLOSED contract: no success claim, no cookie clearing.
+        expect(out.statusCode).toBe(503);
+        expect(out.json()).toMatchObject({
+          error: { code: "AUTHZ_UNAVAILABLE" },
+        });
+        expect(out.headers["set-cookie"]).toBeUndefined();
+
+        // The server did NOT revoke: the same token still authenticates.
+        // Returning success here (204 + cleared cookie) would leave the
+        // user believing the credential is dead while it is not.
+        const meDuringOutage = await r8Ctx.app.inject({
+          method: "GET",
+          url: "/api/auth/me",
+          cookies: { "auth-token": login.token! },
+        });
+        expect(meDuringOutage.statusCode).toBe(200);
+
+        // The audit trail states the truth: revoked:false — never a false
+        // "logged out" (the failure reason lives on the error log event).
+        await r8Ctx.drainAuditWrites();
+        const outageAudits = await r8Ctx.db
+          .select()
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.targetId, userId));
+        const failedLogoutAudit = outageAudits.find(
+          (row) => row.action === "logout",
+        );
+        expect(failedLogoutAudit).toBeDefined();
+        expect(failedLogoutAudit?.metadata).toMatchObject({
+          revoked: false,
+        });
+      } finally {
+        failing = false;
+        dbHandle.update = originalUpdate;
+      }
+
+      // Store recovers; a user-initiated retry completes the revocation.
+      const retry = await r8Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+        cookies: { "auth-token": login.token! },
+      });
+      expect(retry.statusCode).toBe(204);
+
+      const meAfter = await r8Ctx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": login.token! },
+      });
+      expect(meAfter.statusCode).toBe(401);
+
+      // The retried logout audits the honest success: revoked:true.
+      await r8Ctx.drainAuditWrites();
+      const retryAudits = await r8Ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, userId));
+      const retryLogoutAudits = retryAudits.filter(
+        (row) => row.action === "logout",
+      );
+      expect(retryLogoutAudits).toHaveLength(2);
+      expect(retryLogoutAudits.at(-1)?.metadata).toMatchObject({
+        revoked: true,
+      });
+    } finally {
+      await r8Ctx.cleanup();
+    }
+  });
+
+  it("R9: logout without a token stays idempotent — 204 and cookie cleared", async () => {
+    const r9Ctx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const out = await r9Ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/logout",
+      });
+      // No credential presented: nothing to revoke, nothing to fail on.
+      // The browser cookie must still be cleared so the client ends up in
+      // the logged-out state regardless.
+      expect(out.statusCode).toBe(204);
+      expect(out.headers["set-cookie"]).toBeDefined();
+      expect(out.headers["set-cookie"]?.toString()).toContain("auth-token=;");
+    } finally {
+      await r9Ctx.cleanup();
     }
   });
 });

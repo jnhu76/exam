@@ -14,7 +14,9 @@ import type {
 } from "@exam/contracts";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { api, setNavigate } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { defaultLandingPath } from "@/lib/capabilities";
 
 /** User shape returned by the /api/auth/me endpoint. */
@@ -126,7 +128,6 @@ export function AuthProvider({
 
   async function logout() {
     setIsLoggingOut(true);
-    setError(null);
     try {
       await api.post<void>("/api/auth/logout");
       supersedeRestoreProbe();
@@ -134,7 +135,13 @@ export function AuthProvider({
       setUser(null);
       navigate("/login");
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("auth.errors.logoutFailed"));
+      // Fail-closed server contract (#1079 WP-01): a non-2xx logout means
+      // the credential was NOT revoked. No success may be claimed — the
+      // session stays and the failure is surfaced where logout was
+      // triggered (the `error` state renders only on /login), with
+      // code-keyed i18n copy per the message contract Zone A. The user
+      // can retry by activating logout again.
+      toast.error(getApiErrorMessage(e, t, t("auth.errors.logoutFailed")));
     } finally {
       setIsLoggingOut(false);
     }

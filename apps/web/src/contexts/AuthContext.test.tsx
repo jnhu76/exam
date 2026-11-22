@@ -5,7 +5,12 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { AuthProvider, useAuthContext } from "./AuthContext";
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const adminUser: MeResponse = {
   id: "admin",
@@ -312,6 +317,69 @@ describe("AuthContext", () => {
       });
 
       expect(screen.getByTestId("current-path")).toHaveTextContent("/login");
+    });
+
+    it("logout failure keeps the session and surfaces a retryable error (#1079 WP-01)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify(adminUser), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
+
+      render(
+        <MemoryRouter initialEntries={["/admin/dashboard"]}>
+          <AuthProvider>
+            <AuthProbe />
+            <Routes>
+              <Route path="/admin/dashboard" element={<LocationProbe />} />
+              <Route path="/login" element={<LocationProbe />} />
+              <Route path="*" element={<LocationProbe />} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await userEvent.click(screen.getByText("login"));
+      });
+      expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+
+      // Server fail-closed logout: 503 AUTHZ_UNAVAILABLE because the epoch
+      // revocation could not be durably written. The mock server message is
+      // deliberately DISTINCT from the zh-CN i18n copy so the assertion
+      // below proves the toast resolved through the code key (Zone A),
+      // never through server prose passthrough.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTHZ_UNAVAILABLE",
+                message: "server compatibility prose - not user copy",
+                requestId: "req-logout-1",
+              },
+            }),
+            { status: 503, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      );
+
+      await act(async () => {
+        await userEvent.click(screen.getByText("logout"));
+      });
+
+      // The failure must be visible where logout was triggered (the error
+      // state renders only on /login) with code-keyed i18n copy (Zone A).
+      expect(toast.error).toHaveBeenCalledWith("授权服务暂不可用，请稍后重试");
+      // No fake success: the session survives and there is no redirect.
+      expect(screen.getByTestId("user-name")).toHaveTextContent("管理员");
+      expect(screen.getByTestId("current-path")).toHaveTextContent(
+        "/admin/dashboard",
+      );
     });
   });
 
