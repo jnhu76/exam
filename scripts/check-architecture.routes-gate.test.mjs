@@ -300,8 +300,8 @@ export function wp07CexM13Seed(app: FastifyInstance): void {
  * route idioms on this master: executeInTransaction(fastify.db, ...)
  * (apps/api/src/routes/course.ts:232), repo factory chains
  * createCourseRepo(fastify.db) (apps/api/src/routes/course.ts:104), and the
- * allowed @exam/db import faces (repository/* subpaths, types, databaseUrl,
- * testScope, testIsolation, testWorkerDatabase).
+ * allowed @exam/db import faces (repository/* subpaths, types, lock,
+ * databaseUrl, testScope, testIsolation, testWorkerDatabase).
  */
 const LEGIT_FIXTURES = [
   {
@@ -331,6 +331,7 @@ export function wp07LegitRepoChain(app: FastifyInstance): void {
   {
     file: "wp07LegitWhitelistedDbImports.ts",
     body: `import { createCourseRepo } from "@exam/db/repository/courseRepo";
+import { acquireOrganizationAdvisoryLock } from "@exam/db/lock";
 import { parseAppMode } from "@exam/db/databaseUrl";
 import { withDatabaseName } from "@exam/db/testWorkerDatabase";
 import { resolveTestScope } from "@exam/db/testScope";
@@ -341,6 +342,7 @@ export function wp07LegitWhitelistedImports(app: FastifyInstance): void {
   app.get("/wp07-legit/whitelisted-imports", async () => {
     return {
       repo: typeof createCourseRepo,
+      lock: typeof acquireOrganizationAdvisoryLock,
       worker: typeof withDatabaseName,
       scope: typeof resolveTestScope,
       schema: typeof createTestSchema,

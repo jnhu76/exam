@@ -153,14 +153,20 @@ export function forbiddenImportPattern(importer) {
 // updating that suite in the same change.
 
 /**
- * @exam/db subpaths a route module may import: the repository seam and the
- * route-facing type/test-scope helpers. The root entry (self-built
- * connections) and every other subpath — schema first among them — are
- * repository territory (#1072).
+ * @exam/db subpaths a route module may import: the repository seam, the org
+ * advisory-lock seam, and the route-facing type/test-scope helpers. The root
+ * entry (self-built connections) and every other subpath — schema first among
+ * them — are repository territory (#1072).
+ *
+ * `lock` is route-facing because route handlers orchestrate org-scoped
+ * advisory locks around executeInTransaction — the same seam the authz
+ * admin-invariant modules consume (apps/api/src/authz/adminInvariant.ts) and
+ * the candidate-identity protocol depends on (#1066).
  */
 const ROUTE_ALLOWED_DB_SUBPATHS = Object.freeze([
   "repository/*",
   "types",
+  "lock",
   "databaseUrl",
   "testWorkerDatabase",
   "testScope",
