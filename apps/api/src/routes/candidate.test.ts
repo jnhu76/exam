@@ -469,6 +469,63 @@ describe("candidate routes", () => {
     });
   });
 
+  it("POST /api/candidates identity probe never cross-matches JSON string vs number (targeted jsonb lookup)", async () => {
+    // A profile row written outside the API can hold a JSON NUMBER under the
+    // (text) identity field. The identity probe must keep the former
+    // in-memory matcher's JS strict-equality semantics: a "42" string probe
+    // never conflicts with a stored 42, while a stored "42" string does.
+    const userId = crypto.randomUUID();
+    const now = new Date();
+    await ctx.db.insert(schema.users).values({
+      id: userId,
+      organizationId,
+      username: `candidate-numseed-${crypto.randomUUID().slice(0, 8)}`,
+      passwordHash: await hashPassword("password123"),
+      name: "Numeric Seed",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: crypto.randomUUID(),
+      organizationId,
+      userId,
+      fields: { [identityFieldName]: 42 },
+    });
+
+    const stringProbe = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `candidate-strprobe-${crypto.randomUUID().slice(0, 8)}`,
+        password: "password123",
+        name: "String Probe",
+        fields: { [identityFieldName]: "42" },
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(stringProbe.statusCode).toBe(201);
+
+    // The created "42" now conflicts on an equal string probe — the probe
+    // still resolves genuine matches.
+    const repeat = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `candidate-strrepeat-${crypto.randomUUID().slice(0, 8)}`,
+        password: "password123",
+        name: "String Repeat",
+        fields: { [identityFieldName]: "42" },
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(repeat.statusCode).toBe(409);
+    expect(repeat.json()).toMatchObject({
+      error: { code: "CANDIDATE_IDENTITY_CONFLICT" },
+    });
+  });
+
   it("PATCH /api/candidates/:id returns ErrorResponse v0 when missing", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",

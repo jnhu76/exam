@@ -7,6 +7,8 @@ import {
 } from "@exam/contracts";
 import { createCandidateFieldRepo } from "@exam/db/repository/candidateFieldRepo";
 import { createCandidateRepo } from "@exam/db/repository/candidateRepo";
+import { acquireOrganizationAdvisoryLock } from "@exam/db/lock";
+import { executeInTransaction, hasPostgresErrorCode } from "@exam/db/types";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -14,6 +16,36 @@ import { Permission } from "@exam/authz";
 
 /** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/**
+ * True when the error is a violation of the candidate identity partial
+ * unique index (`candidate_fields_org_identity_uidx`) — the DB backstop of
+ * the at-most-one identity field invariant. Any other 23505 on this table
+ * (e.g. the per-org field-name unique index) keeps its existing behavior.
+ */
+export function isIdentityFieldIndexViolation(err: unknown): boolean {
+  if (!hasPostgresErrorCode(err, "23505")) return false;
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      // postgres.js v3 reports the violated constraint as `constraint_name`
+      // (Drizzle preserves it on the error's cause chain).
+      (current as { constraint_name?: unknown }).constraint_name ===
+        "candidate_fields_org_identity_uidx"
+    ) {
+      return true;
+    }
+    current =
+      typeof current === "object" && current !== null
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  return false;
+}
 
 /** OpenAPI security scheme requiring cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -96,18 +128,55 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateCandidateFieldRequestSchema.parse(request.body);
-      const repo = createCandidateFieldRepo(fastify.db);
-      if (data.unique && (await repo.list(ctx)).some((field) => field.unique)) {
+      let field: Awaited<
+        ReturnType<ReturnType<typeof createCandidateFieldRepo>["create"]>
+      > | null = null;
+      try {
+        field = await executeInTransaction(
+          fastify.db,
+          async (tx) => {
+            // Guard + write serialize on the candidate-identity lock shared
+            // with candidate creation, so the precheck cannot race a
+            // concurrent create past its check.
+            await acquireOrganizationAdvisoryLock(
+              tx,
+              ctx.organizationId,
+              "candidate-identity",
+            );
+            const repo = createCandidateFieldRepo(tx);
+            if (
+              data.unique &&
+              (await repo.list(ctx)).some((field) => field.unique)
+            ) {
+              return null;
+            }
+            return await repo.create(ctx, data);
+          },
+          // "read committed" is load-bearing: the precheck must see rows
+          // committed by the transaction whose lock we just waited on (the
+          // REPEATABLE READ snapshot predates the lock wait).
+          { isolationLevel: "read committed" },
+        );
+      } catch (err) {
+        if (isIdentityFieldIndexViolation(err)) {
+          return reply
+            .code(409)
+            .send(
+              buildErrorResponse(
+                request.id,
+                "CANDIDATE_IDENTITY_FIELD_CONFLICT",
+              ),
+            );
+        }
+        throw err;
+      }
+      if (!field) {
         return reply
           .code(409)
           .send(
             buildErrorResponse(request.id, "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
           );
       }
-      const field = await createCandidateFieldRepo(fastify.db).create(
-        ctx,
-        data,
-      );
       recordBestEffortAudit(fastify, request, ctx, {
         action: "candidate_field.create",
         targetType: "candidate_field",
@@ -142,52 +211,104 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * PATCH /candidate-fields/:id — update an existing candidate field.
      *
-     * Returns 404 if the field does not exist, or 409 if setting
+     * Returns 404 if the field does not exist, 409 CANDIDATE_FIELD_IN_USE
+     * if clearing unique would strip the org's only identity field while
+     * candidates exist, or 409 CANDIDATE_IDENTITY_FIELD_CONFLICT if setting
      * unique would conflict with another existing identity field.
      */
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateCandidateFieldRequestSchema.parse(request.body);
-      const repo = createCandidateFieldRepo(fastify.db);
-      if (
-        data.unique &&
-        (await repo.list(ctx)).some((field) => field.unique && field.id !== id)
-      ) {
+      type FieldRow = NonNullable<
+        Awaited<
+          ReturnType<ReturnType<typeof createCandidateFieldRepo>["update"]>
+        >
+      >;
+      type PatchOutcome =
+        | { kind: "updated"; updated: FieldRow }
+        | { kind: "not-found" }
+        | { kind: "identity-conflict" }
+        | { kind: "identity-in-use" };
+      const outcome = await executeInTransaction<PatchOutcome>(
+        fastify.db,
+        async (tx) => {
+          // Guard + write serialize on the candidate-identity lock shared
+          // with candidate creation, so the guards cannot race a concurrent
+          // candidate creation past their checks.
+          await acquireOrganizationAdvisoryLock(
+            tx,
+            ctx.organizationId,
+            "candidate-identity",
+          );
+          const repo = createCandidateFieldRepo(tx);
+          const current = await repo.findById(ctx, id);
+          if (!current) {
+            return { kind: "not-found" };
+          }
+          if (
+            data.unique === false &&
+            current.unique &&
+            (await createCandidateRepo(tx).count(ctx)) > 0
+          ) {
+            // INVARIANT (SPEC.md §2.3, #1066): candidates exist, so the
+            // org's only identity field cannot be unmarked — same contract
+            // as DELETE of that field.
+            return { kind: "identity-in-use" };
+          }
+          if (
+            data.unique &&
+            (await repo.list(ctx)).some(
+              (field) => field.unique && field.id !== id,
+            )
+          ) {
+            return { kind: "identity-conflict" };
+          }
+          const updated = await repo.update(ctx, id, {
+            ...(data.label !== undefined ? { label: data.label } : {}),
+            ...(data.fieldType !== undefined
+              ? { fieldType: data.fieldType }
+              : {}),
+            ...(data.required !== undefined ? { required: data.required } : {}),
+            ...(data.unique !== undefined ? { unique: data.unique } : {}),
+            ...(data.sortOrder !== undefined
+              ? { sortOrder: data.sortOrder }
+              : {}),
+          });
+          if (!updated) {
+            return { kind: "not-found" };
+          }
+          return { kind: "updated", updated };
+        },
+        // "read committed" is load-bearing: the guards must see rows
+        // committed by the transaction whose lock we just waited on (the
+        // REPEATABLE READ snapshot predates the lock wait).
+        { isolationLevel: "read committed" },
+      );
+      if (outcome.kind === "identity-in-use") {
+        return reply
+          .code(409)
+          .send(buildErrorResponse(request.id, "CANDIDATE_FIELD_IN_USE"));
+      }
+      if (outcome.kind === "identity-conflict") {
         return reply
           .code(409)
           .send(
             buildErrorResponse(request.id, "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
           );
       }
-      const updated = await createCandidateFieldRepo(fastify.db).update(
-        ctx,
-        id,
-        {
-          ...(data.label !== undefined ? { label: data.label } : {}),
-          ...(data.fieldType !== undefined
-            ? { fieldType: data.fieldType }
-            : {}),
-          ...(data.required !== undefined ? { required: data.required } : {}),
-          ...(data.unique !== undefined ? { unique: data.unique } : {}),
-          ...(data.sortOrder !== undefined
-            ? { sortOrder: data.sortOrder }
-            : {}),
-        },
-      );
-      if (updated) {
-        recordBestEffortAudit(fastify, request, ctx, {
-          action: "candidate_field.update",
-          targetType: "candidate_field",
-          targetId: id,
-          metadata: { changedFields: Object.keys(data) },
-        });
-      }
-      if (!updated) {
+      if (outcome.kind === "not-found") {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+      const updated = outcome.updated;
+      recordBestEffortAudit(fastify, request, ctx, {
+        action: "candidate_field.update",
+        targetType: "candidate_field",
+        targetId: id,
+        metadata: { changedFields: Object.keys(data) },
+      });
       return { ...updated, createdAt: updated.createdAt.toISOString() };
     },
   );
@@ -220,28 +341,44 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      const repo = createCandidateFieldRepo(fastify.db);
-      const field = await repo.findById(ctx, id);
-      if (
-        field?.unique &&
-        (await createCandidateRepo(fastify.db).count(ctx)) > 0
-      ) {
+      const outcome = await executeInTransaction(
+        fastify.db,
+        async (tx): Promise<{ inUse: boolean; deleted: boolean }> => {
+          // Guard + write serialize on the candidate-identity lock shared
+          // with candidate creation, so the count guard cannot race a
+          // concurrent candidate creation past its check.
+          await acquireOrganizationAdvisoryLock(
+            tx,
+            ctx.organizationId,
+            "candidate-identity",
+          );
+          const field = await createCandidateFieldRepo(tx).findById(ctx, id);
+          if (field?.unique && (await createCandidateRepo(tx).count(ctx)) > 0) {
+            return { inUse: true, deleted: false };
+          }
+          return {
+            inUse: false,
+            deleted: await createCandidateFieldRepo(tx).delete(ctx, id),
+          };
+        },
+        // "read committed" is load-bearing: the guard must see rows
+        // committed by the transaction whose lock we just waited on (the
+        // REPEATABLE READ snapshot predates the lock wait).
+        { isolationLevel: "read committed" },
+      );
+      if (outcome.inUse) {
         return reply
           .code(409)
           .send(buildErrorResponse(request.id, "CANDIDATE_FIELD_IN_USE"));
       }
-      const deleted = await createCandidateFieldRepo(fastify.db).delete(
-        ctx,
-        id,
-      );
-      if (deleted) {
+      if (outcome.deleted) {
         recordBestEffortAudit(fastify, request, ctx, {
           action: "candidate_field.delete",
           targetType: "candidate_field",
           targetId: id,
         });
       }
-      if (!deleted) {
+      if (!outcome.deleted) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));

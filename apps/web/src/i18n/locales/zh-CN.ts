@@ -220,7 +220,7 @@ const zhCN = {
       userAlreadyExists: "用户名已存在",
       adminAlreadyExists: "已存在启用的管理员",
       candidateIdentityConflict: "身份信息已存在",
-      candidateFieldInUse: "该身份字段正在使用，无法删除",
+      candidateFieldInUse: "已有考生，无法移除唯一身份字段",
       candidateIdentityFieldConflict: "只能设置一个唯一身份字段",
       invalidStateTransition: "当前状态不允许执行此操作",
       attemptAlreadyStarted: "考试尝试已开始",

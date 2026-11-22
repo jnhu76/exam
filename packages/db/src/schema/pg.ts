@@ -114,6 +114,13 @@ export const candidateFields = pgTable(
       table.organizationId,
       table.name,
     ),
+    // DB backstop of the at-most-one identity field invariant (SPEC.md §2.3,
+    // #1066): the API prechecks are check-then-act and serialize only via the
+    // candidate-identity advisory lock, so a write path that bypasses the
+    // lock must still fail closed here.
+    uniqueIndex("candidate_fields_org_identity_uidx")
+      .on(table.organizationId)
+      .where(sql`"unique" = true`),
   ],
 );
 

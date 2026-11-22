@@ -328,6 +328,13 @@
       "when": 1788900000011,
       "tag": "0046_client_event_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788900000012,
+      "tag": "0047_candidate_fields_org_identity_uidx",
+      "breakpoints": true
     }
   ]
 }
