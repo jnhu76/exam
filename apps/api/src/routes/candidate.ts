@@ -26,6 +26,7 @@ import {
   ValidationError,
   AuthzUnavailableError,
 } from "@exam/domain";
+import type { RequestContext } from "@exam/domain";
 import {
   ensureTargetOrg,
   getRequestContext,
@@ -153,6 +154,40 @@ function findByIdentity(
       (candidate) => candidate.fields[uniqueField.name] === value,
     ) ?? null
   );
+}
+
+/**
+ * Resolve the existing candidate matching `fields`' identity value via the
+ * targeted per-field lookup (candidateRepo.findByIdentityValue).
+ *
+ * INVARIANT: outcome-identical to the in-memory {@link findByIdentity} over
+ * the same candidate set, including the empty-value early exits
+ * (`undefined`/`null`/`""` never probe) — the jsonb value equality in the
+ * query mirrors JS strict equality for JSON scalars ("42" ≠ 42, 42 = 42.0).
+ * Non-scalar values never matched under the in-memory matcher (strict
+ * equality across a serialization boundary) and are rejected by
+ * validateCandidateFields before any probe.
+ */
+async function findIdentityMatch(
+  candidateRepo: ReturnType<typeof createCandidateRepo>,
+  ctx: RequestContext,
+  configuredFields: Awaited<
+    ReturnType<ReturnType<typeof createCandidateFieldRepo>["list"]>
+  >,
+  fields: Record<string, unknown>,
+) {
+  const uniqueField = configuredFields.find((field) => field.unique);
+  if (!uniqueField) return null;
+  const value = fields[uniqueField.name];
+  if (value === undefined || value === null || value === "") return null;
+  if (
+    typeof value !== "string" &&
+    typeof value !== "number" &&
+    typeof value !== "boolean"
+  ) {
+    return null;
+  }
+  return candidateRepo.findByIdentityValue(ctx, uniqueField.name, value);
 }
 
 /** OpenAPI security scheme requiring cookie-based authentication. */
@@ -320,8 +355,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             validateCandidateFields(configuredFields, data.fields);
             const txCandidateRepo = createCandidateRepo(tx);
             if (
-              findByIdentity(
-                await txCandidateRepo.list(ctx),
+              await findIdentityMatch(
+                txCandidateRepo,
+                ctx,
                 configuredFields,
                 data.fields,
               )
@@ -632,8 +668,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
                 await createCandidateFieldRepo(tx).list(ctx);
               validateCandidateFields(configuredFields, fields);
               const txCandidateRepo = createCandidateRepo(tx);
-              let existing = findByIdentity(
-                await txCandidateRepo.list(ctx),
+              let existing = await findIdentityMatch(
+                txCandidateRepo,
+                ctx,
                 configuredFields,
                 fields,
               );

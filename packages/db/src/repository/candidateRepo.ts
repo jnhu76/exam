@@ -80,6 +80,49 @@ export function createCandidateRepo(db: Database) {
       );
     },
     /**
+     * Targeted identity lookup: the first candidate profile in this
+     * organization whose `fields -> fieldName` equals the given JSON scalar
+     * (jsonb VALUE equality — never a `->>` text projection).
+     *
+     * INVARIANT: jsonb value equality mirrors the JS strict-equality
+     * semantics of the former in-memory identity scan for JSON scalars:
+     * `"42"` (string) never equals `42`, while numeric canonical forms are
+     * equal (`42` = `42.0`). A missing field yields SQL NULL and never
+     * matches.
+     *
+     * PROTOCOL: the value is bound as a pre-encoded JSON text parameter cast
+     * `::jsonb`. The drizzle postgres-js driver installs identity
+     * serializers for json/jsonb parameters, so `JSON.stringify` here is the
+     * single encode the server-side cast parses.
+     *
+     * OWNERSHIP: the CALLER owns the empty-value early exits of the identity
+     * protocol — `undefined`/`null`/`""` must never be probed (a bound JSON
+     * `null` would match a stored JSON `null`, and `""` is a no-match value
+     * by route contract, not an empty-string lookup). Non-scalar values are
+     * rejected by the type: across a serialization boundary JS strict
+     * equality can never match them, so they are unprobeable by contract.
+     */
+    async findByIdentityValue(
+      ctx: TenantContext | RequestContext,
+      fieldName: string,
+      value: string | number | boolean,
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select()
+        .from(candidateProfiles)
+        .where(
+          and(
+            eq(candidateProfiles.organizationId, orgId),
+            sql`${candidateProfiles.fields} -> ${fieldName} = ${JSON.stringify(value)}::jsonb`,
+          ),
+        )
+        .limit(1);
+      return (
+        (rows[0] as typeof candidateProfiles.$inferSelect | undefined) ?? null
+      );
+    },
+    /**
      * Candidates under the given filters with pagination. Filtering (user
      * name/username search, course-scope enrollment EXISTS) happens in SQL
      * BEFORE limit/offset and BEFORE the total count — never post-pagination;
