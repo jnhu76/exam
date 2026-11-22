@@ -23,6 +23,51 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 type AttemptGradingEntrySelect = (typeof attemptGradingEntries)["$inferSelect"];
 
 /**
+ * Tenant-eligibility conditions shared by listPendingManualQueue and
+ * countPendingManualQueue: both methods MUST address the same row set —
+ * the driving grading entry, the attempt, and the exam/profile/user
+ * identity chain must ALL belong to the caller org. The links
+ * (attempt_grading_entries.attempt_id, exam_attempts.exam_id,
+ * exam_attempts.candidate_id, candidate_profiles.user_id) are global FKs,
+ * so org-scoping the driving table alone can neither stop a foreign-org
+ * attempt row from being projected nor keep the pagination total in sync
+ * with rows the list's identity joins drop.
+ */
+function pendingManualQueueEligibility(orgId: string) {
+  return [
+    eq(attemptGradingEntries.organizationId, orgId),
+    eq(attemptGradingEntries.gradingMode, "manual" as GradingEntryMode),
+    eq(attemptGradingEntries.status, "pending_manual" as GradingEntryStatus),
+    eq(examAttempts.organizationId, orgId),
+    eq(exams.organizationId, orgId),
+    eq(candidateProfiles.organizationId, orgId),
+    eq(users.organizationId, orgId),
+  ];
+}
+
+/**
+ * examId / examIds scope filter shared by the pending-manual queue
+ * queries so list and count always apply the SAME filter (the grading
+ * queue route contract: pagination totals agree). Empty examIds is the
+ * zero-rows contract, never "no filter" (explicit `false` beats any
+ * driver quirk around `IN ()`).
+ */
+function examScopeConditions(options: { examId?: string; examIds?: string[] }) {
+  const conditions = [];
+  if (options.examId) {
+    conditions.push(eq(examAttempts.examId, options.examId));
+  }
+  if (options.examIds) {
+    if (options.examIds.length === 0) {
+      conditions.push(sql`false`);
+    } else {
+      conditions.push(inArray(examAttempts.examId, options.examIds));
+    }
+  }
+  return conditions;
+}
+
+/**
  * Input shape for bulk-inserting grading workset entries at submit-freeze
  * time. One entry per frozen question.
  */
@@ -235,7 +280,10 @@ export function createAttemptGradingEntryRepo(db: Database) {
      * themselves are durable rows in `attempt_grading_entries`; this query
      * groups them by attempt for the API response.
      *
-     * Scoped to the tenant; optionally filtered to one exam.
+     * Scoped to the tenant: only attempts whose own row AND identity chain
+     * (exam/profile/user) all resolve in the caller org are eligible —
+     * see {@link pendingManualQueueEligibility}. Optionally filtered to
+     * one exam or an assigned-exam scope.
      */
     async listPendingManualQueue(
       ctx: TenantContext | RequestContext,
@@ -250,33 +298,9 @@ export function createAttemptGradingEntryRepo(db: Database) {
     ) {
       const orgId = resolveOrganizationId(ctx);
       const conditions = [
-        eq(attemptGradingEntries.organizationId, orgId),
-        eq(attemptGradingEntries.gradingMode, "manual" as GradingEntryMode),
-        eq(
-          attemptGradingEntries.status,
-          "pending_manual" as GradingEntryStatus,
-        ),
-        // Same-org predicates on the identity joins: the attempt→exam,
-        // attempt→profile, and profile→user links are global FKs, so an
-        // org-scoped entry could otherwise project a foreign-org exam title,
-        // profile fields, or user name into the queue row.
-        eq(exams.organizationId, orgId),
-        eq(candidateProfiles.organizationId, orgId),
-        eq(users.organizationId, orgId),
+        ...pendingManualQueueEligibility(orgId),
+        ...examScopeConditions(options),
       ];
-      if (options.examId) {
-        conditions.push(eq(examAttempts.examId, options.examId));
-      }
-      if (options.examIds) {
-        // scope filter BEFORE pagination. An empty scope is the
-        // zero-rows contract, never "no filter" (explicit `false` beats any
-        // driver quirk around `IN ()`).
-        if (options.examIds.length === 0) {
-          conditions.push(sql`false`);
-        } else {
-          conditions.push(inArray(examAttempts.examId, options.examIds));
-        }
-      }
 
       const baseQuery = db
         .select({
@@ -315,7 +339,11 @@ export function createAttemptGradingEntryRepo(db: Database) {
 
     /**
      * Counts distinct attempts that have at least one pending_manual grading
-     * entry, scoped to the tenant; optionally filtered to one exam.
+     * entry, scoped to the tenant; optionally filtered to one exam or an
+     * assigned-exam scope. This is the pagination total for
+     * listPendingManualQueue, so it joins the same identity chain and
+     * applies the same shared eligibility + scope conditions — the two
+     * methods MUST address the same tenant-eligible row set.
      */
     async countPendingManualQueue(
       ctx: TenantContext | RequestContext,
@@ -328,23 +356,9 @@ export function createAttemptGradingEntryRepo(db: Database) {
     ): Promise<number> {
       const orgId = resolveOrganizationId(ctx);
       const conditions = [
-        eq(attemptGradingEntries.organizationId, orgId),
-        eq(attemptGradingEntries.gradingMode, "manual" as GradingEntryMode),
-        eq(
-          attemptGradingEntries.status,
-          "pending_manual" as GradingEntryStatus,
-        ),
+        ...pendingManualQueueEligibility(orgId),
+        ...examScopeConditions(options),
       ];
-      if (options.examId) {
-        conditions.push(eq(examAttempts.examId, options.examId));
-      }
-      if (options.examIds) {
-        if (options.examIds.length === 0) {
-          conditions.push(sql`false`);
-        } else {
-          conditions.push(inArray(examAttempts.examId, options.examIds));
-        }
-      }
       const rows = await db
         .select({
           count: sql<number>`count(DISTINCT ${attemptGradingEntries.attemptId})`,
@@ -354,6 +368,15 @@ export function createAttemptGradingEntryRepo(db: Database) {
           examAttempts,
           eq(attemptGradingEntries.attemptId, examAttempts.id),
         )
+        // Identity joins exist solely so the shared eligibility
+        // predicates address the same rows the list projects; the FKs
+        // guarantee these rows exist.
+        .innerJoin(exams, eq(examAttempts.examId, exams.id))
+        .innerJoin(
+          candidateProfiles,
+          eq(examAttempts.candidateId, candidateProfiles.id),
+        )
+        .innerJoin(users, eq(candidateProfiles.userId, users.id))
         .where(and(...conditions));
       return Number((rows[0] as { count: number }).count);
     },
