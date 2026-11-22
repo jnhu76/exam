@@ -12,8 +12,8 @@ for repository releases from `v0.0.1` onward.
 
 ### Added
 
-- Native observability V1 signal contracts and diagnostics (#999–#1003,
-  #1006–#1009, PRs #1015–#1031): system diagnostics expose heartbeat
+- Native observability V1 signal contracts and diagnostics (#999–#1004,
+  #1006–#1009, PRs #1015, #1019, #1020, #1026–#1031): system diagnostics expose heartbeat
   incident counters and `oldestDuePendingAgeSeconds` with exact null
   semantics (legacy `oldestPendingAge` deprecated behind a
   compatibility window), commit-authoritative submit/grade outcome
