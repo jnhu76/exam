@@ -37,13 +37,19 @@ const QUESTION_TYPE_CAPABILITIES = {
   text_response: "question.text_response",
 } as const satisfies Record<QuestionType, ProductCapabilityId>;
 
-/** The final, persistence-shaped material of one question write command. */
+/**
+ * The final, persistence-shaped material of one question write command.
+ * Slot values may be `undefined` as well as `null`: persisted rows
+ * (`domain/types.ts` Option) treat a missing slot as Plain, and the
+ * derivation judges plainness by nullishness, never by which of the two
+ * sentinels a row happens to carry.
+ */
 export interface QuestionWriteMaterial {
   readonly type: QuestionType;
   readonly contentDocument: ContentDocumentV1 | null;
   readonly answerMode: ContentMode | null;
   readonly options: ReadonlyArray<{
-    readonly contentDocument: ContentDocumentV1 | null;
+    readonly contentDocument?: ContentDocumentV1 | null | undefined;
   }>;
 }
 
