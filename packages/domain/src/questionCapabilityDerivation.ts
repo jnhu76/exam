@@ -38,6 +38,18 @@ const QUESTION_TYPE_CAPABILITIES = {
 } as const satisfies Record<QuestionType, ProductCapabilityId>;
 
 /**
+ * Single authority for "which catalog capability does this question type
+ * correspond to". The write derivation (below) and the web authoring
+ * projection (W3.2) both consume THIS table — no second type→capability map
+ * may exist (product-capability-composition.md §16 authority fragmentation).
+ */
+export function capabilityForQuestionType(
+  type: QuestionType,
+): ProductCapabilityId {
+  return QUESTION_TYPE_CAPABILITIES[type];
+}
+
+/**
  * The final, persistence-shaped material of one question write command.
  * Slot values may be `undefined` as well as `null`: persisted rows
  * (`domain/types.ts` Option) treat a missing slot as Plain, and the
