@@ -25,6 +25,7 @@ import {
   assertRichContentUpdateAllowed,
   resolveQuestionContentWrite,
 } from "./questionContent.js";
+import { assertQuestionWriteCapabilities } from "../product/questionWriteCapabilityGuard.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
@@ -313,6 +314,16 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         options: data.options,
       });
 
+      // ADR-022 Phase 2: the deployment product ceiling judges the FINAL
+      // material before the repository write, so a disabled capability
+      // cannot become a new commitment (D5) and a rejection leaves no row.
+      assertQuestionWriteCapabilities({
+        type: data.type,
+        contentDocument: resolved.contentDocument,
+        answerMode: resolved.answerMode,
+        options: resolved.options,
+      });
+
       const question = await createQuestionRepo(fastify.db).create(ctx, {
         courseId: data.courseId,
         type: data.type,
@@ -455,6 +466,18 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         contentDocument: validated.contentDocument,
         answerMode: validated.answerMode,
         options: validated.options,
+      });
+      // ADR-022 Phase 2: the merged FINAL material (stored row + patch) is
+      // judged against the deployment product ceiling before the repository
+      // write. Whole-material semantics: any non-eliminating edit that keeps
+      // a disabled capability in the final material is a new commitment of
+      // it; the legal paths out are the eliminating edit (rich slots
+      // cleared) and delete — both stay ungated (D5).
+      assertQuestionWriteCapabilities({
+        type: validated.type,
+        contentDocument: resolved.contentDocument,
+        answerMode: resolved.answerMode,
+        options: resolved.options,
       });
       const updated = await createQuestionRepo(fastify.db).update(ctx, id, {
         courseId: validated.courseId,
