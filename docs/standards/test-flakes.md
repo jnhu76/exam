@@ -3488,6 +3488,72 @@ AGGREGATION_BASIS = 不与 OBS-2026-11-02-CI-WEB 聚合：那是 coverage lane �
   10s timeout（机制 UNKNOWN）不因本条获释，保持其原状态。
 ```
 
+### OBS-2026-11-24-001 — `pnpm verify` coverage lane `@exam/api#coverage` 任务级 exit 1（无任何测试级失败文本留存；同 SHA 两次实跑复跑全绿）
+
+```text
+OBSERVED_AT = 2026-11-24T02:53:18–02:57+08:00（窗口由 turbo per-task 日志 mtime 与
+  PG 日志边界推断；进程确切退出时刻 UNKNOWN）
+GIT_SHA = 5259a93a（工作树干净）
+BRANCH = feat/678-capability-composition（exam-678 工作树；#678 capability composition）
+COMMAND = pnpm verify（= verify:static && TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build && pnpm lint:prod-resolution；
+  失败发生在其 coverage 阶段，verify:static 已通过）
+EXECUTION_TOPOLOGY = @exam/api#coverage cache miss 实跑（263 文件 × 4 worker × v8
+  coverage）；同 run 前段 api turbo test（256 文件，02:42:22–02:50:38，3127 passed |
+  21 skipped）全绿；coverage 阶段 domain（02:52:28）/ auth（02:52:29）/
+  db（02:53:18）全绿完成后 api 才启动
+FAILED_FILE = UNKNOWN
+FAILED_TEST = UNKNOWN
+FAILURE_PHASE = UNKNOWN（证据指向 run 末段：PG 错误日志序列与同 SHA 通过 run 的
+  suite 顺序同位点——晚 suite 的 serialize-access 错误族在脚本侧 run 位于 02:56:14，
+  在两次通过复跑分别位于 02:59:27–33 与 03:03:01–23，即各自测试相位收尾前 ~10s；
+  脚本侧 run 至少跑完晚 suite，随后在 summary/coverage 序列化相位 exit 1）
+FAILURE_CLASS = 任务级退出码 1；脚本侧输出尾部无任何 vitest 测试失败文本（仅有
+  zod-to-json-schema "Recursive reference detected … Defaulting to any" 警告噪音，
+  该噪音在同 SHA 通过的 turbo 复跑中原样出现 432 次，为既有噪音，非失败原因）
+ERROR = "ERROR @exam/api#coverage: command … pnpm run coverage exited (1)" +
+  "ERROR run failed: command exited (1)"（turbo 2.9.16 汇报；任务级 stdout 未留存）
+AUTHORITATIVE_RUN_RESULT = FAIL
+RERUN_EVIDENCE = 同 SHA 三次诊断复跑：①pnpm --filter @exam/api coverage 直跑
+  （vitest Start at 02:57:17，Duration 161.72s，Test Files 259 passed | 4 skipped，
+  Tests 3137 passed | 11 skipped，EXIT=0）；②同 lane 确切命令
+  TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage（turbo
+  16 successful，@exam/api:coverage cache miss 实跑，Duration 173.53s，计数同①，
+  EXIT=0）；③完整 pnpm verify（EXIT=0 全门禁通过；其中 @exam/api:coverage 为
+  cache hit 回放，replay hash 2196dc799d6fcbf7 = ②实跑成功任务，非新实跑样本）
+NONDETERMINISM_CONFIRMED = YES
+TRACE_AVAILABLE = NO（脚本侧任务 stdout 未保存；turbo 2.9 写入
+  <pkg>/.turbo/turbo-<task>.log 的 per-run 任务日志被诊断复跑覆写。教训：再次遇到
+  本签名时，任何复跑之前先复制保全全部 <pkg>/.turbo/turbo-*.log 与完整 stdout）
+PG_FORENSICS = exam-dev-db-1 日志：脚本侧 api coverage 测试错误流量 02:53:2x–
+  02:56:14（错误行每分钟 02:54=145、02:55=114、02:56=10），全程无 too-many-clients、
+  无 PG 侧 OOM、无非测试注入的 FATAL。启动形态排除 globalSetup run-lease 快速拒绝
+  （lease 拒绝发生在任何测试流量之前；本 run 有约 3 分钟真实测试流量）。失败窗口内
+  同宿主其他 agent 会话仅有间接痕迹（/tmp/exam-restart-*.log 03:00–03:01、
+  exam-429-public-* 与 exam-authority-* 创建于 03:03，均在失败窗口之后）——并发 run
+  干扰假设既不能确认也不能排除
+NONDETERMINISM_NOTE = 同代码 FAIL + 同代码 PASS 仅确立 NONDETERMINISM_CONFIRMED =
+  YES；按 STEP 3 不随之得出无害、不得出改动因果排除、不得出宿主负载根因
+CURRENT_CHANGE_CAUSALITY = UNKNOWN（STEP 7 禁止写 PROVEN_UNRELATED：失败身份未知，
+  机制级归因不可建立。方向性事实：分支 13 个提交不触达 packages/contracts；同 SHA
+  在失败前 8 分钟 turbo test 全绿；同 SHA 三次复跑全绿）
+ROOT_CAUSE_CONFIDENCE = UNKNOWN
+FIRST_CAUSAL_DIVERGENCE = UNKNOWN
+CASE_ID = UNASSIGNED（AGGREGATION_BASIS = NONE：与 BUG-FLAKE-005 同为 verify
+  4-worker coverage lane，但签名不同——005 是文件级 testTimeout 5s 且受害用例身份
+  明确；本条是 run 级 exit 1 且身份 UNKNOWN；不得仅凭 lane 相似归桶）
+NEXT_DIAGNOSTIC_STEP = 复发时先保全 per-task 日志与完整 stdout 再复跑；同 lane 多次
+  采样，一旦取得测试级失败文本按身份独立登记；若"全部测试通过仍 exit 1"被复现，
+  调查 coverage 序列化、globalSetup teardown（lease.release）、unhandled error
+  三条退出路径
+```
+
+上下文补充（登记时刻事实）：宿主同机存在多个并行 agent 会话；失败由编排脚本侧的
+`pnpm verify` 权威 run 报告（编排侧同时给出"未改动基线 775a8c67 上 verify 退出码 0"
+的对照前提，该前提为本登记的外部输入，本登记未独立复跑基线）。基线对照 + 同 SHA 多
+lane 全绿与失败身份 UNKNOWN 并存：本条目按登记册规则保持 occurrence 粒度，不为编排
+绿灯目的而收窄任何一侧证据。
+
 ---
 
 ## Non-Flake / Misclassification Lessons（非 Flake / 误分类教训）
