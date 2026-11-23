@@ -25,7 +25,11 @@ import {
   assertRichContentUpdateAllowed,
   resolveQuestionContentWrite,
 } from "./questionContent.js";
-import { assertQuestionWriteCapabilities } from "../product/questionWriteCapabilityGuard.js";
+import {
+  assertQuestionWriteCapabilities,
+  findQuestionWriteCapabilityViolations,
+  questionWriteCeilingViolationMessage,
+} from "../product/questionWriteCapabilityGuard.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
@@ -701,6 +705,33 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           const data = parsedRow.data;
+          // ADR-022 Phase 2 (#678): the import seam shares the single-write
+          // ceiling derivation (product-capability-composition.md §7 layer 3,
+          // D5). Import final material is Plain BY CONSTRUCTION — the manual
+          // mapping above carries no prompt document, no answer mode and no
+          // option documents — so the document/answer-mode inputs are null.
+          // Judged on preview AND confirm alike (before the confirm branch):
+          // a row beyond the deployment ceiling joins the existing per-row
+          // error contract (details[].status, non-authoritative message,
+          // #417 C2: no stable per-row machine code) and is never created,
+          // while the remaining rows of the batch keep their usual verdict.
+          const violations = findQuestionWriteCapabilityViolations({
+            type: data.type,
+            contentDocument: null,
+            answerMode: null,
+            options: (data.options ?? []).map((option) => ({
+              contentDocument: option.contentDocument ?? null,
+            })),
+          });
+          if (violations.length > 0) {
+            errors++;
+            details.push({
+              row: i + 1,
+              status: "error",
+              message: questionWriteCeilingViolationMessage(violations),
+            });
+            continue;
+          }
           if (body.confirm) {
             // #301: import is Plain-only BY CONSTRUCTION — the seam persists
             // content_document = NULL and derives contents from the plain

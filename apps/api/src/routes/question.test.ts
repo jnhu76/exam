@@ -1,7 +1,68 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from "vitest";
+import {
+  SUPPORTED_PRODUCT_CAPABILITIES,
+  type ProductCapabilityId,
+  type ResolvedProductConfiguration,
+} from "@exam/domain";
 import questionRoutes from "./question.js";
 import courseRoutes from "./course.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+
+/**
+ * Controlled configuration injection for the W2b capability-parity block
+ * below. Same seam and same shape as product/questionWriteCapabilityGuard.test.ts:
+ * the ONLY test seam is the canonical composition root (ADR-022 D4), and the
+ * default (`enabled === undefined`) resolves the real production Standard
+ * configuration, so every pre-existing test in this file is unaffected.
+ */
+const capabilityHarness = vi.hoisted(() => ({
+  enabled: undefined as readonly string[] | undefined,
+}));
+
+vi.mock("../product/compositionRoot.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../product/compositionRoot.js")>();
+  const domain =
+    await vi.importActual<typeof import("@exam/domain")>("@exam/domain");
+  return {
+    ...actual,
+    getResolvedProductConfiguration: (): ResolvedProductConfiguration => {
+      const enabled = capabilityHarness.enabled;
+      if (enabled === undefined) {
+        return actual.getResolvedProductConfiguration();
+      }
+      const allowed = new Set<string>(enabled);
+      return Object.freeze({
+        revision: 1 as const,
+        presentation: "standard",
+        enabled: Object.freeze(
+          domain.SUPPORTED_PRODUCT_CAPABILITIES.filter((capability) =>
+            allowed.has(capability),
+          ),
+        ),
+        allows: (capability: ProductCapabilityId): boolean =>
+          allowed.has(capability),
+      });
+    },
+  };
+});
+
+/** Standard minus exactly the listed capabilities (test-only bounded ceiling). */
+function useBoundedCapabilitiesWithout(
+  disabled: readonly ProductCapabilityId[],
+): void {
+  capabilityHarness.enabled = SUPPORTED_PRODUCT_CAPABILITIES.filter(
+    (capability) => !disabled.includes(capability),
+  );
+}
 
 describe("question routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -1296,6 +1357,202 @@ describe("question routes", () => {
       expect(items.some((q) => q.content === "Import tag round-trip")).toBe(
         true,
       );
+    });
+  });
+
+  // ── W2b.1 counterexamples (ADR-022 Phase 2 #678): import parity ──
+  //
+  // ADR-022 §7 layer 3 names "import / bulk / copy seam" as an enforcement
+  // layer equal to the authoritative API write seam, and D5 blocks NEW
+  // commitments of disabled capabilities. W2a gated single writes
+  // (POST /api/questions) at the final material; the import route
+  // (POST /api/questions/import) still accepts any row regardless of the
+  // deployment ceiling, so a disabled capability becomes a new commitment
+  // through bulk import — the parity gap these tests pin.
+  //
+  // Import final material is Plain by construction (question.ts processRows
+  // maps only type/content/optionA-D/standardAnswer/score/difficulty/tags/
+  // gradingRule/rubric; no contentDocument/answerMode slots exist), so the
+  // parity rows here carry the SAME slot set on both entries: same type,
+  // plain prompt, no rich slots. The expected contract after the fix is the
+  // EXISTING per-row import contract (details[].status / counts, confirm in
+  // one transaction, question.import audit, import job log): a disabled row
+  // is reported status:"error" and is NOT repo.create'd, while legal rows in
+  // the same batch still land. Preview (confirm:false) and confirm must judge
+  // identically. Error details keep the documented compatibility message
+  // channel (no stable per-row machine code — contracts/question.ts
+  // QuestionImportResultSchema, #417 C2); assertions here rely on
+  // status/counters only.
+  describe("question import/write capability parity (W2b #678)", () => {
+    let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+    let courseId: string;
+
+    beforeAll(async () => {
+      ctx = await buildTestApp(async (fastify) => {
+        await fastify.register(courseRoutes);
+        await fastify.register(questionRoutes);
+      });
+      const courseRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/courses",
+        payload: {
+          name: "W2b parity Course",
+          code: `W2B-${uniquePrefix()}`,
+          description: "",
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      courseId = courseRes.json().id as string;
+    }, 30_000);
+
+    afterAll(async () => {
+      await ctx.cleanup();
+    }, 30_000);
+
+    beforeEach(() => {
+      capabilityHarness.enabled = undefined;
+    });
+
+    async function importBatch(
+      rows: Array<Record<string, unknown>>,
+      confirm: boolean,
+    ) {
+      return ctx.app.inject({
+        method: "POST",
+        url: "/api/questions/import",
+        payload: { courseId, confirm, rows },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+    }
+
+    async function countBySearch(content: string): Promise<number> {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/questions?courseId=${courseId}&search=${encodeURIComponent(content)}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json().total as number;
+    }
+
+    it("judges a single write and an import row of the same final material identically (disabled type)", async () => {
+      useBoundedCapabilitiesWithout(["question.true_false"]);
+      const content = `W2b parity row ${uniquePrefix()}`;
+
+      // Anchor (W2a, already merged): the single-write seam rejects the
+      // disabled type at the final material — this leg must keep holding.
+      const single = await ctx.app.inject({
+        method: "POST",
+        url: "/api/questions",
+        payload: {
+          courseId,
+          type: "true_false",
+          content,
+          standardAnswer: true,
+          score: 5,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(single.statusCode, single.body).toBe(400);
+      expect(await countBySearch(content)).toBe(0);
+
+      // RED: the import seam currently reports the same row valid in preview
+      // and would persist it on confirm — no product capability is consulted
+      // in processRows.
+      const preview = await importBatch(
+        [{ type: "true_false", content, standardAnswer: true, score: 5 }],
+        false,
+      );
+      expect(preview.statusCode, preview.body).toBe(200);
+      expect(preview.json().errors).toBe(1);
+      expect(preview.json().details[0]).toMatchObject({
+        row: 1,
+        status: "error",
+      });
+    });
+
+    it("reports a disabled row as an error and persists only the legal rows in a confirmed mixed batch", async () => {
+      useBoundedCapabilitiesWithout(["question.multiple_choice"]);
+      const legalContent = `W2b mixed legal ${uniquePrefix()}`;
+      const disabledContent = `W2b mixed disabled ${uniquePrefix()}`;
+
+      const res = await importBatch(
+        [
+          {
+            type: "single_choice",
+            content: legalContent,
+            optionA: "3",
+            optionB: "4",
+            standardAnswer: "B",
+            score: 5,
+          },
+          {
+            type: "multiple_choice",
+            content: disabledContent,
+            optionA: "1",
+            optionB: "2",
+            standardAnswer: ["A", "B"],
+            score: 5,
+          },
+        ],
+        true,
+      );
+      expect(res.statusCode, res.body).toBe(200);
+      // RED: errors is 0 today — the disabled row is counted valid.
+      expect(res.json().errors).toBe(1);
+      expect(res.json().valid).toBe(1);
+      const details = res.json().details as Array<{
+        row: number;
+        status: string;
+      }>;
+      expect(details[0]).toMatchObject({ row: 1, status: "valid" });
+      // RED: status is "valid" today.
+      expect(details[1]).toMatchObject({ row: 2, status: "error" });
+
+      // The legal row lands; the disabled row must not become a commitment.
+      expect(await countBySearch(legalContent)).toBe(1);
+      // RED: the disabled row is persisted today (total 1).
+      expect(await countBySearch(disabledContent)).toBe(0);
+    });
+
+    it("judges preview and confirm identically on a batch containing a row beyond the ceiling", async () => {
+      useBoundedCapabilitiesWithout(["question.fill_blank"]);
+      const rows = [
+        {
+          type: "true_false",
+          content: `W2b preview confirm legal ${uniquePrefix()}`,
+          standardAnswer: false,
+          score: 5,
+        },
+        {
+          type: "fill_blank",
+          content: `W2b preview confirm ____ ${uniquePrefix()}`,
+          standardAnswer: "Paris",
+          score: 5,
+        },
+      ];
+
+      const preview = await importBatch(rows, false);
+      const confirm = await importBatch(rows, true);
+      expect(preview.statusCode, preview.body).toBe(200);
+      expect(confirm.statusCode, confirm.body).toBe(200);
+
+      // RED: dry-run never reaches any capability judgment today (the seam
+      // only runs under body.confirm), so the fill_blank row reports "valid"
+      // in preview while confirm judges — or, post-fix, both must agree.
+      const previewDetails = preview.json().details as Array<{
+        row: number;
+        status: string;
+      }>;
+      const confirmDetails = confirm.json().details as Array<{
+        row: number;
+        status: string;
+      }>;
+      expect(previewDetails.map((d) => d.status)).toEqual(
+        confirmDetails.map((d) => d.status),
+      );
+      expect(preview.json().errors).toBe(confirm.json().errors);
+      expect(previewDetails[1]).toMatchObject({ row: 2, status: "error" });
     });
   });
 });
