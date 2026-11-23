@@ -494,10 +494,29 @@ Gate：disabled capability 无法绕过，同时 read/active/save/submit/manual 
 - Minimal Plain subjective + basic manual grading；
 - 同一 API、同一 Attempt、同一 grading workset、同一 result authority。
 
+已交付的服务端部分：**静态部署上限**（`PRODUCT_PRESET`，bootstrap 读取，组合根
+单一取值点，未知/不支持配置启动期 fail-fast）与**切换前存量义务核对**
+（startup preflight：枚举已发布待考、open 尚无 attempt、排队/可恢复、待人工
+阅卷、已定稿待统一发布、历史读取六类义务；目标配置会切断具体义务时拒绝启动并
+给出对象与原因）。已交付的 web 呈现部分：public-config 投影消费面
+（`ProductProjectionContext`，fail-closed），题型/Rich 槽位 authoring 裁剪
+（经 `capabilityForQuestionType` 单一映射，不按 preset 名分支），导航双权威
+（actor 权限 × 部署投影，义务面永不隐藏），考生入场队列按本场
+`requireQueue` 策略与投影无关。Phase 3 浏览器级验收已交付：
+`minimal-objective`（Minimal 投影裁剪 + ceiling 写拒绝 + 五题客观全链）与
+`minimal-plain-manual`（Plain 简答 → 待评分义务面 → 阅卷工作台真实 UI →
+manual 政策发布 → 成绩可见）两条 E2E 经 runner 以 `PRODUCT_PRESET=minimal`
+引导运行；`capabilitySwitchPairing.test.ts` 以同一 Rich+简答旧卷 × 生命周期
+中途 ceiling 切换完成配对验证（允许切换走全链 + 新增 Rich 写拒绝 + 实时
+权限保持）；Standard 回归三套（candidate-happy-path / rich-content /
+refresh-during-exam）行为等价。
+
 ### Phase 4 — bounded configuration management
 
-仅在前三阶段证明价值后增加：持久配置、专用权限、impact preview、revision/CAS、
-audit、upgrade/downgrade、draining/reject 与 startup compatibility preflight。
+仅在前三阶段证明价值后增加：持久配置、专用权限、revision/CAS、audit、
+upgrade/downgrade 与 draining。startup compatibility preflight 与 impact
+preview/reject 的 bootstrap 版本已随 Phase 3 静态上限交付（拒绝式，无
+draining）；引入应用内配置写入时按 §8 升级为 revision/CAS 竞争语义。
 
 ### Phase 5 — independent future capabilities
 

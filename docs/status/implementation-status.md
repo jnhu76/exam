@@ -242,7 +242,7 @@ notification onto the now-stable result-publication transaction (P5-N1).
   closed not planned / superseded; normal-submit correctness is owned by the
   pre-submit flush plus the server-side locked submit/freeze path.
 
-## Product capability composition (#678 / ADR-022): 🟡 PHASE 2 PARTIAL — QUESTION WRITE + EXAM PUBLISH BOUNDARIES
+## Product capability composition (#678 / ADR-022): 🟡 PHASE 3 PARTIAL — STATIC MINIMAL CEILING + STARTUP PREFLIGHT DELIVERED
 
 Phase 1 is implemented: the closed Standard catalog and pure fail-closed
 resolver in `packages/domain/src/productCapabilities.ts`, one server
@@ -280,9 +280,49 @@ directly; it stays inside the always-resolved full Standard root and its
 materials are plain objective, so it never exceeds the production ceiling
 (EXSEM-020 freeze/completeness rules still apply to it).
 
-Phase 2 remains open for any further authoritative new-commitment seams a
-later step identifies, Phase 3 Minimal runtime, and Phase 4 persisted
-configuration/CAS.
+Phase 3 is partially implemented on the server side: the static deployment
+ceiling is selected by the `PRODUCT_PRESET` settings leaf (`standard`
+default / `minimal`, `apps/api/src/config/settings.ts`, projected as
+`product.preset` in `AppRuntimeConfig`), mapped to its canonical
+configuration and resolved through the ONE domain resolver at the
+composition root (single memoized instance; `resetResolvedProductConfigurationForTest`
+is the only test seam). The resolver accepts the `minimal` preset with its
+canonical `minimal` presentation (`MINIMAL_PRODUCT_CONFIGURATION`:
+single_choice, true_false, Plain text_response + basic manual grading,
+account admission, result publication — ADR-022 §10). `server.ts` resolves
+the ceiling before any route or loop starts and runs the pre-switch
+outstanding-obligation preflight (`apps/api/src/product/deploymentSwitchPreflight.ts`):
+the six accepted obligation classes (published-awaiting-start,
+open-eligible-without-attempt, queued/resumable, pending manual grading,
+finalized-awaiting-publication, historical results) are enumerated from
+persisted facts; a ceiling that would cut a concrete obligation refuses
+startup naming the objects. Every known class currently derives an EMPTY
+fulfillment requirement (kernel fulfillment per §4.1; Rich decoder/renderer
+retained per §7), so Standard→bounded-subset and Standard→Minimal switches
+are allowed — the rule table in `deploymentSwitchPreflight.ts` is the single
+place where a future capability-gated fulfillment registers a requirement.
+The web presentation layer is delivered: `ProductProjectionContext`
+(`apps/web/src/contexts/ProductProjectionContext.tsx` +
+`apps/web/src/lib/productProjection.ts`) consumes the public-config
+projection fail-closed; question authoring prunes NEW-commitment types and
+Rich slots through the single domain mapping `capabilityForQuestionType`;
+nav items carry an optional `productCapability` (only the
+`operator.monitoring` observation surface uses it — obligation faces stay
+visible under every ceiling); the candidate queue stays driven by the
+per-exam frozen `requireQueue` policy, independent of the projection.
+Phase 3 browser-level acceptance is delivered: the E2E runner passes
+`PRODUCT_PRESET` through to the API servers, and
+`apps/e2e/e2e/minimal-objective.spec.ts` (projection pruning + ceiling write
+rejection + five-objective journey) and
+`apps/e2e/e2e/minimal-plain-manual.spec.ts` (Plain 简答 → grading workbench
+→ manual publication → result flip) run green under a Minimal-booted
+deployment; `capabilitySwitchPairing.test.ts` pairs ONE legacy Rich+简答
+exam with a mid-lifecycle ceiling switch (full chain + new-commitment
+rejection + real-time authorization); the Standard regression trio
+(candidate-happy-path / rich-content / refresh-during-exam) stays
+behavior-equivalent. Phase 4 (persisted configuration/CAS/draining) remains
+open, and Phase 2 stays open for any further new-commitment seams a later
+step identifies.
 
 `enabled` means the deployment may make a **new** commitment. It does not
 grant actor Permissions, enable a per-exam policy, or prove that an obligation

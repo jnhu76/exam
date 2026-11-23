@@ -41,17 +41,24 @@ this document stops applying.
   institution. `organizationId` is an internal data-ownership boundary;
   the product is single-tenant. Multi-tenant platform features
   (tenant login, tenant switcher, SuperAdmin) are not implemented.
-- **Standard-only product composition.** The only delivered product
-  configuration is "Standard" ([ADR-022](../adr/ADR-022-product-capability-composition.md)
-  Phase 1). A "Minimal" preset exists as accepted design, not as a
-  selectable runtime.
+- **Standard-only product composition.** The capability catalog this
+  document describes is the shipped "Standard" set
+  ([ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 1).
+  Since the Phase 2 write guards and the Phase 3 static ceiling, a
+  deployment may run a bounded subset of that catalog or the `minimal`
+  preset (`PRODUCT_PRESET`, bootstrap-only) — the catalog itself is
+  unchanged; a smaller ceiling only disables NEW commitments, and accepted
+  obligations (pending manual grading, recovery, historical Rich reads)
+  stay fulfillable. Minimal web presentation is not delivered yet.
 - **Language.** The shipped web UI is Simplified Chinese (zh-CN) only.
   There is no English UI locale and no language switcher.
 - **When this document stops applying.** Treat it as stale when any of
   these happen: a newer master state or release tag supersedes
   `511e6e60` with behavior changes; [ADR-022](../adr/ADR-022-product-capability-composition.md)
   Phase 2–4 land (write guards, Minimal runtime, persisted deployment
-  configuration); the [#293](https://github.com/jnhu76/exam/issues/293)
+  configuration) — Phase 2 write guards and the Phase 3 static
+  `minimal` ceiling have landed, so the "Standard-only runtime" reading of
+  this document no longer applies; the [#293](https://github.com/jnhu76/exam/issues/293)
   Controlled/Strict profiles land; the R4 reliability decisions
   ([#813](https://github.com/jnhu76/exam/issues/813),
   [#827](https://github.com/jnhu76/exam/issues/827),

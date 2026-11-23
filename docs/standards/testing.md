@@ -574,6 +574,7 @@ dependencies (`docker-compose.dev.yml`).
 | **TEST_DATABASE_URL** | Explicit per-DB URL (`…/exam_e2e[_w{N}]`); `DATABASE_URL`/`TEST_DB_URL` unset |
 | **Compose topology** | Runner-owned: `COMPOSE_DISABLE_ENV_FILE=1` prevents Compose from reading root `.env`; `DB_HOST_PORT`/`REDIS_HOST_PORT`/`TZ`/`APP_TIMEZONE` are frozen once from shell input (or managed defaults) and exported. Developer root `.env` has ZERO authority over managed E2E Compose interpolation. |
 | **Topology overrides** | Shell env vars only: `DB_HOST_PORT=25432 bash scripts/e2e/run.sh` |
+| **Deployment product preset** | `PRODUCT_PRESET` (shell input, default `standard`; ADR-022 Phase 3) — passed through to every shard API server, so Minimal-deployment specs (`minimal-*`) run via `PRODUCT_PRESET=minimal bash scripts/e2e/run.sh minimal-objective minimal-plain-manual`; standard specs run under the default. The runner is the E2E env authority; the composition-root startup preflight validates the value at boot |
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) |
 | **Blob reports** | Merged locally after run |
 | **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs |

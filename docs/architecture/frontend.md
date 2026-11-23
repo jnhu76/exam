@@ -79,7 +79,12 @@ titles sync to `document.title` via `AppTitle`.
 
 The root `App` wraps everything in `ErrorBoundary` → `BrowserRouter` →
 `BrandProvider loadRemote` → `AuthProvider restoreSession` → `DateTimeProvider`
-→ `AppTitle` + `AppRoutes` + `<Toaster>`.
+→ `ProductProjectionProvider` → `AppTitle` + `AppRoutes` + `<Toaster>`. The
+product projection provider (ADR-022 Phase 3) fetches the deployment's public
+`/api/system/public-config` projection once per shell; `allows()` prunes
+NEW-commitment authoring (question types, Rich slots) and capability-scoped
+nav surfaces, is fail-closed before load/failure, never gates obligation
+faces, and consumers never branch on the preset/presentation name.
 
 ## Responsive structure and spatial authority map
 
@@ -204,13 +209,25 @@ chain exists to prevent.
   Teacher; Proctor monitoring = Admin + Proctor) is derived from the
   **capability set**, not role labels. Role labels (`user.role`) are used only
   where the contract genuinely keys on role.
+- **Deployment product projection (second, independent nav/authoring
+  authority).** `ProductProjectionContext` +
+  `apps/web/src/lib/productProjection.ts` expose the deployment ceiling
+  (ADR-022 Phase 3). Nav items declare an optional `productCapability` — only
+  capability-scoped OPTIONAL surfaces (监考工作台 → `operator.monitoring`)
+  carry one; obligation faces (待评分, 恢复审查, 监考处置, 成绩查询) never do
+  and stay visible under every ceiling. Question authoring prunes types via
+  the single domain mapping `capabilityForQuestionType` and hides Rich
+  prompt/option/answer slots beyond `content.*.rich`/`answer.text.rich`;
+  legacy material stays displayed (D5: new commitments only). Per-exam
+  policy (frozen `controlFlags.requireQueue`) drives the candidate queue
+  regardless of the projection.
 
 ## State and data ownership
 
 - **No global store library** (no zustand / redux / jotai). State is plain React:
   server state fetched via the API client and held in page/component state;
   cross-tree concerns use React Context providers (`AuthContext`,
-  `DateTimeContext`, `BrandProvider`).
+  `DateTimeContext`, `BrandProvider`, `ProductProjectionContext`).
 - **Exam runtime uses a reducer, not a store.**
   `apps/web/src/exam/transientReducer.ts` is the exam-runtime transient state
   machine.
