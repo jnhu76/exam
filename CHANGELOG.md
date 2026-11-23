@@ -8,6 +8,23 @@ for repository releases from `v0.0.1` onward.
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-11-23
+
+### Security
+
+- Logout authorization-epoch revocation now fails closed on storage errors: `POST /auth/logout` responds with 503 `AUTHZ_UNAVAILABLE` without clearing the cookie or falsely claiming successful revocation (#1079, PR #1082).
+
+### Fixed
+
+- Web tests synchronize asynchronous React updates with their owning lifecycle, removing spurious `act(...)` warnings without weakening assertions (PR #1085).
+- Release notes are checked for unintended line wrapping before publishing; historical notes were normalized for GitHub rendering (PR #1081).
+
+### Internal / infrastructure
+
+- Incremental staged Web ESLint enforces `react-hooks/rules-of-hooks` while preserving existing `exam-ui/*` rules, architecture checks, pre-push typecheck/OpenAPI checks, and full CI (PR #1086).
+- Exam Code Review now documents a merge-base-to-HEAD Diff review mode with targeted contextual tracing (PR #1086).
+- The new direct dependency `eslint-plugin-react-hooks` is development-only. No new database migration or deployment environment variable was introduced since v0.0.16.
+
 ## [0.0.16] - 2026-11-22
 
 ### Added
