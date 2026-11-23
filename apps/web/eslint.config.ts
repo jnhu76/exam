@@ -121,9 +121,6 @@ const eslintConfig = [
   },
   {
     files: layoutGlobs,
-    linterOptions: {
-      reportUnusedDisableDirectives: "warn",
-    },
     plugins: {
       "exam-ui": examUiPlugin,
     },
