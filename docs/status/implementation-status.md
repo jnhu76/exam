@@ -242,7 +242,7 @@ notification onto the now-stable result-publication transaction (P5-N1).
   closed not planned / superseded; normal-submit correctness is owned by the
   pre-submit flush plus the server-side locked submit/freeze path.
 
-## Product capability composition (#678 / ADR-022): 🟡 PHASE 2 PARTIAL — QUESTION WRITE BOUNDARY
+## Product capability composition (#678 / ADR-022): 🟡 PHASE 2 PARTIAL — QUESTION WRITE + EXAM PUBLISH BOUNDARIES
 
 Phase 1 is implemented: the closed Standard catalog and pure fail-closed
 resolver in `packages/domain/src/productCapabilities.ts`, one server
@@ -261,9 +261,28 @@ on preview and confirm alike, and a row beyond the deployment ceiling joins
 the existing per-row error contract without being created; the resolver now
 accepts bounded subsets of Standard with in-catalog dependency validation
 (`question.text_response` requires `grading.manual`). No copy/duplicate
-question route exists. Phase 2 remains open for the other authoritative
-seams (exam authoring and publish), Phase 3 Minimal runtime, and Phase 4
-persisted configuration/CAS.
+question route exists.
+
+The exam publish seam is gated at the freeze boundary: `publishExam`
+(`packages/exam-engine/src/examCommands.ts`) takes the caller-resolved
+`ResolvedProductConfiguration` as a REQUIRED parameter, derives the required
+capabilities of the rows re-read inside the publish transaction through the
+shared derivation authority, and rejects unadmitted capabilities as a typed
+validation error BEFORE the snapshot is materialized — a rejected publish
+writes no exam row, and retained EXSEM-004 residue cannot bypass
+re-acceptance on republish. The publish route consults the canonical
+composition root per call (`apps/api/src/routes/exam.ts`). Draft
+orchestration points (exam create / `questionIds` PATCH) are deliberately
+ungated: a draft is not a commitment, and every channel (historical draft,
+template prefill, direct API call, republish) converges on the publish
+freeze gate. The demo/bootstrap seed fixture writes published exams
+directly; it stays inside the always-resolved full Standard root and its
+materials are plain objective, so it never exceeds the production ceiling
+(EXSEM-020 freeze/completeness rules still apply to it).
+
+Phase 2 remains open for any further authoritative new-commitment seams a
+later step identifies, Phase 3 Minimal runtime, and Phase 4 persisted
+configuration/CAS.
 
 `enabled` means the deployment may make a **new** commitment. It does not
 grant actor Permissions, enable a per-exam policy, or prove that an obligation
