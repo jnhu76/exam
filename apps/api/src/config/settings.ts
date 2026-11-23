@@ -610,6 +610,33 @@ function deploymentModeLeaf(): SettingLeaf<"singleTenant"> {
 }
 
 /**
+ * PRODUCT_PRESET: the deployment's STATIC product capability preset
+ * (ADR-022 Phase 3). Bootstrap-only until Phase 4 introduces persisted
+ * configuration (product-capability-composition.md §8); the composition
+ * root maps the validated preset onto its canonical configuration and the
+ * ONE domain resolver validates and resolves it. Unlike DEPLOYMENT_MODE,
+ * the invalid value IS echoed: preset vocabulary is non-secret and the
+ * startup failure must name what the operator actually wrote.
+ */
+function productPresetLeaf(): SettingLeaf<"standard" | "minimal"> {
+  return {
+    kind: "product-preset",
+    resolve: (raw) => {
+      const trimmed = raw?.trim();
+      if (trimmed === undefined || trimmed === "") return "standard";
+      if (trimmed === "standard" || trimmed === "minimal") return trimmed;
+      throw new SettingsError(
+        `Invalid PRODUCT_PRESET='${trimmed}'. Supported presets: standard, minimal.`,
+      );
+    },
+    defaultRaw: "standard",
+    requiredInProduction: false,
+    secret: false,
+    binding: "operator",
+  };
+}
+
+/**
  * Nullable trimmed string (REDIS_URL): unset/empty → null.
  */
 function nullableStringLeaf(
@@ -682,6 +709,7 @@ export const SETTINGS = {
     ),
     NODE_ENV: appEnvLeaf(),
     DEPLOYMENT_MODE: deploymentModeLeaf(),
+    PRODUCT_PRESET: productPresetLeaf(),
     HOST: stringLeaf("0.0.0.0", { binding: "fixed" }),
     // No leaf-level default: the bind-port owner switch (APP_PORT vs
     // DEV_API_PORT by mode, fallback 3000) is runtime policy.

@@ -23,6 +23,8 @@ import { setupErrorHandler } from "./plugins/errors.js";
 import { setupRequestIdHeader } from "./plugins/requestIdHeader.js";
 import { registerStaticFrontend } from "./plugins/staticFrontend.js";
 import apiSurfacePlugin from "./routes/apiSurface.js";
+import { getResolvedProductConfiguration } from "./product/compositionRoot.js";
+import { auditDeploymentSwitch } from "./product/deploymentSwitchPreflight.js";
 import { registerRootNotFoundBoundary } from "./plugins/rootNotFoundBoundary.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
@@ -151,6 +153,38 @@ async function main() {
   setupErrorHandler(app);
   await app.register(zodProviderPlugin);
   await app.register(dbPlugin);
+
+  // ADR-022 Phase 3 startup preflight (#678): the static deployment ceiling
+  // is resolved here — before any route or loop can start — through the ONE
+  // composition root, so an unsupported PRODUCT_PRESET fails startup. The
+  // outstanding-obligation audit is the §8 pre-switch check: with the
+  // bootstrap-only static preset the switch moment IS a server start, so a
+  // configuration that would cut an accepted obligation refuses to serve,
+  // naming the objects and obligations. Write guards, public-config and this
+  // preflight all read the same resolved instance afterwards.
+  const deploymentProduct = getResolvedProductConfiguration();
+  const switchAudit = await auditDeploymentSwitch(app.db, deploymentProduct);
+  app.log.info(
+    {
+      deploymentPreset: getRuntimeConfig().product.preset,
+      enabledCapabilities: deploymentProduct.enabled.length,
+      outstandingObligations: switchAudit.obligations.length,
+      obligationKinds: [...new Set(switchAudit.obligations.map((o) => o.kind))],
+    },
+    "deployment product preflight",
+  );
+  if (!switchAudit.allowed) {
+    throw new Error(
+      "deployment switch preflight rejected: the deployment ceiling would cut accepted obligations: " +
+        switchAudit.violations
+          .map(
+            (violation) =>
+              `${violation.kind} × ${violation.capability} → ${JSON.stringify(violation.objects)}`,
+          )
+          .join("; "),
+    );
+  }
+
   await app.register(auditLifecyclePlugin);
   await app.register(redisPlugin);
   await app.register(nowPlugin);

@@ -24,6 +24,9 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       PUBLIC_WEB_ORIGIN: ${PUBLIC_WEB_ORIGIN:-http://localhost}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
+      # Static deployment product ceiling (ADR-022 Phase 3, #678); the API
+      # startup preflight validates it and audits outstanding obligations.
+      PRODUCT_PRESET: ${PRODUCT_PRESET:-standard}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
       TZ: ${TZ:-Asia/Shanghai}
       REDIS_URL: ${REDIS_URL:-}

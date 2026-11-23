@@ -268,6 +268,13 @@ export interface AppRuntimeConfig {
   };
   env: AppEnv;
   mode: DeploymentMode;
+  /**
+   * Static deployment product preset (ADR-022 Phase 3, bootstrap-only until
+   * Phase 4). Consumed ONLY by the product composition root, which maps it
+   * to its canonical configuration and resolves it through the one domain
+   * resolver; no other module may read it to branch semantics.
+   */
+  product: { preset: "standard" | "minimal" };
   port: number;
   host: string;
   database: DatabaseConfig;
@@ -671,6 +678,7 @@ export function loadRuntimeConfig(
     app: { mode, isProduction, isTestLike },
     env: s.app.NODE_ENV,
     mode: s.app.DEPLOYMENT_MODE,
+    product: { preset: s.app.PRODUCT_PRESET },
     port: resolveApiBindPort(s, mode),
     host: s.app.HOST,
     database: { url: databaseUrl },
