@@ -166,13 +166,16 @@ await forbid("apps/web/src", [
 // pinned by #1076's kill-cases (apps/web/src/architectureBoundary.test.ts).
 await forbid("apps/api/src/routes", ROUTE_DB_GATE_PATTERNS);
 
-// EXSEM-014 lifecycle-state write funnels (#927 F43). The repo layer makes
-// the boundary typable (narrowed `update` inputs; the named
-// `updateIncludingLifecycleState` seam), and these scans anchor the two
-// named write funnels to their reviewed caller allowlists so a future
-// route or script that grabs a repo handle cannot silently acquire a
-// lifecycle writer. Patterns and allowlists derive from
-// config/architecture-policy.mjs — the same table the regression test
+// Lifecycle write funnels (#927 F43) plus the EXSEM-007 answer-receipt
+// funnels (#678 r3 §8 first static gate). The repo layer makes the
+// lifecycle boundary typable (narrowed `update` inputs; the named
+// `updateIncludingLifecycleState` seam), and these scans anchor the four
+// named write funnels — the EXSEM-014 lifecycle seam, the
+// assignment-revoke funnel and the EXSEM-007 answer-receipt pair — to
+// their reviewed caller allowlists so a future route or script that grabs
+// a repo or adapter handle cannot silently acquire one of these writers.
+// Patterns and allowlists derive from config/architecture-policy.mjs —
+// the same table the regression test
 // (apps/web/src/lifecycleStateWriteBoundary.test.ts) imports; this file
 // holds no second copy. A scan root that is missing or renamed away makes
 // the walker throw here — fail closed, never a vacuous exempt tree.
