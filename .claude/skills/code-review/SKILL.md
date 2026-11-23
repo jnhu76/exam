@@ -25,11 +25,11 @@ Review or improve Exam code using the principles in [coding-style.md](coding-sty
 
 ## Review procedure
 
-1. **Establish baseline**: record repo, base/head commits, branch/worktree state when available, authorized scope, affected modules, and relevant contracts. Compare with current master; do not trust stale Issue narratives.
+1. **Establish baseline and scope**. Fetch the current PR target (default `origin/master`), confirm HEAD is the proposed commit, and record the target, merge base, HEAD, and relevant authorities. Review the diff from the merge base to HEAD. Follow direct callers, callees, tests, and frozen contracts only where needed to assess a changed behavior. Uncommitted edits require an explicitly requested scope. When a shallow checkout lacks a merge base, deepen it before reviewing.
 2. **Trace the actual behavior**: input/schema -> authorization -> domain command -> repository/transaction -> API response, or UI event -> state/effect -> request -> rendered outcome. Identify the owner of each invariant.
 3. **Review correctness before aesthetics**: tenant boundaries, domain state machine, idempotency/version conflicts, server time, frozen snapshots, error and log privacy, resource/Promise lifecycle, and type narrowing.
 4. **Apply the TypeScript heuristics** in [coding-style.md](coding-style.md). Separate verified defects from readability suggestions. Do not demand arbitrary extraction, naming churn, or all-branches-have-else style.
-5. **Ground each finding**: exact file/line or code span, evidence or reproducible counterexample, affected contract, consequence, and smallest repair. Identify which test would turn red before the fix.
+5. **Ground each finding**. Report only defects introduced by the diff. Give the exact file and line, failure mechanism, trigger or counterexample, affected contract, smallest repair, and confidence. Skip diagnostics already reported by deterministic lint. Identify which test would turn red before the fix.
 6. **Check only real gates**: distinguish `docs/standards/code-quality.md` classifications (A enforceable, B partial, C human review, D not implemented). Do not claim `no-explicit-any`, `no-floating-promises`, `import/no-cycle`, or whole-repo ESLint are enforced when they are not.
 7. **If changes were authorized**, work within the Issue scope, prefer failing regression/characterization before a fix, preserve unrelated files, and run the relevant existing `package.json` scripts. Follow `docs/standards/testing.md` resource ownership when running DB/E2E workflows.
 8. **Report honestly**: do not equate CI green with architectural correctness or claim that an unexecuted command passed.
@@ -37,7 +37,7 @@ Review or improve Exam code using the principles in [coding-style.md](coding-sty
 ## Output contract
 
 - **Baseline / scope**: refs, code examined, contracts used.
-- **Findings**: prioritized P0/P1/P2 (and optional P3), each with location, evidence, impact, and minimal fix. No speculative style-only noise.
+- **Findings**: prioritized P0/P1/P2 with the evidence required above, or `NO_ACTIONABLE_FINDINGS`. Speculation and style preferences do not block the PR.
 - **Verified non-findings / trade-offs**: noteworthy examined cases that are safe, if material.
 - **Validation**: exact executed commands and results; `NOT_RUN` / `NOT_APPLICABLE` with reasons, including real DB/browser evidence when relevant.
 - **Decision**: `GO`, `HOLD`, or `INCONCLUSIVE` with residual risks.
@@ -46,6 +46,15 @@ For an implementation job, also deliver the **five fields in `docs/standards/cod
 
 ## Invocation examples
 
-- "Use the Exam code-review skill to review PR #123 against current master and `docs/standards/code-quality.md`. Audit only; do not edit."
+- "Use the Exam code-review skill for a read-only diff review of this branch against its PR target. Return the findings contract."
+- For a local branch targeting `master`, inspect the range with:
+
+  ```sh
+  git fetch origin &&
+    base=$(git merge-base origin/master HEAD) &&
+    git diff --find-renames "$base" HEAD
+  ```
+
+  Substitute the actual PR target when it differs from `master`.
 - "Use this skill to assess `apps/api/src/...` for async lifecycle, repository, and transaction issues; provide evidence and the minimal repair."
 - "Under Issue #123, use the Exam code-review skill to make the smallest authorized refactor, with regression evidence and relevant quality gates."

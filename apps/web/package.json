@@ -70,6 +70,7 @@
     "@vitest/coverage-v8": "^4.1.7",
     "dotenv": "^17.4.2",
     "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jiti": "^2.7.0",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",

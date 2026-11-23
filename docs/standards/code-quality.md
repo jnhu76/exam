@@ -16,7 +16,7 @@
 目标：
 
 1. 类型安全 — strict TypeScript（A：`pnpm typecheck`，选项见 §3）；禁止 `any` 是评审规则（C），没有全仓执行器（D）。
-2. 代码风格统一 — Prettier（A：`pnpm format:check`）；ESLint 仅覆盖 `apps/web` 视觉规则（A，见 §4），不是全仓 lint。
+2. 代码风格统一 — Prettier（A：`pnpm format:check`）；Web ESLint 检查视觉规则及 React Hook 调用顺序（A，见 §4）。
 3. 架构边界清晰 — `pnpm lint:arch` 执行命名的边界禁令（B，见 §6.2）；“依赖方向正确 / 无循环依赖”目前没有机器检查（D）。
 4. 没有裸 db 查询绕过 repository — route 层有文本禁令（B，见 §6.2/§7），repository 语义由评审把关（C）。
 5. 没有 route 直接写复杂业务逻辑（C）
@@ -38,7 +38,7 @@
 | Prettier（`pnpm format:check`）                                               | 格式化检查（仓库使用 Prettier 默认配置）                                                                     |
 | `pnpm lint`（`scripts/check-code-quality.mjs`）                               | 对 apps+packages 做 `console.log` / `console.error` 文本扫描                                                 |
 | `pnpm lint:arch`（`scripts/check-architecture.mjs`）                          | 命名的边界禁令 + #794 workspace resolution 契约（清单见 §6.2）                                               |
-| `pnpm lint:eslint`（仅 `apps/web`）                                           | `exam-ui/*` 视觉规则（业务 9 条、layout 8 条）+ 不执行任何检查的兼容 no-op stub（见 §4）                     |
+| `pnpm lint:eslint`（仅 `apps/web`）                                           | `exam-ui/*` 视觉规则与 `react-hooks/rules-of-hooks`（见 §4）                                                         |
 | `pnpm lint:db-config`（`scripts/check-db-config.mjs`）                        | DB URL 单源、测试运行时模式、hook 超时预算等回归守护                                                         |
 | `pnpm lint:db-journal`（`scripts/db/check-postgres-migration-journal.mjs`）   | Drizzle migration journal 结构、单调性与文件一致性                                                           |
 | `pnpm lint:env-contract`（`scripts/repository-contract/config-contract.mjs`） | settings 语义模型 ↔ 各拓扑（compose/CI/WSL）绑定关系                                                         |
@@ -91,13 +91,14 @@
 
 ## 4. ESLint Rules
 
-### 实际执行的 ESLint（仅 `apps/web` 视觉规则）
+### 实际执行的 ESLint（仅 `apps/web`）
 
-仓库唯一的 ESLint 配置是 `apps/web/eslint.config.ts`，由 `pnpm lint:eslint`（`pnpm --filter @exam/web lint:eslint`）执行。它只包含本地 `exam-ui/*` 视觉权威规则，不是通用 linter：
+仓库唯一的 ESLint 配置位于 `apps/web/eslint.config.ts`。`pnpm lint:eslint` 在 Web 包运行该配置，`lint-staged` 使用同一配置检查暂存的 Web 源文件。
 
 - 业务/功能源码 9 条：`prefer-inline-error-banner`、`no-business-shadow`、`no-arbitrary-typography`、`no-arbitrary-inline-typography`、`no-typography-authority-conflict`、`no-heavy-font-weight`、`no-recipe-recomposition`、`no-dialog-spatial-override`、`no-arbitrary-filter-width`；
 - `components/layout` 子集 8 条（不含 `no-business-shadow`：topbar/sidebar 拥有有意的 sticky elevation）；
-- `src/components/ui/**`（生成的 shadcn primitive）、`src/lint/**` 与测试文件不参与 lint。
+- `react-hooks/rules-of-hooks` 检查 `src/` 下 TS/TSX 的 Hook 调用顺序和位置。
+- 生成的 `src/components/ui/**`、`src/lint/**`、`*.test.ts(x)` 和 `*.d.ts` 不在上述检查范围内。
 
 兼容层（保留，不是遗漏）：配置为历史源码里既有的 `eslint-disable` 指令注册了 `react-hooks/exhaustive-deps` 与 `@typescript-eslint/no-explicit-any` 的 **no-op 规则**——它们不执行任何检查，只让旧指令可解析；单独删除会让 `pnpm lint:eslint` 失败。用途见 `apps/web/eslint.config.ts` 头注释。
 
@@ -500,8 +501,8 @@ API route 测试使用**真实 PostgreSQL**，不是内存数据库：默认按�
 
 Husky 钩子的唯一权威是 `.husky/` 目录（`package.json` 的 `prepare` 脚本安装）。本节只记录钩子职责，不复制命令快照——以钩子文件为准：
 
-- `pre-commit`：`lint-staged`（对 staged 文件跑 Prettier）+ `pnpm lint:arch`；
-- `pre-push`：`pnpm typecheck` + `pnpm --filter @exam/api api:openapi:check`（OpenAPI drift 检查）；
+- `pre-commit` 通过 `lint-staged` 格式化暂存文件，再对暂存的 `apps/web/src/` TS/TSX 应用 §4 的 ESLint 配置。完整架构检查继续由 `pnpm lint:arch` 执行。
+- `pre-push` 执行提交信息检查、完整工作区 typecheck 和 OpenAPI drift 检查。
 - `commit-msg`：commitlint（Conventional Commits）。
 
 ---
@@ -517,6 +518,8 @@ CI job 拓扑、命令与 env 接线的唯一权威是 `.github/workflows/ci.yml
 ---
 
 ## 16. Code Quality Review Checklist
+
+日常变更使用 [Exam Code Review](../../.claude/skills/code-review/SKILL.md) 的 Diff 入口，从目标分支与 HEAD 的 merge-base 审到 HEAD。涉及契约和跨模块行为时定向追踪直接上下文。
 
 每个 Job 的 Review Checklist 必须包含以下代码质量项：
 

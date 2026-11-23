@@ -65,7 +65,8 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*": "prettier --write --ignore-unknown"
+    "*": "prettier --write --ignore-unknown",
+    "apps/web/src/**/*.{ts,tsx}": "pnpm --filter @exam/web exec eslint --max-warnings=0 --no-warn-ignored --"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",

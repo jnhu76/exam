@@ -16,32 +16,26 @@
  *     is excluded from no-business-shadow but still covered by the other rules;
  *   - test files (*.test.ts/tsx) and the lint rules themselves are excluded.
  *
- * No other ESLint rules are configured here — exam-ui is the sole purpose of
- * this config. The existing scripts/check-*.mjs architecture lint remains
- * unchanged and authoritative for non-visual concerns.
+ * React Hook call-order rules also apply to Web application TS/TSX.
  */
 import tseslintParser from "@typescript-eslint/parser";
+import reactHooks from "eslint-plugin-react-hooks";
 import { BUSINESS_UI_ROOTS } from "../../scripts/lib/ui-scan-roots.mjs";
 import examUiPlugin from "./src/lint/exam-ui/index";
 
-/**
- * No-op stub plugin for pre-existing `eslint-disable` comments.
- *
- * This repo did not previously run ESLint, so a few source files carry
- * `eslint-disable-next-line <rule>` comments that reference rules belonging to
- * plugins this config intentionally does not load (react-hooks,
- * @typescript-eslint). ESLint v9+ treats a disable directive for an unknown
- * rule as a hard error. Rather than edit unrelated business source, we
- * register no-op pass-through rules under those namespaces so the directives
- * resolve cleanly. These stubs never report anything.
- */
+// Keep existing disable directives resolvable for rules that are inactive.
 const noopRule = {
   meta: { type: "suggestion", schema: [] },
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   create: () => ({}),
 };
-const compatibilityPlugins = {
-  "react-hooks": { rules: { "exhaustive-deps": noopRule } },
+const webSourcePlugins = {
+  "react-hooks": {
+    rules: {
+      "exhaustive-deps": noopRule,
+      "rules-of-hooks": reactHooks.rules["rules-of-hooks"],
+    },
+  },
   "@typescript-eslint": { rules: { "no-explicit-any": noopRule } },
 };
 
@@ -82,6 +76,7 @@ const ignores = [
   "src/lint/**",
   "**/*.test.ts",
   "**/*.test.tsx",
+  "**/*.d.ts",
 ];
 
 const eslintConfig = [
@@ -89,7 +84,7 @@ const eslintConfig = [
     ignores,
   },
   {
-    files: businessGlobs,
+    files: ["src/**/*.{ts,tsx}"],
     languageOptions: {
       parser: tseslintParser,
       parserOptions: {
@@ -98,19 +93,19 @@ const eslintConfig = [
         sourceType: "module",
       },
     },
-    // This ESLint config intentionally provides ONLY the exam-ui/* rules. It
-    // is not a general-purpose linter. Pre-existing source contains a few
-    // eslint-disable comments that reference rules from plugins this config
-    // does not load (react-hooks/exhaustive-deps, @typescript-eslint/*). Such
-    // directives are "unused" from this config's perspective and must NOT
-    // break the gate, so we silence unused-directive reporting rather than
-    // edit unrelated business source.
+    // Existing disable directives for inactive rules are intentionally unused.
     linterOptions: {
       reportUnusedDisableDirectives: "off",
     },
+    plugins: webSourcePlugins,
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+    },
+  },
+  {
+    files: businessGlobs,
     plugins: {
       "exam-ui": examUiPlugin,
-      ...compatibilityPlugins,
     },
     rules: {
       "exam-ui/prefer-inline-error-banner": "error",
@@ -126,17 +121,8 @@ const eslintConfig = [
   },
   {
     files: layoutGlobs,
-    languageOptions: {
-      parser: tseslintParser,
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-        ecmaVersion: "latest",
-        sourceType: "module",
-      },
-    },
     plugins: {
       "exam-ui": examUiPlugin,
-      ...compatibilityPlugins,
     },
     rules: {
       // Layout owns the sticky topbar (shadow-xs). Shadows are allowed here;
