@@ -242,15 +242,24 @@ notification onto the now-stable result-publication transaction (P5-N1).
   closed not planned / superseded; normal-submit correctness is owned by the
   pre-submit flush plus the server-side locked submit/freeze path.
 
-## Product capability composition (#678 / ADR-022): 🟡 PHASE 1 IMPLEMENTED
+## Product capability composition (#678 / ADR-022): 🟡 PHASE 2 PARTIAL — QUESTION WRITE BOUNDARY
 
 Phase 1 is implemented: the closed Standard catalog and pure fail-closed
 resolver in `packages/domain/src/productCapabilities.ts`, one server
 composition root in `apps/api/src/product/compositionRoot.ts`, and the
 read-only projection on the public `GET /api/system/public-config` response
-(`PublicConfigResponseSchema` in `packages/contracts/src/system.ts`). Phase 2
-authoritative write guards, Phase 3 Minimal runtime and Phase 4 persisted
-configuration/CAS are **not implemented**.
+(`PublicConfigResponseSchema` in `packages/contracts/src/system.ts`).
+
+Phase 2 is partially implemented for the question write boundary: question
+create/update derive their required capabilities from the final merged
+material (`packages/domain/src/questionCapabilityDerivation.ts`) and are
+rejected at the authoritative seam before the repository write
+(`apps/api/src/product/questionWriteCapabilityGuard.ts` consumed by
+`apps/api/src/routes/question.ts`); the resolver now accepts bounded subsets
+of Standard with in-catalog dependency validation
+(`question.text_response` requires `grading.manual`). Phase 2 remains open
+for the other authoritative seams (question import/copy, exam authoring and
+publish), Phase 3 Minimal runtime, and Phase 4 persisted configuration/CAS.
 
 `enabled` means the deployment may make a **new** commitment. It does not
 grant actor Permissions, enable a per-exam policy, or prove that an obligation
