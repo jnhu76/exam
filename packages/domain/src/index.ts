@@ -11,3 +11,4 @@ export * from "./examProfileRecipes.js";
 export * from "./identity.js";
 export * from "./content/contentDocument.js";
 export * from "./productCapabilities.js";
+export * from "./questionCapabilityDerivation.js";
