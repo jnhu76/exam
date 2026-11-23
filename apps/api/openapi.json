@@ -38176,7 +38176,7 @@
                         },
                         "presentation": {
                           "type": "string",
-                          "enum": ["standard"]
+                          "enum": ["standard", "minimal"]
                         },
                         "enabled": {
                           "type": "array",
