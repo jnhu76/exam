@@ -26,9 +26,11 @@ export type ProductCapabilityId =
   (typeof SUPPORTED_PRODUCT_CAPABILITIES)[number];
 
 /**
- * Phase 1 deliberately admits only the shipped Standard configuration.
- * Minimal is an ACCEPTED design preset, not a selectable runtime until
- * Phase 2's server write guards and Phase 3's UI/obligation proof exist.
+ * Phase 1 shipped the Standard configuration; Phase 2 adds BOUNDED subsets
+ * of it (ADR-022 authoritative write guards). The preset vocabulary stays
+ * the `standard` literal — a subset of Standard expresses disabled
+ * capabilities without introducing a `Minimal` runtime preset, which remains
+ * an ACCEPTED design awaiting Phase 3's UI/obligation proof.
  *
  * Every field is a closed literal so an internal TypeScript caller cannot
  * construct a configuration the resolver would reject. External input stays
@@ -75,10 +77,14 @@ const supported = new Set<string>(SUPPORTED_PRODUCT_CAPABILITIES);
 const configFields = new Set(["preset", "revision", "presentation", "enabled"]);
 
 /**
- * Pure, deterministic, fail-closed resolver. It intentionally DOES NOT accept
- * a subset of Standard yet: without Phase 2's authoritative CRUD/import/
- * publish guards, treating a disabled capability as effective would be a lie.
- * No DB state, environment variables, permissions or UI flags enter here.
+ * Pure, deterministic, fail-closed resolver (ADR-022 Phase 2). Accepts the
+ * full Standard catalog or any guarded subset of it. `enabled` lists the
+ * capabilities this deployment may make NEW commitments with; every omitted
+ * catalog capability is disabled at the authoritative write boundaries.
+ * Fail-closed invariants are unchanged: unknown/future names, duplicates and
+ * structural violations never resolve. In-catalog dependency: subjective
+ * questions cannot be enabled without their manual completion path. No DB
+ * state, environment variables, permissions or UI flags enter here.
  */
 export function resolveDeploymentProductConfiguration(
   input: unknown,
@@ -115,15 +121,22 @@ export function resolveDeploymentProductConfiguration(
     }
     seen.add(value);
   }
-  if (seen.size !== supported.size) {
+  if (seen.has("question.text_response") && !seen.has("grading.manual")) {
+    // product-capability-composition.md §5: 不能开启主观题却关闭其
+    // completion path. The message names the missing dependency so a broken
+    // deployment fails with an actionable cause.
     throw new Error(
-      "Partial product configurations require authoritative write guards",
+      "question.text_response requires grading.manual (a deployment cannot enable subjective questions without their manual completion path)",
     );
   }
 
-  // Stable catalog order, independent of caller ordering; no exposed mutable
-  // set, and no runtime branch on the preset name after resolution.
-  const enabled = Object.freeze([...SUPPORTED_PRODUCT_CAPABILITIES]);
+  // Stable catalog-order projection of the VALIDATED subset, independent of
+  // caller ordering; a disabled capability must never appear as effective.
+  // No exposed mutable set, and no runtime branch on the preset name after
+  // resolution.
+  const enabled = Object.freeze(
+    SUPPORTED_PRODUCT_CAPABILITIES.filter((capability) => seen.has(capability)),
+  );
   const allowed = new Set<string>(enabled);
   return Object.freeze({
     revision: 1 as const,
