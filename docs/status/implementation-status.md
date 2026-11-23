@@ -255,11 +255,15 @@ create/update derive their required capabilities from the final merged
 material (`packages/domain/src/questionCapabilityDerivation.ts`) and are
 rejected at the authoritative seam before the repository write
 (`apps/api/src/product/questionWriteCapabilityGuard.ts` consumed by
-`apps/api/src/routes/question.ts`); the resolver now accepts bounded subsets
-of Standard with in-catalog dependency validation
-(`question.text_response` requires `grading.manual`). Phase 2 remains open
-for the other authoritative seams (question import/copy, exam authoring and
-publish), Phase 3 Minimal runtime, and Phase 4 persisted configuration/CAS.
+`apps/api/src/routes/question.ts`); question import reuses the same ceiling
+derivation per row — import final material is Plain by construction, judged
+on preview and confirm alike, and a row beyond the deployment ceiling joins
+the existing per-row error contract without being created; the resolver now
+accepts bounded subsets of Standard with in-catalog dependency validation
+(`question.text_response` requires `grading.manual`). No copy/duplicate
+question route exists. Phase 2 remains open for the other authoritative
+seams (exam authoring and publish), Phase 3 Minimal runtime, and Phase 4
+persisted configuration/CAS.
 
 `enabled` means the deployment may make a **new** commitment. It does not
 grant actor Permissions, enable a per-exam policy, or prove that an obligation
