@@ -91,6 +91,7 @@ export const API_STATIC_SEGMENTS = new Set([
   "proctor-events",
   "proctors",
   "profile",
+  "public-config",
   "publish",
   "publish-results",
   "questions",

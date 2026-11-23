@@ -27,11 +27,14 @@ import { Plus, Trash2 } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { FieldRow, FieldGroup, Field } from "@/components/shared/FieldGroup";
 import {
+  capabilityForQuestionType,
   plainTextProjection,
   plainTextToDocument,
   type ContentDocumentV1,
+  type QuestionType,
 } from "@exam/domain";
 import { RichContentEditorLazy } from "@/components/shared/content/RichContentEditorLazy";
+import { useProductProjection } from "@/contexts/ProductProjectionContext";
 import { CourseSearchSelect } from "./CourseSearchSelect";
 
 /** A single option within a question, with an ID, display content, and correctness flag. */
@@ -109,6 +112,25 @@ const defaultForm: QuestionFormData = {
 };
 
 /**
+ * Ordered NEW-question type options. Rendering filters this list through the
+ * deployment projection via `capabilityForQuestionType` — the SINGLE domain
+ * type→capability authority; no local second table.
+ */
+const QUESTION_TYPE_OPTIONS = [
+  { value: "single_choice", labelKey: "admin.forms.question.typeSingleChoice" },
+  {
+    value: "multiple_choice",
+    labelKey: "admin.forms.question.typeMultipleChoice",
+  },
+  { value: "fill_blank", labelKey: "admin.forms.question.typeFillBlank" },
+  { value: "true_false", labelKey: "admin.forms.question.typeTrueFalse" },
+  {
+    value: "text_response",
+    labelKey: "admin.forms.question.typeTextResponse",
+  },
+] as const satisfies ReadonlyArray<{ value: QuestionType; labelKey: string }>;
+
+/**
  * True when the document carries anything the plain textarea cannot
  * represent (structure, math, marks). hardBreak projects to a newline, so it
  * is not lossy.
@@ -136,6 +158,10 @@ export function QuestionForm({
   onChange,
 }: QuestionFormProps) {
   const { t } = useTranslation();
+  // Deployment product ceiling (ADR-022 Phase 3): prunes NEW-commitment
+  // authoring only. Existing legacy material stays displayed and editable —
+  // the server write guard owns update acceptance (ADR-022 D5).
+  const { allows } = useProductProjection();
   const [form, setForm] = useState<QuestionFormData>({
     ...defaultForm,
     ...initial,
@@ -338,21 +364,20 @@ export function QuestionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="single_choice">
-                {t("admin.forms.question.typeSingleChoice")}
-              </SelectItem>
-              <SelectItem value="multiple_choice">
-                {t("admin.forms.question.typeMultipleChoice")}
-              </SelectItem>
-              <SelectItem value="fill_blank">
-                {t("admin.forms.question.typeFillBlank")}
-              </SelectItem>
-              <SelectItem value="true_false">
-                {t("admin.forms.question.typeTrueFalse")}
-              </SelectItem>
-              <SelectItem value="text_response">
-                {t("admin.forms.question.typeTextResponse")}
-              </SelectItem>
+              {/* INVARIANT: the CURRENT type always stays listed (displaying
+                legacy material is not a new commitment, ADR-022 D5); types
+                beyond the deployment ceiling are never OFFERED for new
+                authoring. Verdicts come from the projection via the single
+                domain mapping — never from the preset name. */}
+              {QUESTION_TYPE_OPTIONS.filter(
+                (option) =>
+                  option.value === form.type ||
+                  allows(capabilityForQuestionType(option.value)),
+              ).map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
@@ -361,7 +386,7 @@ export function QuestionForm({
       <Field>
         <div className="flex items-center justify-between">
           <Label>{t("admin.forms.question.content")}</Label>
-          {form.type !== "fill_blank" && (
+          {form.type !== "fill_blank" && allows("content.prompt.rich") && (
             <Select
               value={form.contentDocument ? "rich" : "plain"}
               onValueChange={(v) => {
@@ -483,7 +508,7 @@ export function QuestionForm({
                     disabled={form.type === "true_false"}
                   />
                 )}
-                {optionTypesWithRich && (
+                {optionTypesWithRich && allows("content.option.rich") && (
                   <Select
                     value={opt.contentDocument ? "rich" : "plain"}
                     onValueChange={(v) => {
@@ -560,26 +585,36 @@ export function QuestionForm({
             </p>
           </Field>
 
-          <Field>
-            <Label>{t("admin.forms.question.answerMode")}</Label>
-            <Select
-              value={form.answerMode}
-              onValueChange={(v) =>
-                update({ answerMode: v as QuestionFormData["answerMode"] })
-              }
-            >
-              <SelectTrigger aria-label={t("admin.forms.question.answerMode")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="plain">{t("content.mode.plain")}</SelectItem>
-                <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="type-metadata">
-              {t("admin.forms.question.answerModeHint")}
-            </p>
-          </Field>
+          {/* answer.text.rich beyond the deployment ceiling: only the plain
+            answer mode exists, so the whole selector (and its hint) is
+            omitted. An existing rich-answer legacy question keeps rendering
+            its editor below via the read path. */}
+          {allows("answer.text.rich") && (
+            <Field>
+              <Label>{t("admin.forms.question.answerMode")}</Label>
+              <Select
+                value={form.answerMode}
+                onValueChange={(v) =>
+                  update({ answerMode: v as QuestionFormData["answerMode"] })
+                }
+              >
+                <SelectTrigger
+                  aria-label={t("admin.forms.question.answerMode")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="plain">
+                    {t("content.mode.plain")}
+                  </SelectItem>
+                  <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="type-metadata">
+                {t("admin.forms.question.answerModeHint")}
+              </p>
+            </Field>
+          )}
 
           <Field>
             <Label>{t("admin.forms.question.referenceAnswer")}</Label>

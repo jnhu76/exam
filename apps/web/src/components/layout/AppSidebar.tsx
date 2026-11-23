@@ -1,5 +1,7 @@
 import type { MeResponse } from "@exam/contracts";
+import type { ProductCapabilityId } from "@exam/domain";
 import { Permission } from "@exam/authz";
+import { useProductProjection } from "@/contexts/ProductProjectionContext";
 import {
   canImportQuestions,
   canSeeCourses,
@@ -66,6 +68,13 @@ interface AppSidebarProps {
 /** A navigation item: route + icon + the i18n key for its label.
  *  `visible?` is a UX-only capability gate (see lib/capabilities.ts); it hides
  *  the entry for roles that lack the permission. Backend remains authoritative.
+ *  `productCapability?` gates OPTIONAL capability surfaces by the deployment
+ *  projection (ADR-022 Phase 3): the entry shows only when the ceiling admits
+ *  a NEW commitment of that capability. INVARIANT: obligation faces (pending
+ *  manual grading, recovery, incident disposition, result reads) MUST NOT set
+ *  this field — accepted work is reachable under every ceiling
+ *  (product-capability-composition.md §4.4) — and consumers never branch on
+ *  the preset/presentation name (§6).
  *  Current-state matching is NOT per-item: lib/navMatch.ts owns the
  *  route→destination authority (a destination represents a route family). */
 interface NavItem {
@@ -73,6 +82,7 @@ interface NavItem {
   to: string;
   icon: LucideIcon;
   visible?: (user: Pick<MeResponse, "role" | "capabilities">) => boolean;
+  productCapability?: ProductCapabilityId;
 }
 
 /** A navigation group: the i18n key for its heading + its items. */
@@ -180,6 +190,11 @@ const groups: NavGroup[] = [
         to: routes.admin.proctorWorkspace,
         icon: Monitor,
         visible: canSeeProctor,
+        // Capability-scoped OPTIONAL observation surface. The adjacent
+        // recovery/incident disposition entries (监考处置, 恢复审查) carry NO
+        // productCapability: disposition work is an obligation face and
+        // stays reachable under every ceiling (§4.4).
+        productCapability: "operator.monitoring",
       },
     ],
   },
@@ -310,6 +325,7 @@ export function SidebarContent({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
+  const { allows } = useProductProjection();
   const location = useLocation();
   const navRef = useRef<HTMLElement | null>(null);
   // NAV-4 (issue 494): vertical overflow is an explicit component state; the
@@ -328,10 +344,19 @@ export function SidebarContent({
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [location.pathname]);
 
+  // UX-only filters, two independent authorities (ADR-022 D3): the ACTOR
+  // permission gate (lib/capabilities.ts) and, only for items that declare
+  // one, the deployment product ceiling. Items without a productCapability —
+  // every obligation and business surface — are projected-independent and
+  // stay visible under any ceiling; verdicts come from allows(), never from
+  // the preset name (§6). Backend remains authoritative.
+  const projectedVisible = (item: NavItem) =>
+    !item.productCapability || allows(item.productCapability);
+
   // Management items are individually capability-gated so a partial-authority
   // actor never sees an item that would 403 on click (dead navigation).
   const management = managementItems.filter(
-    (item) => !item.visible || item.visible(user),
+    (item) => (!item.visible || item.visible(user)) && projectedVisible(item),
   );
   // Belt-and-braces: the group gate and the per-item predicates are kept in
   // sync by the four management perms, but if a future per-item gate drops
@@ -340,12 +365,13 @@ export function SidebarContent({
   const showManagement = canSeeManagement(user) && management.length > 0;
   const initials = user.name.slice(0, 2);
 
-  // UX-only capability filter (lib/capabilities.ts). Hides nav entries the
-  // role's preset does not grant; backend remains authoritative.
   const visibleGroups = groups
     .map((g) => ({
       ...g,
-      items: g.items.filter((item) => !item.visible || item.visible(user)),
+      items: g.items.filter(
+        (item) =>
+          (!item.visible || item.visible(user)) && projectedVisible(item),
+      ),
     }))
     .filter((g) => g.items.length > 0);
 
