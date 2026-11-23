@@ -3554,6 +3554,79 @@ NEXT_DIAGNOSTIC_STEP = 复发时先保全 per-task 日志与完整 stdout 再复
 lane 全绿与失败身份 UNKNOWN 并存：本条目按登记册规则保持 occurrence 粒度，不为编排
 绿灯目的而收窄任何一侧证据。
 
+### OBS-2026-11-24-002 — 同 lane 复发并首次取得测试级身份：7 例固定预算超时（6× testTimeout 5s + 1× hookTimeout 10s）+ 1 例超时在途写入连带 FK 违规；同 SHA `pnpm verify` 复跑（api coverage cache-miss 实跑）全绿
+
+```text
+OBSERVED_AT = 2026-11-24T06:52:13–06:55:42+08:00（vitest "Start at 06:52:13"；
+  apps/api/.turbo/turbo-coverage.log 失败 run mtime 06:55:42）
+GIT_SHA = 91ff2335（工作树干净；该提交纯文档，代码内容与 4b78faa2 一致）
+BRANCH = feat/678-capability-composition（exam-678 工作树；#678 capability composition）
+COMMAND = pnpm verify（失败发生在 coverage 阶段 @exam/api#coverage；verify:static 先行通过）
+EXECUTION_TOPOLOGY = @exam/api#coverage cache miss 实跑（266 文件 × 4 worker × v8
+  coverage × TEST_DB_ISOLATION=worker-database + API_TEST_MAX_WORKERS=4）
+FAILED_FILE = src/authz/graderExamMatrix.test.ts（suite 级）、
+  src/routes/listPagination.contract.test.ts（6 用例）、
+  src/routes/attempts/candidate-save-submit.test.ts（1 用例）
+FAILED_TEST = 8 个失败单元，全部无断言失败：
+  ① graderExamMatrix beforeAll buildTestApp（src/authz/graderExamMatrix.test.ts:732）
+     Hook timed out in 10000ms
+  ② listPagination B01（:388）/ B02×3 / B13（:596）Test timed out in 5000ms
+  ③ listPagination B03 在 clearOrgData（:554→:83）删 users 时 PG 23503：
+     Key (id)=(25ff925c-…, 02f5f3a0-…) is still referenced from table
+     "candidate_profiles"（constraint candidate_profiles_user_id_users_id_fk）；
+     被引用 user 均非 seed 保留用户
+  ④ candidate-save-submit "strict policy restore grants zero seconds and
+     preserves the deadline (ADR-013)"（:1556）Test timed out in 5000ms
+FAILURE_PHASE = 测试相位（非 bootstrap / 序列化）
+FAILURE_CLASS = 固定预算超时 ×7（testTimeout 5000ms ×6、hookTimeout 10000ms ×1）
+  + 超时连带 FK 违规 ×1；同一文件内依赖链：vitest 超时不终止在途写入，B02 候选人
+  构造的在途 INSERT 落在 B03 clearOrgData 的 candidateProfiles 删除与 users 删除
+  之间，破坏其 FK-safe 顺序（clearOrgData:56 注释声明顺序 attempt→…→profiles→
+  users；FK 被引用者非 seed 用户支持该机制）
+ERROR = Test Files 3 failed | 259 passed | 4 skipped (266)；Tests 7 failed |
+  3137 passed | 13 skipped (3157)；Duration 208.07s；vitest exit 1 →
+  turbo "ERROR @exam/api#coverage: command … exited (1)"
+ASSERTION_FAILURE = NO
+AUTHORITATIVE_RUN_RESULT = FAIL
+RERUN_EVIDENCE = 同 SHA 完整 pnpm verify 复跑 EXIT=0，其中 @exam/api:coverage 为
+  cache miss 真跑（262 passed | 4 skipped 文件，3146 passed | 11 skipped 用例，
+  Duration 161.59s）；对照：同 SHA turbo test 非 coverage lane（06:39:47–06:47:58，
+  早于 91ff2335 提交时刻，代码内容一致）259 passed | 7 skipped 文件 /
+  3136 passed | 21 skipped 用例全绿。失败 run 慢于绿色复跑 208.07s vs 161.59s
+NONDETERMINISM_CONFIRMED = YES
+TRACE_AVAILABLE = PARTIAL：失败 run 的 per-task 日志已按 OBS-2026-11-24-001 教训
+  在复跑前保全至工作树外 /tmp/exam-678-failure-witness/turbo-{coverage,test}.log
+  （一次性见证产物，宿主重启丢失；关键失败文本已摘录于本条）；编排侧完整 stdout
+  未由本登记取得
+PG_FORENSICS = exam-dev-db-1 窗口 06:50–06:58 ERROR 每分钟 50/69/41/37/5 递减；
+  FATAL 仅 worker-database 生命周期噪声（bootstrap_missing 探针、DROP DATABASE
+  连带 autovacuum 终止）；无 too-many-clients、无产品侧错误
+NONDETERMINISM_NOTE = 同代码 FAIL + 同代码 PASS 仅确立 NONDETERMINISM_CONFIRMED =
+  YES；按 STEP 3 不随之得出无害、不得出改动因果排除、不得出宿主负载根因
+CURRENT_CHANGE_CAUSALITY = UNKNOWN（STEP 7 禁止写 PROVEN_UNRELATED：三个受害文件
+  在分支 21 提交中零改动仅支撑 PLAUSIBLY_UNRELATED；分支向 api coverage lane 增
+  3 个测试文件，改变 lane 长度与 worker 占用，排除不可能满足 (b)
+  CONTROLLED_EXCLUSION）
+ROOT_CAUSE_CONFIDENCE = UNKNOWN（方向性观察：受害身份聚焦"大批量数据构造用例
+  （B 系列 40/25 行）与 buildTestApp beforeAll"在 4-worker coverage lane 的固定
+  预算边界，与 CASE-2026-11-03 机制家族"固定预算 < 固有成本"同为 HYPOTHESIS 级
+  共性，不构成机制级聚合）
+FIRST_CAUSAL_DIVERGENCE = UNKNOWN
+CASE_ID = UNASSIGNED（AGGREGATION_BASIS = NONE：与 OBS-2026-11-24-001 同 lane 但
+  001 失败身份 UNKNOWN，不得仅凭 lane 相似归桶；与 BUG-FLAKE-005 签名不同——
+  受害用例非 schema-provisioning 身份；与 CASE-2026-11-03 受害身份不同且该 case
+  已 REPAIRED）
+NEXT_DIAGNOSTIC_STEP = 同 lane 继续自然采样；复发时沿用 001 教训（先保全再复跑）
+  并采样测试级身份；测试级身份已累计 1 次本条 + 历史 REPAIRED case，若同身份累计
+  3+ 次按 STEP 8 触发聚合复审；结构加固（如 B 系列构造成本或 beforeAll 预算的
+  所有权收窄）未获授权，不得以扩 timeout / 降断言制造绿灯
+```
+
+上下文补充（登记时刻事实）：本条为编排脚本侧第二轮 `pnpm verify` 失败的处置记录；
+处置代理按 001 登记的教训先保全 apps/api/.turbo 失败 run 日志再执行复跑（工作树内
+日志随后被复跑覆写，失败 run 原件仅在 /tmp 见证副本）。按 STEP 4，失败权威 run 保持
+FAIL，本轮 EXIT=0 的复跑为并存的新权威 gate run，不追溯改写第一 run。
+
 ---
 
 ## Non-Flake / Misclassification Lessons（非 Flake / 误分类教训）
