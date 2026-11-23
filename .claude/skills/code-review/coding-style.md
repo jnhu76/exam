@@ -119,7 +119,7 @@ Read `docs/standards/code-quality.md` §13.5, `docs/standards/testing.md`, and `
 | Prettier through `pnpm format:check` | A: formatting; repo uses default Prettier, with Markdown ignored |
 | `pnpm lint` | B: a limited text scan for `console.log`/`console.error`, **not general ESLint** |
 | `pnpm lint:arch` | B: specified import/manifest/route/lifecycle/resolution bans, **not every dependency edge or cycle** |
-| `pnpm lint:eslint` | A within its defined scope: `apps/web` UI rules; not whole-repo JS/TS lint |
+| `pnpm lint:eslint` | A within its defined scope: `apps/web` UI rules and `react-hooks/rules-of-hooks` |
 | `@typescript-eslint/no-explicit-any` / `react-hooks/exhaustive-deps` | no-op compatibility stubs in the web config, **not enforced** |
 | `no-floating-promises`, `consistent-type-imports`, `no-unused-vars`, `import/no-cycle`, arbitrary complexity limits | D: no corresponding all-repo execution point; review manually if material |
 | `any`/unsafe assertions, code cohesion, domain responsibility, privacy | C: required review, not a falsely claimed automated pass |
