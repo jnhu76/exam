@@ -2,6 +2,23 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
+// Deployment product preset (ADR-022 Phase 3): the browser suite is
+// EXPLICITLY allocated between the two shipped presets so neither preset's
+// assertions run against the other's deployment. `PRODUCT_PRESET` is the
+// runner/CI topology value the API server boots with (testing.md §4.1/§4.2
+// single authority) — this config only reads it, never invents a second
+// preset knob:
+//   standard (default) — every spec EXCEPT Minimal-deployment specs.
+//   minimal            — ONLY Minimal-deployment specs (`minimal-*.spec.ts`),
+//                        which assert `product.presentation === "minimal"`.
+// Selecting an out-of-preset spec (e.g. `run.sh minimal-objective` without
+// the minimal preset) fails loud at discovery ("no tests found") instead of
+// running it against the wrong deployment.
+const minimalPreset = process.env.PRODUCT_PRESET === "minimal";
+// Matches the Minimal-deployment spec family regardless of the path shape
+// Playwright hands to matchers (absolute or testDir-relative).
+const MINIMAL_SPEC_FILE = /(^|[\\/])minimal-[^\\/]+\.spec\.tsx?$/;
+
 // Worker count is configurable so E2E can run serially (local default) or in
 // parallel via run-script sharding (E2E_WORKERS>1). NOTE: parallel execution
 // is NOT enabled by raising Playwright `workers` here — that would share one
@@ -21,6 +38,9 @@ const hostMap = process.env.E2E_HOST_MAP;
 
 export default defineConfig({
   testDir: "./e2e",
+  ...(minimalPreset
+    ? { testMatch: MINIMAL_SPEC_FILE }
+    : { testIgnore: MINIMAL_SPEC_FILE }),
   fullyParallel: false,
   workers,
   retries: 0,

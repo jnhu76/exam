@@ -37,8 +37,11 @@
 #                       的 dev 栈占用默认端口时并行运行本脚本
 #   PRODUCT_PRESET      本部署的产品上限预设（ADR-022 Phase 3）：standard（默认）
 #                       或 minimal。与其他拓扑配置值一样由调用方 shell 传入，
-#                       透传给 API server（组合根唯一取值点）；minimal 部署的
-#                       spec（如 minimal-*）依赖它，standard spec 在缺省下运行。
+#                       透传给 API server（组合根唯一取值点），Playwright 配置
+#                       读同一值做套件分配（testing.md §4.1）：standard 运行除
+#                       minimal-* 外的全部 spec；minimal 仅运行 minimal-* spec
+#                       （它们断言 presentation === "minimal"）。跨预设点名 spec
+#                       会在发现阶段失败（no tests found），不会跑错部署。
 #   KEEP_SERVER=1     等价于 --keep-server
 #   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
 #
