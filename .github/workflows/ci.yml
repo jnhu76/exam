@@ -636,16 +636,28 @@ jobs:
 
       # ── Phase 2 (Minimal): restart the REAL entrypoint against the SAME
       # database with the Minimal ceiling — the static-preset switch moment
-      # (server boot) the browser specs then exercise.
+      # (server boot) the browser specs then drive in the browser.
       - name: Restart API server (minimal preset)
         run: |
+          # Cross-step process control: the phase-1 `pnpm start` wrapper may
+          # be an unreaped zombie (`kill -0` succeeds on zombies), and its
+          # node child survives the wrapper's TERM while still holding :3000
+          # — the new server then fails EADDRINUSE and the health poll keeps
+          # answering the OLD Standard server (the exact failure class
+          # scripts/e2e/run.sh owns with process-group teardown, #256-A).
+          # The observable resource here is the PORT: terminate the tree,
+          # then wait until :3000 STOPS answering before rebinding it.
           kill $API_PID 2>/dev/null || true
+          pkill -TERM -f "node dist/server.js" 2>/dev/null || true
           for i in $(seq 1 30); do
-            if ! kill -0 $API_PID 2>/dev/null; then
+            if ! curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
+          if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+            echo "old API server still holds :3000 after TERM" && exit 1
+          fi
           pnpm --filter @exam/api start > server-minimal.log 2>&1 &
           echo "API_PID=$!" >> $GITHUB_ENV
           for i in $(seq 1 30); do
@@ -671,6 +683,7 @@ jobs:
         if: always()
         run: |
           kill $API_PID 2>/dev/null || true
+          pkill -TERM -f "node dist/server.js" 2>/dev/null || true
 
       - name: Write E2E failure summary
         # Same zero-artifact failure contract as the standard E2E lanes: text
