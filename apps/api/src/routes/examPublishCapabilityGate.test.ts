@@ -12,6 +12,8 @@ import {
   type ProductCapabilityId,
   type ResolvedProductConfiguration,
 } from "@exam/domain";
+import { eq } from "drizzle-orm";
+import { schema } from "@exam/db/schema/pg";
 import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
@@ -200,6 +202,76 @@ describe("exam publish capability gate (W2c.1 #678)", () => {
     const allowed = await publish(examId);
     expect(allowed.statusCode, allowed.body).toBe(200);
     expect(allowed.json().status).toBe("published");
+  });
+
+  it("RED: a queue-required draft with ceiling-legal questions is rejected without admission.queue; the same draft publishes under Standard (#678 review)", async () => {
+    // The gate must judge the exam's OWN admission policy, not only question
+    // material: this draft's questions are all legal under Minimal's types,
+    // but freezing controlFlags.requireQueue is a NEW admission.queue
+    // commitment. (Minimal ships without admission.queue; the engine unit
+    // test covers the preset-true resolution, this covers the route seam.)
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "排队考试的判断题",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(qRes.statusCode, qRes.body).toBe(201);
+
+    const examRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Gate queue-required draft",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [qRes.json().id],
+        controlFlags: { requireQueue: true },
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(examRes.statusCode, examRes.body).toBe(201);
+    const queueExamId = examRes.json().id as string;
+
+    useBoundedCapabilitiesWithout(["admission.queue"]);
+
+    const rejected = await publish(queueExamId);
+    expect(rejected.statusCode, rejected.body).toBe(400);
+    expect(rejected.json().error.code).toBe("VALIDATION_ERROR");
+    // The envelope is the route's generic ValidationError mapping (same as
+    // the rich rejections above); the named cause is pinned at the engine
+    // unit level, and the differential below (the SAME draft publishes once
+    // the ceiling re-admits admission.queue) proves this 400 IS the queue
+    // gate, not an unrelated draft validation.
+    expect(await examStatus(queueExamId)).toBe("draft");
+    // Validation-before-freeze: the rejected publish materializes no snapshot.
+    const rejectedRow = await ctx.db
+      .select({ snapshot: schema.exams.questionSnapshot })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, queueExamId));
+    expect(rejectedRow[0]!.snapshot).toHaveLength(0);
+
+    // Same draft under the full Standard ceiling (queue admitted): publishes
+    // and freezes the snapshot.
+    capabilityHarness.enabled = undefined;
+    const allowed = await publish(queueExamId);
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json().status).toBe("published");
+    const publishedRow = await ctx.db
+      .select({ snapshot: schema.exams.questionSnapshot })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, queueExamId));
+    expect(publishedRow[0]!.snapshot).toHaveLength(1);
   });
 
   it("RED: republishing after unpublish under a lowered ceiling is rejected and keeps the draft (EXSEM-004 re-acceptance)", async () => {

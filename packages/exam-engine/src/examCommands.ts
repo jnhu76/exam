@@ -323,8 +323,11 @@ export async function publishExam(
   // ADR-022 Phase 2 (#678): publish is an authoritative new-commitment
   // boundary, so the deployment ceiling judges the CURRENT material (the
   // rows re-read inside the publish transaction) through the single shared
-  // derivation authority — question type and Rich slots only; `grading.manual`
-  // is transitively enforced by the resolver's question.text_response
+  // derivation authority — question type and Rich slots, PLUS the exam's
+  // own admission policy: freezing `requireQueue` commits the deployment
+  // to the queue admission path for this exam's whole lifecycle, so it is
+  // judged here exactly like a material requirement. `grading.manual` is
+  // transitively enforced by the resolver's question.text_response
   // dependency, never derived from material. Required-but-unadmitted
   // capabilities fail closed as a typed rejection.
   // INVARIANT (validation-before-freeze, D5.1): this gate and every
@@ -336,6 +339,9 @@ export async function publishExam(
     for (const capability of deriveQuestionRequiredCapabilities(question)) {
       requiredCapabilities.add(capability);
     }
+  }
+  if (exam.controlFlags.requireQueue) {
+    requiredCapabilities.add("admission.queue");
   }
   const unadmitted = SUPPORTED_PRODUCT_CAPABILITIES.filter(
     (capability) =>

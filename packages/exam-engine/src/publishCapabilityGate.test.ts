@@ -6,6 +6,7 @@ import {
 } from "./examCommands.js";
 import type { Exam, Question } from "@exam/domain";
 import {
+  MINIMAL_PRODUCT_CONFIGURATION,
   STANDARD_PRODUCT_CONFIGURATION,
   SUPPORTED_PRODUCT_CAPABILITIES,
   ValidationError,
@@ -180,6 +181,11 @@ function publishRepo(question: Question) {
 /** The full Standard ceiling, resolved through the canonical Phase 2 resolver. */
 function resolvedStandard(): ResolvedProductConfiguration {
   return resolveDeploymentProductConfiguration(STANDARD_PRODUCT_CONFIGURATION);
+}
+
+/** The shipped Minimal preset, resolved through the same resolver authority. */
+function resolvedMinimal(): ResolvedProductConfiguration {
+  return resolveDeploymentProductConfiguration(MINIMAL_PRODUCT_CONFIGURATION);
 }
 
 /** Standard minus exactly the listed capabilities (controlled bounded ceiling). */
@@ -367,6 +373,61 @@ describe("publishExam capability ceiling (W2c.1 #678)", () => {
     expect(after.status).toBe("draft");
     // Residue is untouched by the rejected republish (still the old freeze).
     expect(after.questionSnapshot).toEqual(residue);
+  });
+
+  it("RED: rejects a queue-required draft under the Minimal preset, writing nothing", async () => {
+    // #678 review: the publish gate must judge the exam's OWN admission
+    // policy, not only question material — a draft whose questions are all
+    // inside Minimal's three types but whose controlFlags freeze a queue
+    // admission path is a NEW admission.queue commitment the Minimal
+    // ceiling does not admit.
+    const question = makeQuestion("q1", { type: "true_false" });
+    const repo = makeRepo(
+      makeExam({
+        questionIds: [question.id],
+        totalScore: question.score,
+        passingScore: 0,
+        controlFlags: {
+          ...makeExam().controlFlags,
+          requireQueue: true,
+        },
+      }),
+    );
+
+    const rejection = await captureRejection(() =>
+      publishExam(repo, "exam-1", [question], resolvedMinimal()),
+    );
+    const error = expectValidationError(rejection);
+    expect(error.message).toContain("admission.queue");
+
+    expect(repo.updateCalls).toBe(0);
+    const after = repo.findById("exam-1") as Exam;
+    expect(after.status).toBe("draft");
+    expect(after.questionSnapshot).toEqual([]);
+  });
+
+  it("publishes the same queue-required draft under the full Standard ceiling (behavior equivalence)", async () => {
+    const question = makeQuestion("q1", { type: "true_false" });
+    const repo = makeRepo(
+      makeExam({
+        questionIds: [question.id],
+        totalScore: question.score,
+        passingScore: 0,
+        controlFlags: {
+          ...makeExam().controlFlags,
+          requireQueue: true,
+        },
+      }),
+    );
+
+    const published = await publishExam(
+      repo,
+      "exam-1",
+      [question],
+      resolvedStandard(),
+    );
+    expect(published.status).toBe("published");
+    expect(published.questionSnapshot).toHaveLength(1);
   });
 
   it("publishes the same rich material under the full Standard ceiling (behavior equivalence)", async () => {
