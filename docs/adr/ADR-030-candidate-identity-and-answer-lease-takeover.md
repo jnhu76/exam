@@ -10,11 +10,22 @@
 - 各待裁决项（§Open questions）须由 Owner 逐项裁决；裁决结果以 ACCEPTED 修订
   形式落回本文件后才成为权威。
 
+2026-11-24 增量修订（均为 as-built 精确化与裁决面扩展，不改变任何决定方向，
+状态保持 PROPOSED）：as-built 第 9 条按代码实查补全考生侧归属核对点全景
+（save / take / heartbeat 三处事务内核对；start 引擎入口 candidateId 绑定；
+restore 独立双路径——路由事务外投影读 + 事务内恢复命令，签名无 candidateId）；
+D8 受保护入口表补 `client-events` advisory 行（归属链核验主体为 user）并新增
+待裁决项 Q11；D6 读面清单补管理端候选搜索的 `users` EXISTS 第 6 处耦合，并将
+"实现时全库重扫"义务化。同日评审退修：初版修订误将 restore 写为
+`startOrRestoreAttempt` 同一入口，已按实查改为双路径事实（grep 全库证实该
+命令唯一生产调用点为 start 路由 `attempts.candidate.ts:709`；restore 路由
+`attempts.candidate.ts:1373` 直调 `restoreInterruptedAttempt`）。
+
 ## Metadata
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-11-23 |
+| Date | 2026-11-23（proposed；2026-11-24 增量修订见 Status） |
 | Decision owners | jnhu76 |
 | Tracking | [#645](https://github.com/jnhu76/exam/issues/645)（产品问题）、[#678](https://github.com/jnhu76/exam/issues/678)（能力组合载体。本草案引用的设计素材原文出自其正文折叠的**工程演进基线 r3**（2026-11-20）§7.1/§7.2/§8；r4（2026-11-23）将该基线保留为历史依据，其现行验收口径是正文无编号的"#645 身份与换机"段，两者语义一致。下文引作"#678 r3 基线 §x.y"） |
 | Related | #587（账号登录 Argon2 包络，正交）、#316（受控/严格入场的二次身份核验，`related`，不吸收其 scope） |
@@ -105,10 +116,21 @@
 8. **合成审计主体已有先例。** 后台扫描器使用闭集合成 id（`system:deadline-scanner`
    等）+ 专用 Role + 编译期/运行期越界即抛（`packages/authz/src/systemActor.ts`）。
    这是"非 users 审计主体"的仓库内既有模式。
-9. **考生入口的归属核对点已定位。** save 在事务内锁后核对
-   `attempt.candidateId === candidateProfile.id`（`apps/api/src/routes/attempts.candidate.ts`）；
-   heartbeat 用状态条件写 `refreshLastActivityIfInProgress`（同文件）。这两处
-   是未来加入"作答代际"条件时已知的落点。
+9. **考生入口的归属核对点已定位。** 事务内核对有三处：save 在锁后核对
+   `currentAttempt.candidateId !== candidateProfile.id`（`apps/api/src/routes/attempts.candidate.ts`
+   的 save 路由）；take 快照在同一事务内 `ensureAttemptDeadlineReconciled`
+   截止对账之后核对 `reconciled.candidateId`（同文件 take 路由）；heartbeat
+   先经 `getOwnedAttempt` 归属投影读、再以状态条件写
+   `refreshLastActivityIfInProgress` 落笔（同文件）。start 入口由引擎命令
+   `startOrRestoreAttempt`（`packages/exam-engine/src/attemptCommands.ts`，
+   唯一生产调用点为 start 路由）以 candidateId 参数在同一事务内绑定归属，
+   其 disrupted 分支转入恢复命令。恢复入口是独立路径：`POST
+   /attempts/:attemptId/restore` 在**事务外**经 `getOwnedAttempt`
+   （`findByIdAndCandidate`）做归属投影读，事务内 `lockEnrollmentAndAttempt`
+   取得锁定 capability 后调 `restoreInterruptedAttempt`
+   （`packages/exam-engine/src/restoreInterruption.ts`，签名无 candidateId，
+   归属经 capability 传递）。恢复因此有两条调用路径（restore 直连与 start 的
+   disrupted 分支），未来加入"作答代际"条件时两条路径的落点都必须覆盖。
 
 ### 为什么现在决策
 
@@ -162,7 +184,8 @@
   `candidate_profiles.user_id NOT NULL`（或将绑定移入独立表），并核对所有默认
   "档案必有账号"的调用者——已知的结构性调用点是第 2 条 as-built 硬约束
   （成绩导出、阅卷队列与监考面板共 5 处经 `candidateProfiles.userId → users`
-  的 innerJoin，清单见 D6 的义务化）与管理端列表组装。
+  的 innerJoin，清单见 D6 的义务化）与管理端列表组装（含管理端候选搜索对
+  `users` 的 EXISTS 过滤，同见 D6）。
 
 在获准前，现有 `POST /candidates` 行为不变。
 
@@ -241,8 +264,12 @@ actor_id) → users` 的 DB 强制、`command_type` 被 CHECK 限定为工作人
   `listByExam` 监考面板全状态列表）、`attemptGradingEntryRepo.ts` 两处
   （`listPendingManualQueue` 阅卷待办队列与 `countPendingManualQueue` 队列
   计数）、`gradingQueueRepo.ts` 一处（`findCandidateWithUser` 档案+用户解析）。
-  无账号考生在这些读面同样结构性缺席；改造时不得弱化机构隔离与发布可见性
-  语义。
+  另有第 6 处不同性质的耦合：管理端候选搜索以 EXISTS 子查询按
+  `users.name`/`users.username` 过滤（`candidateRepo.ts` 的分页列表），无账号
+  考生在该搜索面结构性不可见。上述清单是起草时点快照；实现时必须以全库重扫
+  （`innerJoin(users`、对 `users` 的 EXISTS 子查询等耦合模式）代替硬编码
+  清单逐点核对。无账号考生在这些读面同样结构性缺席；改造时不得弱化机构隔离
+  与发布可见性语义。
 - 已消费的准考凭证不兑换成绩；自助查分默认**不开放**（若开放，另行核验并签发
   只读结果凭证，独立定义有效期与撤销——见 Q8）。
 - 已有账号考生的查分遵循原有权限与可见性。
@@ -304,9 +331,10 @@ attempt 上的**作答会话持有证明**，与账号层 `authEpoch`（其吊�
 | take 快照（`GET /candidate/attempts/:attemptId/take`） | 截止对账同一入口 |
 | 保存 | 锁内主体核对处（`attempts.candidate.ts` 已定位）加代际条件 |
 | 心跳 | 状态条件写处（同文件已定位）加代际条件 |
-| 恢复（restore） | 事务内取得 enrollment → attempt 锁的同一命令 |
+| 恢复（restore） | 两条调用路径均须校验：`POST /attempts/:attemptId/restore`（事务外 `getOwnedAttempt` 投影读 + 事务内 `restoreInterruptedAttempt`，锁 enrollment → attempt）与 start 路由 `startOrRestoreAttempt` 的 disrupted 分支（转入同一恢复命令） |
 | 提交 | `submitAttempt`/`submitAndGradeAttempt` 锁内复核 |
 | 附件读取 | 当前无服务端通道；若建通道必须经租约校验（Q4） |
+| 客户端遥测（`POST /client-events`） | advisory 写入口：attempt 归属链按 owner user 与当前登录 user 比对（`clientEventReferenceNormalizer.ts` 的 `ownerUserId === actorId`；当前 user↔profile 一对一下与 candidate 核验等价），事件本身非权威（`clientEvents.ts` 契约注释）；换机后是否加代际条件见 Q11 |
 
 **分支语义：**
 
@@ -368,6 +396,7 @@ operator approval"具体化为上述事务与入口清单；换机的遥测沿�
 | Q8 | 无账号考生自助查分 | a. 默认不开放，仅授权人员导出交付；b. 开放只读结果凭证（独立有效期/撤销） | **a**（首个切片）；b 另立设计评审后再裁 |
 | Q9 | 回退门槛确认 | D7 两段（R1 旧读取可恢复；R2 关新入场但保留恢复/阅卷/查分）vs 单段（整体开关） | **两段**：R2 是履约义务边界，单段会把"已开考人员"误伤为可丢弃状态 |
 | Q10 | 名册登记字段是否入场冻结 | a. 冻结登记快照（作为准入事实的一部分）；b. 只存引用、读时取 live 档案 | **a**：名册行是机构在入场时刻确认的事实，冻结才可解释"当时是谁在考"；live 投影语义（EXSEM-015 普通报表）不变 |
+| Q11 | 换机后旧端 `client-events` 遥测写入 | a. 加代际条件：交接提交后旧端遥测随其他入口一并失效（该入口归属核验主体是 user——`ownerUserId === actorId`——D2 解绑后不随 candidate 绑定状态变化，代际条件落点同以 user 会话为载体）；b. 保持 advisory 无条件接受，旧端换机后产生的遥测作为其继续操作的取证证据留存 | **b**：该入口契约是 advisory 非权威（事件从不单独构成处罚/状态/截止依据），拒绝写入会改动"接受无条件"契约；交接后旧端的遥测恰是旧端仍存活、仍在操作的证据，对取证有价值。若 Owner 要求失效面整齐覆盖遥测，选 a 并同步修订 `client-events` 契约注释 |
 
 ## Consequences
 
