@@ -78,7 +78,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       code: `LR-${stamp}`,
       description: "",
     });
-    expect(course.status(), course.text()).toBe(201);
+    expect(course.status(), await course.text()).toBe(201);
     const courseId = ((await course.json()) as { id: string }).id;
 
     const qPrompt = await adminPost(request, token, "/api/questions", {
@@ -93,7 +93,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       standardAnswer: "a",
       score: 50,
     });
-    expect(qPrompt.status(), qPrompt.text()).toBe(201);
+    expect(qPrompt.status(), await qPrompt.text()).toBe(201);
 
     const qShortAnswer = await adminPost(request, token, "/api/questions", {
       courseId,
@@ -104,7 +104,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       rubric: "按要点给分",
       score: 50,
     });
-    expect(qShortAnswer.status(), qShortAnswer.text()).toBe(201);
+    expect(qShortAnswer.status(), await qShortAnswer.text()).toBe(201);
 
     const promptId = ((await qPrompt.json()) as { id: string }).id;
     const shortAnswerId = ((await qShortAnswer.json()) as { id: string }).id;
@@ -122,7 +122,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       questionIds: [promptId, shortAnswerId],
       resultPublicationMode: "immediate",
     });
-    expect(exam.status(), exam.text()).toBe(201);
+    expect(exam.status(), await exam.text()).toBe(201);
     const examId = ((await exam.json()) as { id: string }).id;
 
     const publish = await adminPost(
@@ -130,7 +130,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       token,
       `/api/exams/${examId}/publish`,
     );
-    expect(publish.status(), publish.text()).toBe(200);
+    expect(publish.status(), await publish.text()).toBe(200);
 
     const candidate = await request.post(`${BASE_URL}/api/candidates`, {
       data: {
@@ -140,7 +140,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
         fields: { candidateNo: CANDIDATE.candidateNo },
       },
     });
-    expect(candidate.status(), candidate.text()).toBe(201);
+    expect(candidate.status(), await candidate.text()).toBe(201);
     const profileId = ((await candidate.json()) as { id: string }).id;
 
     const enroll = await adminPost(
@@ -149,7 +149,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       `/api/exams/${examId}/enrollments`,
       { candidateIds: [profileId] },
     );
-    expect(enroll.status(), enroll.text()).toBe(200);
+    expect(enroll.status(), await enroll.text()).toBe(200);
 
     // The search projection (the discovery channel the Minimal phase uses)
     // serves both legacy questions with their rich slots intact.
@@ -158,7 +158,7 @@ test.describe("Legacy Rich material authored under Standard (#678 review)", () =
       token,
       `/api/questions?search=${encodeURIComponent(MARKER)}&pageSize=50`,
     );
-    expect(search.status(), search.text()).toBe(200);
+    expect(search.status(), await search.text()).toBe(200);
     const items = (
       (await search.json()) as {
         items: Array<{

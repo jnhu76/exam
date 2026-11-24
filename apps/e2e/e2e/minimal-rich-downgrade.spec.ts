@@ -86,7 +86,7 @@ test.describe("Minimal deployment — legacy Rich downgrade (#678 review)", () =
       token,
       `/api/questions?search=${encodeURIComponent(MARKER)}&pageSize=50`,
     );
-    expect(search.status(), search.text()).toBe(200);
+    expect(search.status(), await search.text()).toBe(200);
     const items = (await search
       .json()
       .then((body) => body.items)) as LegacyQuestion[];
@@ -140,7 +140,7 @@ test.describe("Minimal deployment — legacy Rich downgrade (#678 review)", () =
       token,
       `/api/questions/${promptQuestion!.id}`,
     );
-    expect(reread.status(), reread.text()).toBe(200);
+    expect(reread.status(), await reread.text()).toBe(200);
     const persisted = (await reread.json()) as LegacyQuestion;
     expect(persisted.contentDocument).toBeNull();
     expect(persisted.options[0]?.contentDocument).toBeNull();
@@ -177,7 +177,7 @@ test.describe("Minimal deployment — legacy Rich downgrade (#678 review)", () =
     const exams = await request.get(`${BASE_URL}/api/candidate/exams`, {
       headers: { Cookie: `auth-token=${candidateToken}` },
     });
-    expect(exams.status(), exams.text()).toBe(200);
+    expect(exams.status(), await exams.text()).toBe(200);
     const examList = (await exams.json()) as Array<{
       examId: string;
       title: string;
@@ -208,7 +208,7 @@ test.describe("Minimal deployment — legacy Rich downgrade (#678 review)", () =
       `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
       { headers: { Cookie: `auth-token=${candidateToken}` } },
     );
-    expect(take.status(), take.text()).toBe(200);
+    expect(take.status(), await take.text()).toBe(200);
     const served = (await take.json().then((body) => body.questions)) as Array<{
       id: string;
       prompt: string;
