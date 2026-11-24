@@ -104,7 +104,9 @@ test.describe("Minimal deployment — legacy Rich downgrade (#678 review)", () =
     await page.goto(`${BASE_URL}/admin/questions/${promptQuestion!.id}/edit`, {
       waitUntil: "networkidle",
     });
-    expect(page.getByRole("combobox", { name: "内容模式" })).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "内容模式" })).toHaveCount(
+      0,
+    );
 
     // Formatted prompt → the lossy confirmation guards the downgrade.
     // exact: the per-option conversion button's aria-label contains the same
@@ -119,7 +121,7 @@ test.describe("Minimal deployment — legacy Rich downgrade (#678 review)", () =
 
     // The legacy rich option converts directly (unformatted → no dialog).
     await page.getByRole("button", { name: "选项 a 转为纯文本" }).click();
-    expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
     // ── Save through the real PATCH seam — the eliminating edit is the one
     // final material the Minimal write guard admits.
