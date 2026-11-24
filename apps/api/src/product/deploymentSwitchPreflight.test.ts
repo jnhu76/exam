@@ -23,6 +23,9 @@ import examRoutes from "../routes/exam.js";
 import attemptRoutes from "../routes/attempts.js";
 import scoreRoutes from "../routes/scores.js";
 import {
+  FULFILLMENT_REQUIREMENTS,
+  auditDeploymentSwitch,
+  auditDeploymentSwitchWithRequirements,
   collectOutstandingObligations,
   evaluateDeploymentSwitch,
   type OutstandingObligation,
@@ -648,6 +651,85 @@ describe("pre-switch outstanding obligation audit (#678 W3.1)", () => {
     expect(
       evaluateDeploymentSwitch(obligations, standardCeiling()).allowed,
     ).toBe(true);
+  });
+
+  it("做减法: skips the database entirely while no obligation class is gated", async () => {
+    // #678 review: with an empty rule table the enumeration cannot change
+    // the verdict, so the startup audit must not touch the database at all.
+    // The proxy fails on ANY property access — an O(history) scan at every
+    // boot would throw here instead of silently returning.
+    const untouchableDb = new Proxy({} as Database, {
+      get() {
+        throw new Error("preflight touched the database with no gated class");
+      },
+    });
+    const audit = await auditDeploymentSwitch(untouchableDb, standardCeiling());
+    expect(audit).toEqual({
+      allowed: true,
+      obligations: [],
+      violations: [],
+      scanned: false,
+      gatedKinds: [],
+    });
+    // The production differential on the real (non-empty) database: the
+    // same skip — the fixtures above DO carry obligations, none gated.
+    const onFixtures = await auditDeploymentSwitch(
+      ctx.db as Database,
+      ceilingWithout([
+        "content.prompt.rich",
+        "content.option.rich",
+        "answer.text.rich",
+      ]),
+    );
+    expect(onFixtures.scanned).toBe(false);
+    expect(onFixtures.gatedKinds).toEqual([]);
+    expect(onFixtures.allowed).toBe(true);
+  });
+
+  it("walks persisted data to a rejection when a rule-table entry registers a requirement", async () => {
+    // The composition seam over an injected rule table: this is the
+    // production machinery (collect from persisted facts → filter to gated
+    // classes → compare), proven with a FUTURE entry shape before any real
+    // one exists. The pending-manual attempt the fixtures persisted is the
+    // named object; the ceiling that omits grading.manual is the cut.
+    const r1AttemptId = candidates.get("r1")!.attemptId;
+    if (r1AttemptId === undefined) {
+      throw new Error("seed did not record r1's submitted attempt");
+    }
+    const injected = {
+      ...FULFILLMENT_REQUIREMENTS,
+      pending_manual_grading: ["grading.manual"] as const,
+    };
+    const audit = await auditDeploymentSwitchWithRequirements(
+      ctx.db as Database,
+      // question.text_response must go too: the resolver's dependency rule
+      // rejects a ceiling that enables subjective questions without their
+      // manual completion path.
+      ceilingWithout(["grading.manual", "question.text_response"]),
+      injected,
+    );
+    expect(audit.scanned).toBe(true);
+    expect(audit.gatedKinds).toEqual(["pending_manual_grading"]);
+    expect(audit.allowed).toBe(false);
+    expect(audit.violations).toHaveLength(1);
+    expect(audit.violations[0]).toMatchObject({
+      kind: "pending_manual_grading",
+      capability: "grading.manual",
+    });
+    expect(audit.violations[0]!.objects).toContainEqual({
+      examId: exams.active.id,
+      attemptId: r1AttemptId,
+    });
+
+    // Target-driven both ways: the same injected table against a ceiling
+    // that ADMITS the requirement stays allowed.
+    const admitted = await auditDeploymentSwitchWithRequirements(
+      ctx.db as Database,
+      standardCeiling(),
+      injected,
+    );
+    expect(admitted.allowed).toBe(true);
+    expect(admitted.violations).toEqual([]);
   });
 
   it("rejects with object + obligation + reason when a requirement is not admitted", () => {

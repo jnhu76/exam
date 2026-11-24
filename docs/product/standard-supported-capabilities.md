@@ -188,7 +188,12 @@ API routes; capability authority:
   resolves `PRODUCT_PRESET` once at bootstrap, and the authoritative
   new-commitment boundaries (question create/update/import, exam
   publish), `GET /system/public-config` and the startup
-  deployment-switch preflight all consume that single instance. The two
+  deployment-switch preflight all consume that single instance. Exam
+  publish judges the whole new commitment: question material AND the
+  exam's own frozen admission policy — a `requireQueue` draft is an
+  `admission.queue` commitment that a ceiling without it (Minimal) must
+  reject at publish, while already-published queue exams keep admitting.
+  The two
   per-exam knobs (`requireQueue`, `resultPublicationMode`) are exam
   policy choices, not deployment capability toggles.
 - **Not implemented:** persisted deployment configuration with
@@ -335,7 +340,7 @@ commit.
 | TLS/HTTPS ingress | PARTIAL | operator cert + nginx override | 511e6e60 (post-v0.0.10) | SOURCE_INSPECTED | deployment README "Network / TLS" | no certificate automation; template must be applied per image |
 | Admission `timed_sync` timing mode | DEFERRED | B2 product decision | 511e6e60 (post-v0.0.10) | NOT_VERIFIED | [timed-sync-semantics.md](../contracts/timed-sync-semantics.md) | frozen contract, not activated |
 | Durable local answer draft / offline client | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-012](../adr/ADR-012-candidate-recovery-contract.md) (target), [ADR-016](../adr/ADR-016-future-offline-resilient-client-data-and-recovery-model.md) (deferred), #827 (research) | research/decision stage |
-| Minimal / bounded subset composition (static `PRODUCT_PRESET`) | SUPPORTED (static bootstrap) | standard/minimal preset, bootstrap-only | feat/678-capability-composition (#678 W2/W3) | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 2–3, #678 | startup preflight; accepted obligations stay fulfillable; Minimal web prunes authoring/nav only, obligation faces stay visible |
+| Minimal / bounded subset composition (static `PRODUCT_PRESET`) | SUPPORTED (static bootstrap) | standard/minimal preset, bootstrap-only | feat/678-capability-composition (#678 W2/W3) | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 2–3, #678 | startup preflight (skipped while no obligation class is capability-gated — kernel fulfillment ruling); publish gate judges question material + per-exam `requireQueue` (`admission.queue`); accepted obligations stay fulfillable; Minimal web prunes authoring/nav only, obligation faces stay visible; legacy Rich questions keep an explicit Rich→Plain conversion |
 | Per-capability runtime toggles | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 4, #678 | no in-app capability switch, no revision/CAS writes |
 | Controlled/Strict high-assurance (device binding, lockdown, continuous monitoring) | NOT_SUPPORTED | — | — | NOT_VERIFIED | [#293](https://github.com/jnhu76/exam/issues/293) | umbrella tracker; #315/#316/#317 not started |
 | Multi-tenant platform | NOT_SUPPORTED | — | — | NOT_VERIFIED | [SPEC](../SPEC.md), Phase 4 roadmap | — |

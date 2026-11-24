@@ -160,14 +160,19 @@ async function main() {
   // outstanding-obligation audit is the §8 pre-switch check: with the
   // bootstrap-only static preset the switch moment IS a server start, so a
   // configuration that would cut an accepted obligation refuses to serve,
-  // naming the objects and obligations. Write guards, public-config and this
-  // preflight all read the same resolved instance afterwards.
+  // naming the objects and obligations. While every obligation class is
+  // kernel-fulfilled (the rule table is empty), the audit skips the
+  // database entirely — the verdict cannot change and an O(history)
+  // enumeration must not run at every boot. Write guards, public-config
+  // and this preflight all read the same resolved instance afterwards.
   const deploymentProduct = getResolvedProductConfiguration();
   const switchAudit = await auditDeploymentSwitch(app.db, deploymentProduct);
   app.log.info(
     {
       deploymentPreset: getRuntimeConfig().product.preset,
       enabledCapabilities: deploymentProduct.enabled.length,
+      obligationScan: switchAudit.scanned ? "enumerated" : "skipped",
+      gatedObligationKinds: switchAudit.gatedKinds,
       outstandingObligations: switchAudit.obligations.length,
       obligationKinds: [...new Set(switchAudit.obligations.map((o) => o.kind))],
     },

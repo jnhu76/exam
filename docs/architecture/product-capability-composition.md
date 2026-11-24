@@ -496,19 +496,32 @@ Gate：disabled capability 无法绕过，同时 read/active/save/submit/manual 
 
 已交付的服务端部分：**静态部署上限**（`PRODUCT_PRESET`，bootstrap 读取，组合根
 单一取值点，未知/不支持配置启动期 fail-fast）与**切换前存量义务核对**
-（startup preflight：枚举已发布待考、open 尚无 attempt、排队/可恢复、待人工
-阅卷、已定稿待统一发布、历史读取六类义务；目标配置会切断具体义务时拒绝启动并
-给出对象与原因）。已交付的 web 呈现部分：public-config 投影消费面
+（startup preflight：已发布待考、open 尚无 attempt、排队/可恢复、待人工
+阅卷、已定稿待统一发布、历史读取六类义务。当前裁定：全部六类的履约路径都是
+kernel（§4.1/§7，含 candidate 自助排队 reconcile），没有任何一类需要 ceiling
+中的能力，因此启动期**跳过**全库枚举——不会改变判定的枚举不得在每次重启付出
+随历史答卷增长的成本；`FULFILLMENT_REQUIREMENTS` 规则表是未来能力门控履约
+（如 #645 result delivery）的唯一切换拒绝登记点，首个条目必须随该义务的
+有界收集一起交付并从持久化数据走到拒绝启动）。发布冻结门（G3）在题型与 Rich
+槽位之外同时按本场 `controlFlags.requireQueue` 冻结策略判定 `admission.queue`
+新承诺（Standard 下已发布的排队考试切换 Minimal 后继续放行、领卷）。已交付的
+web 呈现部分：public-config 投影消费面
 （`ProductProjectionContext`，fail-closed），题型/Rich 槽位 authoring 裁剪
-（经 `capabilityForQuestionType` 单一映射，不按 preset 名分支），导航双权威
+（经 `capabilityForQuestionType` 单一映射，不按 preset 名分支），旧 Rich 题的
+显式 Rich→Plain 转换入口（题干/选项/作答模式；升级方向保持关闭，消除性编辑
+是写入门禁下唯一可保存路径），导航双权威
 （actor 权限 × 部署投影，义务面永不隐藏），考生入场队列按本场
 `requireQueue` 策略与投影无关。Phase 3 浏览器级验收已交付：
 `minimal-objective`（Minimal 投影裁剪 + ceiling 写拒绝 + 五题客观全链）与
 `minimal-plain-manual`（Plain 简答 → 待评分义务面 → 阅卷工作台真实 UI →
-manual 政策发布 → 成绩可见）两条 E2E 经 runner 以 `PRODUCT_PRESET=minimal`
+manual 政策发布 → 成绩可见）与 `minimal-rich-downgrade`（Standard 阶段种入
+旧 Rich 材料 → 切换 Minimal 后浏览器驱动旧题降级保存 + 已发布试卷保留
+Rich 冻结快照）三条 E2E 经 runner 以 `PRODUCT_PRESET=minimal`
 引导运行；`capabilitySwitchPairing.test.ts` 以同一 Rich+简答旧卷 × 生命周期
 中途 ceiling 切换完成配对验证（允许切换走全链 + 新增 Rich 写拒绝 + 实时
-权限保持）；Standard 回归三套（candidate-happy-path / rich-content /
+权限保持），`queueAdmissionSwitchPairing.test.ts` 以 Standard→Minimal 切换
+完成排队卷配对（切换前核对允许 + 旧排队卷放行/领卷 + 新排队卷发布拒绝）；
+Standard 回归三套（candidate-happy-path / rich-content /
 refresh-during-exam）行为等价。
 
 ### Phase 4 — bounded configuration management

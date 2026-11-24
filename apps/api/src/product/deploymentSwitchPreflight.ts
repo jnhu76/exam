@@ -26,6 +26,16 @@ import type {
  * is `deriveQuestionRequiredCapabilities`' new-commitment authority); this
  * table owns execution-fulfillment requirements only.
  *
+ * 做减法 (#678 review): because every shipped class is kernel-fulfilled
+ * (the table is empty), `auditDeploymentSwitch` skips the database entirely
+ * — an obligation enumeration that cannot change the verdict must not cost
+ * an O(history) scan on every boot of a long-lived deployment. The
+ * enumeration (and its rejection channel) is exercised only when a class is
+ * gated: the FIRST rule-table entry must ship together with the bounded
+ * per-obligation collection for its class (the shared collector below
+ * enumerates everything; it is the reference shape, not the startup cost
+ * contract).
+ *
  * The audit is read-only: it derives obligations from persisted facts and
  * never reinterprets exam/attempt/grading truth (EXSEM authorities own
  * those facts; this module only enumerates them).
@@ -66,10 +76,26 @@ export interface DeploymentSwitchViolation {
   readonly reason: string;
 }
 
-export interface DeploymentSwitchAudit {
+/** Pure comparison result: obligations × target ceiling, no scan facts. */
+export interface DeploymentSwitchVerdict {
   readonly allowed: boolean;
   readonly obligations: readonly OutstandingObligation[];
   readonly violations: readonly DeploymentSwitchViolation[];
+}
+
+export interface DeploymentSwitchAudit extends DeploymentSwitchVerdict {
+  /**
+   * false when the audit SKIPPED the database because no obligation class
+   * is gated (kernel ruling): the enumeration cannot change the verdict, so
+   * it must not run. Observability: the startup log distinguishes a skipped
+   * audit from an empty database.
+   */
+  readonly scanned: boolean;
+  /**
+   * The classes whose rule-table entries drove the enumeration (empty ⇒
+   * skipped). The single derivation is the rule table itself.
+   */
+  readonly gatedKinds: readonly SwitchObligationKind[];
 }
 
 /**
@@ -78,9 +104,8 @@ export interface DeploymentSwitchAudit {
  * fulfillment — see module comment); a future capability-gated fulfillment
  * path adds its requirement HERE and nowhere else.
  */
-const FULFILLMENT_REQUIREMENTS: Record<
-  SwitchObligationKind,
-  readonly ProductCapabilityId[]
+export const FULFILLMENT_REQUIREMENTS: Readonly<
+  Record<SwitchObligationKind, readonly ProductCapabilityId[]>
 > = {
   published_awaiting_start: [],
   open_eligible_without_attempt: [],
@@ -296,7 +321,7 @@ export async function collectOutstandingObligations(
 export function evaluateDeploymentSwitch(
   obligations: readonly OutstandingObligation[],
   target: ResolvedProductConfiguration,
-): DeploymentSwitchAudit {
+): DeploymentSwitchVerdict {
   /** Accumulation shape: mutable objects array, narrowed on return. */
   type ViolationAccumulator = Omit<DeploymentSwitchViolation, "objects"> & {
     objects: DeploymentSwitchViolation["objects"][number][];
@@ -339,15 +364,64 @@ export function evaluateDeploymentSwitch(
 }
 
 /**
- * Convenience wrapper for the startup preflight: collect + evaluate against
- * the deployment's resolved ceiling. Read-only.
+ * Convenience wrapper for the startup preflight: the production rule table
+ * above is the single authority. Read-only, and — per the 做减法 ruling —
+ * it does not touch the database at all while no class is gated.
  */
 export async function auditDeploymentSwitch(
   db: Database,
   target: ResolvedProductConfiguration,
 ): Promise<DeploymentSwitchAudit> {
-  return evaluateDeploymentSwitch(
-    await collectOutstandingObligations(db),
+  return auditDeploymentSwitchWithRequirements(
+    db,
     target,
+    FULFILLMENT_REQUIREMENTS,
   );
+}
+
+/**
+ * Composition seam over an explicit rule table. Production callers use
+ * {@link auditDeploymentSwitch} (the module table); the seam exists so the
+ * persisted-data→rejection channel is provable for FUTURE entries before
+ * any real one exists (the injected table must stay shaped like the
+ * production one: one entry list per obligation class).
+ */
+export async function auditDeploymentSwitchWithRequirements(
+  db: Database,
+  target: ResolvedProductConfiguration,
+  requirements: Readonly<
+    Record<SwitchObligationKind, readonly ProductCapabilityId[]>
+  >,
+): Promise<DeploymentSwitchAudit> {
+  const gatedKinds = (Object.keys(requirements) as SwitchObligationKind[])
+    .filter((kind) => requirements[kind].length > 0)
+    .sort();
+  if (gatedKinds.length === 0) {
+    // 做减法 (#678 review): no class's fulfillment is capability-gated, so
+    // no obligation can produce a violation — the verdict is deterministic
+    // and the O(history) enumeration must not run at every server boot.
+    // `db` is deliberately untouched in this branch.
+    return {
+      allowed: true,
+      obligations: [],
+      violations: [],
+      scanned: false,
+      gatedKinds,
+    };
+  }
+  const obligations = (await collectOutstandingObligations(db))
+    .filter((obligation) => gatedKinds.includes(obligation.kind))
+    // The collector embeds the PRODUCTION table's requirements; this seam's
+    // caller supplied its own, so the gated classes' obligations carry the
+    // caller's entries into the comparator (identity for the production
+    // table, which is the only caller auditDeploymentSwitch makes).
+    .map((obligation) => ({
+      ...obligation,
+      requiredCapabilities: requirements[obligation.kind],
+    }));
+  return {
+    ...evaluateDeploymentSwitch(obligations, target),
+    scanned: true,
+    gatedKinds,
+  };
 }
