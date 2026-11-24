@@ -137,6 +137,14 @@ const zhCN = {
       plain: "纯文本",
       rich: "富文本",
     },
+    // Legacy-material downgrade under a ceiling without the Rich slot: the
+    // eliminating edit is the only legal save path, so it stays an explicit
+    // action while the upgrade direction stays closed.
+    convertToPlain: "转为纯文本",
+    convertToPlainOption: "选项 {{id}} 转为纯文本",
+    convertToPlainAnswer: "转为纯文本作答",
+    convertToPlainHint:
+      "当前部署不提供富文本；转换为此题在写入门禁下可保存的唯一路径。",
     confirmToPlain: {
       title: "转换为纯文本？",
       description:

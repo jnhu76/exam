@@ -601,12 +601,23 @@ second repository-owned application topology.
 
 The browser suite is allocated between the two shipped presets: the standard
 shards above never discover `minimal-*.spec.ts`, and a dedicated
-`E2E (minimal preset)` job boots the same real production entrypoint with
-`PRODUCT_PRESET=minimal` and runs ONLY the `minimal-*` family (no matrix —
-the family is small and file-serial). The job fails the server-start step
-loud when `/api/system/public-config` does not report the Minimal
-presentation, so a silent Standard fallback cannot reach the specs. Local
-equivalent: `PRODUCT_PRESET=minimal bash scripts/e2e/run.sh`.
+`E2E (minimal preset)` job runs ONLY the `minimal-*` family (no matrix —
+the family is small and file-serial). The lane is TWO-PHASE, reproducing the
+static-preset switch story against one database: the server first boots
+Standard and a seeding spec authors the legacy Rich material through the
+real authoring API (`legacy-rich-material.spec.ts`, fixed LEGACY-RICH-678
+markers), then the server restarts with `PRODUCT_PRESET=minimal` and the
+minimal specs run — including `minimal-rich-downgrade.spec.ts`, which drives
+the legacy Rich→Plain conversions in the browser and re-checks the published
+paper's frozen Rich snapshot. Both server-start steps fail loud when
+`/api/system/public-config` does not report the booted preset, so a silent
+fallback can never reach the specs. Local equivalent of the pair:
+
+```bash
+E2E_WORKERS=1 bash scripts/e2e/run.sh legacy-rich-material        # Standard, reseed
+PRODUCT_PRESET=minimal E2E_WORKERS=1 \
+  bash scripts/e2e/run.sh --no-reseed                             # Minimal, reuse
+```
 
 ### 4.3 CI E2E Build/Input Contract
 

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -7,7 +7,7 @@ import {
 } from "@exam/domain";
 import { ProductProjectionProvider } from "@/contexts/ProductProjectionContext";
 import type { ProductProjection } from "@/lib/productProjection";
-import { QuestionForm } from "./QuestionForm";
+import { QuestionForm, type QuestionFormData } from "./QuestionForm";
 
 /**
  * W3.2 counterexamples (#678 / ADR-022 Phase 3): NEW-question authoring
@@ -41,6 +41,37 @@ function renderForm(projection: ProductProjection) {
       <QuestionForm courses={[]} onChange={vi.fn()} />
     </ProductProjectionProvider>,
   );
+}
+
+/** Formatted legacy rich document: bold mark → the lossy confirm fires. */
+const LEGACY_RICH_DOC = {
+  docVersion: 1 as const,
+  type: "doc" as const,
+  content: [
+    {
+      type: "paragraph" as const,
+      content: [
+        {
+          type: "text" as const,
+          text: "旧题富文本题干",
+          marks: ["bold" as const],
+        },
+      ],
+    },
+  ],
+};
+
+function renderFormWithInitial(
+  projection: ProductProjection,
+  initial: Partial<QuestionFormData>,
+) {
+  const onChange = vi.fn();
+  render(
+    <ProductProjectionProvider initialProjection={projection}>
+      <QuestionForm courses={[]} initial={initial} onChange={onChange} />
+    </ProductProjectionProvider>,
+  );
+  return { onChange };
 }
 
 describe("QuestionForm authoring under the deployment ceiling (#678 W3.2)", () => {
@@ -125,5 +156,110 @@ describe("QuestionForm authoring under the deployment ceiling (#678 W3.2)", () =
     await user.click(screen.getByRole("combobox", { name: "内容模式" }));
     expect(screen.getByRole("option", { name: "富文本" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "纯文本" })).toBeInTheDocument();
+  });
+});
+
+describe("QuestionForm legacy Rich downgrade under a closed Rich ceiling (#678 review)", () => {
+  it("offers the explicit prompt Rich→Plain conversion for a legacy rich question and emits the eliminating edit", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFormWithInitial(minimalProjection, {
+      type: "single_choice",
+      content: "旧题富文本题干",
+      contentDocument: LEGACY_RICH_DOC,
+      options: [
+        { id: "A", content: "0" },
+        { id: "B", content: "1" },
+      ],
+    });
+
+    // The downgrade entry is explicit (a labeled action, not a mode select
+    // that would also imply the closed upgrade direction).
+    const convert = screen.getByRole("button", { name: "转为纯文本" });
+    await user.click(convert);
+
+    // Formatted document → the lossy confirmation guards the downgrade.
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toBeVisible();
+    await user.click(
+      within(dialog).getByRole("button", { name: "转换并丢弃格式" }),
+    );
+
+    // The eliminating edit: prompt document cleared, content carries the
+    // plain projection — the one final material the write guard admits.
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        contentDocument: null,
+        content: "旧题富文本题干",
+      }),
+    );
+    // The rich editor is replaced by the plain textarea surface.
+    expect(screen.getByPlaceholderText("输入题目内容")).toBeInTheDocument();
+  });
+
+  it("offers the per-option Rich→Plain conversion for a legacy rich option", async () => {
+    const user = userEvent.setup();
+    const optionDoc = {
+      docVersion: 1 as const,
+      type: "doc" as const,
+      content: [
+        {
+          type: "paragraph" as const,
+          content: [{ type: "text" as const, text: "旧选项富文本" }],
+        },
+      ],
+    };
+    const { onChange } = renderFormWithInitial(minimalProjection, {
+      type: "single_choice",
+      content: "plain prompt",
+      options: [
+        { id: "A", content: "旧选项富文本", contentDocument: optionDoc },
+        { id: "B", content: "1" },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "选项 A 转为纯文本" }));
+
+    // Unformatted document → no lossy confirm, direct downgrade.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        options: [
+          { id: "A", content: "旧选项富文本", contentDocument: null },
+          { id: "B", content: "1" },
+        ],
+      }),
+    );
+  });
+
+  it("offers the answerMode rich→plain conversion for a legacy rich-answer question, with no rich option offered", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFormWithInitial(minimalProjection, {
+      type: "text_response",
+      content: "旧富文本作答简答",
+      answerMode: "rich",
+      options: [],
+      rubric: "按要点给分",
+    });
+
+    // The field stays present for the legacy rich answer mode with the
+    // explicit conversion; the mode selector's 富文本 option is never
+    // offered (upgrade direction closed).
+    await user.click(screen.getByRole("button", { name: "转为纯文本作答" }));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ answerMode: "plain" }),
+    );
+    expect(
+      screen.queryByRole("option", { name: "富文本" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers no downgrade entry for a NEW plain question under Minimal (nothing to convert)", () => {
+    renderForm(minimalProjection);
+    expect(
+      screen.queryByRole("button", { name: "转为纯文本" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "转为纯文本作答" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -511,7 +511,11 @@ jobs:
   # Minimal ceiling (PRODUCT_PRESET=minimal: startup preflight + the same
   # public-config projection the browser fetches) so the Minimal spec family
   # keeps its preset assertions against continuous coverage. No sharding:
-  # the minimal-* family is small and file-serial.
+  # the minimal-* family is small and file-serial. The lane is two-phase
+  # (#678 review): the server first boots Standard and seeds the legacy-Rich
+  # material through the real authoring API, then restarts Minimal against
+  # the SAME database — the static-preset switch moment the minimal-rich
+  # downgrade spec drives in the browser.
   e2e-minimal:
     name: E2E (minimal preset)
     runs-on: ubuntu-latest
@@ -602,7 +606,14 @@ jobs:
       - name: Seed E2E data
         run: pnpm --filter @exam/api db:seed:e2e
 
-      - name: Start API server (minimal preset)
+      # ── Phase 1 (Standard): the legacy-Rich switch story starts from a
+      # deployment that authored Rich under Standard. The seeding spec writes
+      # the legacy material through the real authoring API (rich question +
+      # published exam + enrolled candidate) so Phase 2 proves conversions
+      # against authentic Standard-authored rows, not fixture shortcuts.
+      - name: Start API server (standard phase)
+        env:
+          PRODUCT_PRESET: standard
         run: |
           pnpm --filter @exam/api start > server.log 2>&1 &
           echo "API_PID=$!" >> $GITHUB_ENV
@@ -615,12 +626,43 @@ jobs:
             sleep 2
           done
           curl -sf http://localhost:3000/api/health || (echo "API failed to start" && cat server.log && exit 1)
+          curl -sf http://localhost:3000/api/system/public-config | grep -q '"presentation":"standard"' \
+            || (echo "server did not boot the Standard preset" && cat server.log && exit 1)
+
+      - name: Seed the Standard-authored legacy Rich material
+        env:
+          PRODUCT_PRESET: standard
+        run: pnpm --filter @exam/e2e exec playwright test legacy-rich-material
+
+      # ── Phase 2 (Minimal): restart the REAL entrypoint against the SAME
+      # database with the Minimal ceiling — the static-preset switch moment
+      # (server boot) the browser specs then exercise.
+      - name: Restart API server (minimal preset)
+        run: |
+          kill $API_PID 2>/dev/null || true
+          for i in $(seq 1 30); do
+            if ! kill -0 $API_PID 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          pnpm --filter @exam/api start > server-minimal.log 2>&1 &
+          echo "API_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "API is healthy"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api/health || (echo "API failed to start" && cat server-minimal.log && exit 1)
           # The Minimal preset must actually be live before the specs run:
           # public-config is the same resolver output the startup preflight
           # enforced, so a silent fallback to Standard fails here, not in
           # thirty scattered spec assertions.
           curl -sf http://localhost:3000/api/system/public-config | grep -q '"presentation":"minimal"' \
-            || (echo "server did not boot the Minimal preset" && cat server.log && exit 1)
+            || (echo "server did not boot the Minimal preset" && cat server-minimal.log && exit 1)
 
       - name: Run E2E tests (minimal preset)
         run: pnpm --filter @exam/e2e exec playwright test
@@ -638,9 +680,10 @@ jobs:
           {
             echo "## E2E (minimal preset) Failure Summary"
             echo ""
-            echo "### Server log tail"
+            echo "### Server log tails (standard phase, then minimal phase)"
             echo '```text'
-            tail -120 server.log || true
+            tail -80 server.log || true
+            tail -120 server-minimal.log || true
             echo '```'
             echo ""
             echo "### Playwright error contexts"
