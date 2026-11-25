@@ -1,5 +1,6 @@
 import type { MeResponse } from "@exam/contracts";
 import { permissionsForRole } from "@exam/authz";
+import { SUPPORTED_PRODUCT_CAPABILITIES } from "@exam/domain";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -11,6 +12,14 @@ import { ExamLayout } from "./ExamLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProductProjectionProvider } from "@/contexts/ProductProjectionContext";
+import type { ProductProjection } from "@/lib/productProjection";
+
+const standardCeiling: ProductProjection = {
+  revision: 1,
+  presentation: "standard",
+  enabled: [...SUPPORTED_PRODUCT_CAPABILITIES],
+};
 
 const admin: MeResponse = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -84,7 +93,14 @@ function renderWithProviders(ui: React.ReactElement, route = "/") {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <AuthProvider>
-        <BrandProvider>{ui}</BrandProvider>
+        <BrandProvider>
+          {/* Full Standard ceiling: these tests own ROLE visibility; the
+            deployment projection authority is covered by
+            AppSidebar.productPresentation.test.tsx. */}
+          <ProductProjectionProvider initialProjection={standardCeiling}>
+            {ui}
+          </ProductProjectionProvider>
+        </BrandProvider>
       </AuthProvider>
     </MemoryRouter>,
   );

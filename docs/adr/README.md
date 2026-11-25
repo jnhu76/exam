@@ -133,7 +133,8 @@ Architecture decisions
 |   +-- ADR-010 scoped RBAC
 |   +-- ADR-017 operational authority / maintainer boundary
 |   +-- ADR-018 operational observability window
-|   `-- ADR-023 backup-evidence subsystem removal
+|   +-- ADR-023 backup-evidence subsystem removal
+|   `-- ADR-030 candidate identity & answer-lease device takeover (PROPOSED)
 |
 +-- E. Application, client & content evolution
 |   +-- ADR-009 frontend state-machine adoption
@@ -197,6 +198,7 @@ unrelated ADR cleanup.
 | [ADR-017](ADR-017-operational-authority-maintainer-boundary.md) | Operational/Maintainer authority boundary | ACCEPTED through revision 5 (backup-evidence scopes superseded by ADR-023) |
 | [ADR-018](ADR-018-operational-observability-window.md) | Read-only operational observability contract | ACCEPTED; backup/restore-readiness/ops-policy window content superseded by ADR-023 |
 | [ADR-023](ADR-023-remove-backup-evidence-subsystem.md) | Backup-evidence subsystem removal (Host owns operational evidence) | ACCEPTED |
+| [ADR-030](ADR-030-candidate-identity-and-answer-lease-takeover.md) | Candidate identity (stable candidateId + optional account binding), single-exam admission credential, and answer-lease device takeover | PROPOSED |
 
 ### E. Application, client & content evolution
 
@@ -303,9 +305,10 @@ ADR numbers are stable lookup identifiers; grouping does not renumber files.
 | [ADR-027](ADR-027-build-first-dev-execution.md) | Build-first Development Execution (managed `pnpm dev` entrypoints and failed-build safety) | ACCEPTED (approved with errata E1–E3, 2026-11-11) | none (adopts the #937 architecture adjudication `ADOPT_BUILD_FIRST_DEV` as binding policy) | none |
 | [ADR-028](ADR-028-opentelemetry-technical-telemetry.md) | OpenTelemetry Technical Telemetry Standard (default Off, bounded opt-in) | REJECTED (2026-11-16) | none (the prospective narrowing of ADR-018's anti-goal window and the #921 NO_GO ruling never took effect — it was conditional on acceptance) | none (successor direction: ADR-029, PROPOSED) |
 | [ADR-029](ADR-029-exam-native-observability.md) | Exam Native Observability: Incremental Enhancement of Existing Facilities | PROPOSED | none | none |
+| [ADR-030](ADR-030-candidate-identity-and-answer-lease-takeover.md) | Candidate Identity, Admission Binding and Answer-Lease Device Takeover | PROPOSED | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-030**.
+ADR numbers are stable and never reused. The next free number is **ADR-031**.
 Files that are audits *about* an ADR belong under `docs/archive/`, not in this
 folder with a conflicting ADR number.

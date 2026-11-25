@@ -1,4 +1,6 @@
 import type { APIRequestContext } from "@playwright/test";
+import { STARTER_PROFILE_RECIPES } from "@exam/domain";
+import type { StarterProfileRecipeKey } from "@exam/domain";
 
 const ADMIN_USERNAME = process.env.E2E_ADMIN_USERNAME ?? "admin";
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "admin123";
@@ -14,6 +16,53 @@ export interface SeededExam {
   extraCandidates: SeededCandidate[];
   /** text_response question ids, when `textResponseQuestions` was set. */
   textResponseQuestionIds: string[];
+  /** All objective (true_false) question ids, in exam order. */
+  objectiveQuestionIds: string[];
+}
+
+/**
+ * Explicit per-field overrides over a selected exam profile's copy-on-apply
+ * defaults (docs/contracts/exam-profile-templates.md §10/§11). A key left
+ * undefined stays ABSENT from the create payload so the profile's value
+ * materializes; an explicit `null` is a semantic value and wins over the
+ * profile. Presence is read from the RAW request body route-side
+ * (apps/api/src/routes/exam.ts profile merge), so `undefined` keys must be
+ * dropped, not sent.
+ */
+export interface SeedExamProfileSelection {
+  /** Organization-owned exam profile row id (POST /api/exam-profiles). */
+  id: string;
+  overrides?: {
+    resultPublicationMode?: "immediate" | "after_grading" | "manual";
+    minSubmitAfterStartMinutes?: number | null;
+    latestStartOffsetMinutes?: number | null;
+  };
+}
+
+/**
+ * Creates an exam policy profile row from a shipped starter recipe's
+ * defaults (packages/domain/src/examProfileRecipes.ts) via the production
+ * POST /api/exam-profiles route — the same authoring path the UI uses. The
+ * recipe is authoring input only: the created profile is an everyday
+ * organization-owned row, and no runtime code branches on the recipe key.
+ */
+export async function createExamProfileFromRecipe(
+  request: APIRequestContext,
+  unique: string,
+  key: StarterProfileRecipeKey,
+): Promise<{ id: string; name: string }> {
+  const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+  const token = await adminLogin(request, baseURL);
+  const recipe = STARTER_PROFILE_RECIPES.find((r) => r.key === key);
+  if (!recipe) {
+    throw new Error(`unknown starter recipe key: ${key}`);
+  }
+  const name = `E2E-profile-${key}-${unique}-${Date.now()}`;
+  const body = await adminPost(request, baseURL, token, "/api/exam-profiles", {
+    ...recipe.defaults,
+    name,
+  });
+  return { id: body.id as string, name };
 }
 
 /**
@@ -213,6 +262,22 @@ export async function seedExam(
      * Merged into controlFlags at create time (frozen post-publish).
      */
     requireQueue?: { batchSize: number; batchInterval: number };
+    /**
+     * Selects an exam policy profile row (POST /api/exam-profiles). The
+     * profile-owned policy fields are OMITTED from the create payload so
+     * the profile's copy-on-apply values materialize into the exam
+     * (docs/contracts/exam-profile-templates.md §10/§12) — sending them
+     * explicitly would downgrade them to explicit request input and defeat
+     * the materialization witness. Per-field overrides stay explicit.
+     *
+     * Profile-path controlFlags deliberately carry NO
+     * `showResultImmediately`: the legacy flag would be read as an explicit
+     * publication-mode input (resolveResultPublicationMode) and override the
+     * profile-derived mode.
+     */
+    profile?: SeedExamProfileSelection;
+    /** Number of objective (true_false) questions. Defaults to 1. */
+    objectiveQuestionCount?: number;
     /** Seeds N extra candidates enrolled in the same exam. */
     additionalCandidates?: number;
     /**
@@ -241,19 +306,30 @@ export async function seedExam(
   });
   const courseId = course.id as string;
 
-  const question = await adminPost(request, baseURL, token, "/api/questions", {
-    courseId,
-    type: "true_false",
-    content: `判断题-${unique}`,
-    standardAnswer: opts.questionAnswer ?? true,
-    score: opts.questionScore ?? 100,
-  });
-  const questionId = question.id as string;
+  const objectiveQuestionCount = opts.objectiveQuestionCount ?? 1;
+  const objectiveQuestionIds: string[] = [];
+  for (let i = 0; i < objectiveQuestionCount; i += 1) {
+    const label = objectiveQuestionCount === 1 ? unique : `${unique}-${i + 1}`;
+    const question = await adminPost(
+      request,
+      baseURL,
+      token,
+      "/api/questions",
+      {
+        courseId,
+        type: "true_false",
+        content: `判断题-${label}`,
+        standardAnswer: opts.questionAnswer ?? true,
+        score: opts.questionScore ?? 100,
+      },
+    );
+    objectiveQuestionIds.push(question.id as string);
+  }
+  const questionId = objectiveQuestionIds[0]!;
 
   // Objective (true_false) question renders FIRST, manual-graded (text_response)
   // questions AFTER — consumers answer the objective Q1 first, then navigate to
   // the manual question Q2.
-  const questionIds: string[] = [questionId];
   // text_response is an independent QuestionType. Per
   // docs/architecture/exam-runtime.md §1.1 the legacy `fill_blank + standardAnswer=null`
   // encoding is deprecated for free-text questions.
@@ -269,13 +345,18 @@ export async function seedExam(
       score: tr.score,
     });
     textResponseQuestionIds.push(created.id as string);
-    questionIds.push(created.id as string);
   }
+  // Exam order: every objective question first, then the manual items.
+  const questionIds: string[] = [
+    ...objectiveQuestionIds,
+    ...textResponseQuestionIds,
+  ];
 
   const textResponseTotal =
     opts.textResponseQuestions?.reduce((sum, q) => sum + q.score, 0) ?? 0;
   const baseQuestionScore = opts.questionScore ?? 100;
-  const computedTotalScore = baseQuestionScore + textResponseTotal;
+  const computedTotalScore =
+    baseQuestionScore * objectiveQuestionCount + textResponseTotal;
 
   // Mode-legal timing shape. timed_window keeps the historical
   // defaults byte-identically (60min duration, +24h closeAt). deadline carries
@@ -289,33 +370,71 @@ export async function seedExam(
       ? null
       : (opts.closeAt ?? new Date(Date.now() + 86400_000));
 
-  const exam = await adminPost(request, baseURL, token, "/api/exams", {
-    title: examTitle,
-    description: "",
-    courseId,
-    timingMode,
-    durationMinutes,
-    openAt: openAt.toISOString(),
-    closeAt: closeAt ? closeAt.toISOString() : null,
-    passingScore: opts.passingScore ?? 60,
-    totalScore: opts.totalScore ?? computedTotalScore,
-    questionSelectionMode: "manual",
-    questionIds,
-    resultPublicationMode: opts.resultPublicationMode ?? "immediate",
-    controlFlags: {
-      shuffleQuestions: false,
-      shuffleOptions: false,
-      detectTabSwitch: false,
-      disableCopyPaste: false,
-      ...(opts.requireQueue ?? {}),
-      requireQueue: opts.requireQueue !== undefined,
-      showResultImmediately: true,
-    },
-    retakePolicy: "unlimited",
-    scoreStrategy: "highest",
-    maxAttempts: 1,
-    interruptionTimePolicy: opts.interruptionTimePolicy ?? "strict",
-  });
+  // Profile path: the profile-owned policy fields stay ABSENT so the
+  // profile's copy-on-apply values materialize (exam.ts presence-based
+  // merge on the RAW body). Only the explicitly selected overrides are
+  // sent — `undefined` keys are dropped so they cannot downgrade a profile
+  // value into explicit request input.
+  const profileOverrides = Object.fromEntries(
+    Object.entries(opts.profile?.overrides ?? {}).filter(
+      ([, value]) => value !== undefined,
+    ),
+  );
+  const exam = await adminPost(
+    request,
+    baseURL,
+    token,
+    "/api/exams",
+    opts.profile
+      ? {
+          title: examTitle,
+          description: "",
+          courseId,
+          profileId: opts.profile.id,
+          ...profileOverrides,
+          openAt: openAt.toISOString(),
+          closeAt: closeAt ? closeAt.toISOString() : null,
+          passingScore: opts.passingScore ?? 60,
+          totalScore: opts.totalScore ?? computedTotalScore,
+          questionSelectionMode: "manual",
+          questionIds,
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            ...(opts.requireQueue ?? {}),
+            requireQueue: opts.requireQueue !== undefined,
+          },
+        }
+      : {
+          title: examTitle,
+          description: "",
+          courseId,
+          timingMode,
+          durationMinutes,
+          openAt: openAt.toISOString(),
+          closeAt: closeAt ? closeAt.toISOString() : null,
+          passingScore: opts.passingScore ?? 60,
+          totalScore: opts.totalScore ?? computedTotalScore,
+          questionSelectionMode: "manual",
+          questionIds,
+          resultPublicationMode: opts.resultPublicationMode ?? "immediate",
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            ...(opts.requireQueue ?? {}),
+            requireQueue: opts.requireQueue !== undefined,
+            showResultImmediately: true,
+          },
+          retakePolicy: "unlimited",
+          scoreStrategy: "highest",
+          maxAttempts: 1,
+          interruptionTimePolicy: opts.interruptionTimePolicy ?? "strict",
+        },
+  );
   const examId = exam.id as string;
 
   await adminPost(request, baseURL, token, `/api/exams/${examId}/publish`, {});
@@ -346,5 +465,6 @@ export async function seedExam(
     candidate,
     extraCandidates,
     textResponseQuestionIds,
+    objectiveQuestionIds,
   };
 }

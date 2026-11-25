@@ -182,7 +182,7 @@ true_false,一年一定有 366 天,,,,,false,5,1,常识,,
 
 | 字段                             | 必填       | 说明                                                                                               |
 | -------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
-| `type`                           | 必填       | 题型：`single_choice`, `multiple_choice`, `fill_blank`, `true_false`                               |
+| `type`                           | 必填       | 题型：`single_choice`, `multiple_choice`, `fill_blank`, `true_false`, `text_response`               |
 | `content`                        | 必填       | 题目内容，填空题需包含 `____` 占位符                                                               |
 | `optionA`                        | 选择题必填 | 选项 A 内容                                                                                        |
 | `optionB`                        | 选择题必填 | 选项 B 内容                                                                                        |
@@ -194,6 +194,7 @@ true_false,一年一定有 366 天,,,,,false,5,1,常识,,
 | `tags`                           | 可选       | 标签，空格分隔或按当前实现解析                                                                     |
 | `gradingRule.multiSelectScoring` | 可选       | 多选题评分：`all_correct_full` 或 `partial_half`                                                    |
 | `gradingRule.fillBlankMatchMode` | 可选       | 填空题匹配模式：`exact` 或 `keyword`                                                               |
+| `rubric`                         | 可选       | `text_response` 的评分标准文字；CSV 固定题头不含该列，仅 JSON 请求体行可携带，缺省为 `null`          |
 
 ### 导入端点
 
@@ -235,6 +236,12 @@ true_false,一年一定有 366 天,,,,,false,5,1,常识,,
 5. **判断题答案**: `standardAnswer` 必须是布尔值 (`true`/`false`)。
 6. **正整数分值**: `score` 必须是正整数。
 7. **难度范围**: `difficulty` 必须是 1-5 的整数。
+8. **部署产品能力判定**: 每行通过与单条题目写入相同的部署产品能力权威判定
+   ([ADR-022](../adr/ADR-022-product-capability-composition.md) / #678，导入
+   行最终材料恒为 Plain)。超出部署能力上限的行报告为逐行
+   `status: "error"`（`message` 为非权威兼容文本，说明超出上限的能力），不落
+   库；同批次其余行照常校验与写入。preview (`confirm: false`) 与 confirm 对
+   同一批次给出一致判定。
 
 ---
 

@@ -327,7 +327,10 @@ void _productCapabilityIdentity;
  */
 export const ProductCapabilityProjectionSchema = z.object({
   revision: z.literal(1),
-  presentation: z.literal("standard"),
+  // Presentation of the resolved deployment preset (ADR-022 Phase 3:
+  // `minimal` ships beside `standard`). Surface projection only — §6 forbids
+  // runtime semantic branching on the preset/presentation name.
+  presentation: z.enum(["standard", "minimal"]),
   enabled: z.array(ProductCapabilityIdSchema),
 });
 

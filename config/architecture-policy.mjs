@@ -19,10 +19,12 @@
 // forbiddenImportPattern() — the manifests are the declaration authority,
 // the source scan is secondary defense-in-depth for undeclared imports.
 //
-// The module also hosts the EXSEM-014 lifecycle-state write funnel table
-// (LIFECYCLE_STATE_WRITE_RULES below): the same "checker and regression
-// tests import one table" contract — the allowlisted files are the as-built
-// compliant callers, and growing them is a reviewed boundary change.
+// The module also hosts the write funnel table (LIFECYCLE_STATE_WRITE_RULES
+// below) — the EXSEM-014 lifecycle-state funnels and the EXSEM-007
+// answer-receipt funnels (#678 r3 §8 first static gate): the same "checker
+// and regression tests import one table" contract — the allowlisted files
+// are the as-built compliant callers, and growing them is a reviewed
+// boundary change.
 
 /**
  * One entry per importer whose runtime dependency declarations are machine-
@@ -241,20 +243,31 @@ export const ROUTE_DB_GATE_PATTERNS = Object.freeze([
   ]),
 ]);
 
-// ── EXSEM-014 lifecycle-state write funnels ──────────────────────────────
+// ── Write funnels: EXSEM-014 lifecycle state + EXSEM-007 answer receipts ──
 //
 // Lifecycle state columns (`status`, `gradingStatus`) are written only
 // through the engine command funnel (EXSEM-014; ADR-005
-// lock-reconcile-assert-mutate). The repo layer types this contract
+// lock-reconcile-assert-mutate). The repo layer types that contract
 // (narrowed `update` inputs + the named `updateIncludingLifecycleState`
-// seam); the rules below are the name-anchored textual backstop for
-// callers that bypass the type boundary (scripts, `as`-cast handles). A
-// pattern matches the MEMBER-CALL form only — `x.seam(` — so the
-// baseRepo definition, interface member declarations, return-object
-// shorthand and bare prose mentions do not match; a comment carrying the
-// call shape DOES match (same documented textual posture as the import
-// scan above). `.test.` files and `testHelpers.ts` are exempt (test
-// harness), mirroring the checker's forbid() exemptions.
+// seam), and assignment revocation is the named revoke funnel.
+//
+// Answer save receipts are the idempotency ledger of the draft-answer
+// acceptance protocol (EXSEM-007): the adapter method `appendAnswerReceipt`
+// is issued only inside the answer save protocol's one-transaction commit
+// (answerProtocol.ts, #669), and the repository method
+// `appendAnswerSaveReceipt` is only called by the ctx-binding adapter
+// (repoAdapters.ts) on the protocol's behalf — #678 r3 §8 first static
+// gate, which requires ordinary AND optional-chained route calls to be
+// rejected (the member-call anchor matches `?.` spellings too).
+//
+// The rules below are the name-anchored textual backstop for callers that
+// bypass the type boundary (scripts, `as`-cast handles). A pattern matches
+// the MEMBER-CALL form only — `x.seam(` — so the baseRepo definition,
+// interface member declarations, return-object shorthand and bare prose
+// mentions do not match; a comment carrying the call shape DOES match
+// (same documented textual posture as the import scan above). `.test.`
+// files and `testHelpers.ts` are exempt (test harness), mirroring the
+// checker's forbid() exemptions.
 //
 // The allowlists are the as-built compliant callers. A new caller must be
 // reviewed into the list (boundary change), never added silently.
@@ -292,6 +305,20 @@ export const LIFECYCLE_STATE_WRITE_RULES = Object.freeze([
     ]),
     rationale:
       "assignment revocation is a named lifecycle funnel (proctor/grader/teacher assignment commands) — new callers of revokeAssignment must be reviewed into this allowlist",
+  }),
+  Object.freeze({
+    rule: "EXSEM007_ANSWER_RECEIPT_FUNNEL",
+    pattern: Object.freeze(/\.appendAnswerReceipt\(/),
+    allowedFiles: Object.freeze(["packages/exam-engine/src/answerProtocol.ts"]),
+    rationale:
+      "answer save receipts are the idempotency ledger of the EXSEM-007 answer acceptance protocol — the adapter method appendAnswerReceipt is issued only inside the answer save protocol's one-transaction commit (#669); new callers must be reviewed into this allowlist",
+  }),
+  Object.freeze({
+    rule: "EXSEM007_ANSWER_SAVE_RECEIPT_FUNNEL",
+    pattern: Object.freeze(/\.appendAnswerSaveReceipt\(/),
+    allowedFiles: Object.freeze(["apps/api/src/adapters/repoAdapters.ts"]),
+    rationale:
+      "answer save receipts are the idempotency ledger of the EXSEM-007 answer acceptance protocol — the repository method appendAnswerSaveReceipt is only called by the ctx-binding adapter on the protocol's behalf; new callers must be reviewed into this allowlist",
   }),
 ]);
 

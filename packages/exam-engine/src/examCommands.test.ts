@@ -15,8 +15,10 @@ import {
 import type { Exam, Question, ContentDocumentV1 } from "@exam/domain";
 import {
   InvalidStateTransitionError,
+  STANDARD_PRODUCT_CONFIGURATION,
   ValidationError,
   plainTextProjection,
+  resolveDeploymentProductConfiguration,
 } from "@exam/domain";
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
@@ -92,6 +94,16 @@ function makeQuestion(id: string, overrides: Partial<Question> = {}): Question {
 }
 
 const testQuestions = [makeQuestion("q1"), makeQuestion("q2")];
+
+/**
+ * Every publish test in this file runs under the full resolved Standard
+ * ceiling: these tests own the publish content/policy/lifecycle contracts,
+ * not the deployment composition. The bounded-ceiling counterexamples for
+ * the publish freeze gate live in publishCapabilityGate.test.ts.
+ */
+const STANDARD_DEPLOYMENT = resolveDeploymentProductConfiguration(
+  STANDARD_PRODUCT_CONFIGURATION,
+);
 
 function makeRepo(initial: Exam): ExamRepository {
   let current = { ...initial };
@@ -196,7 +208,7 @@ describe("examCommands", () => {
         makeExam({ questionIds: ["q-rfb"], totalScore: 50, passingScore: 0 }),
       );
       await expect(
-        publishExam(repo, "exam-1", [richFillBlank]),
+        publishExam(repo, "exam-1", [richFillBlank], STANDARD_DEPLOYMENT),
       ).rejects.toThrow(/must not carry rich content/);
     });
 
@@ -208,9 +220,9 @@ describe("examCommands", () => {
       const repo = makeRepo(
         makeExam({ questionIds: ["q-mode"], totalScore: 50, passingScore: 0 }),
       );
-      await expect(publishExam(repo, "exam-1", [wrongMode])).rejects.toThrow(
-        /answerMode but is not text_response/,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [wrongMode], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/answerMode but is not text_response/);
     });
 
     it("rejects publish when rich content diverges from its projection (#301)", async () => {
@@ -230,9 +242,9 @@ describe("examCommands", () => {
           passingScore: 0,
         }),
       );
-      await expect(publishExam(repo, "exam-1", [divergent])).rejects.toThrow(
-        /plainTextProjection/,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [divergent], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/plainTextProjection/);
     });
 
     it("rejects publish when a rich OPTION diverges from its projection (#301)", async () => {
@@ -258,7 +270,7 @@ describe("examCommands", () => {
         }),
       );
       await expect(
-        publishExam(repo, "exam-1", [divergentOption]),
+        publishExam(repo, "exam-1", [divergentOption], STANDARD_DEPLOYMENT),
       ).rejects.toThrow(/rich option b .*plainTextProjection/s);
     });
 
@@ -325,7 +337,12 @@ describe("examCommands", () => {
           rubric: "按要点给分",
         });
         const repo = publishRepo(richQuestion);
-        const result = await publishExam(repo, "exam-1", [richQuestion]);
+        const result = await publishExam(
+          repo,
+          "exam-1",
+          [richQuestion],
+          STANDARD_DEPLOYMENT,
+        );
         expect(result.status).toBe("published");
       });
 
@@ -348,10 +365,20 @@ describe("examCommands", () => {
             standardAnswer: null,
           });
           await expect(
-            publishExam(publishRepo(badQuestion), "exam-1", [badQuestion]),
+            publishExam(
+              publishRepo(badQuestion),
+              "exam-1",
+              [badQuestion],
+              STANDARD_DEPLOYMENT,
+            ),
           ).rejects.toThrow(ValidationError);
           await expect(
-            publishExam(publishRepo(badQuestion), "exam-1", [badQuestion]),
+            publishExam(
+              publishRepo(badQuestion),
+              "exam-1",
+              [badQuestion],
+              STANDARD_DEPLOYMENT,
+            ),
           ).rejects.toThrow(message);
 
           const badOptionQuestion = makeQuestion("q-opt-bad", {
@@ -364,14 +391,20 @@ describe("examCommands", () => {
             ],
           });
           await expect(
-            publishExam(publishRepo(badOptionQuestion), "exam-1", [
-              badOptionQuestion,
-            ]),
+            publishExam(
+              publishRepo(badOptionQuestion),
+              "exam-1",
+              [badOptionQuestion],
+              STANDARD_DEPLOYMENT,
+            ),
           ).rejects.toThrow(ValidationError);
           await expect(
-            publishExam(publishRepo(badOptionQuestion), "exam-1", [
-              badOptionQuestion,
-            ]),
+            publishExam(
+              publishRepo(badOptionQuestion),
+              "exam-1",
+              [badOptionQuestion],
+              STANDARD_DEPLOYMENT,
+            ),
           ).rejects.toThrow(message);
         },
       );
@@ -387,7 +420,12 @@ describe("examCommands", () => {
           standardAnswer: null,
         });
         await expect(
-          publishExam(publishRepo(fallback), "exam-1", [fallback]),
+          publishExam(
+            publishRepo(fallback),
+            "exam-1",
+            [fallback],
+            STANDARD_DEPLOYMENT,
+          ),
         ).rejects.toThrow(/corrupt/);
       });
 
@@ -405,14 +443,24 @@ describe("examCommands", () => {
           rubric: "按要点给分",
         });
         await expect(
-          publishExam(publishRepo(noncanonical), "exam-1", [noncanonical]),
+          publishExam(
+            publishRepo(noncanonical),
+            "exam-1",
+            [noncanonical],
+            STANDARD_DEPLOYMENT,
+          ),
         ).rejects.toThrow(/not canonical Rich/);
       });
     });
 
     it("transitions draft → published", async () => {
       const repo = makeRepo(makeExam());
-      const result = await publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        testQuestions,
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.status).toBe("published");
     });
 
@@ -421,7 +469,12 @@ describe("examCommands", () => {
       const repo = makeRepo(
         makeExam({ timingMode: "deadline", durationMinutes: null }),
       );
-      const result = await publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        testQuestions,
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.status).toBe("published");
       expect(result.timingMode).toBe("deadline");
     });
@@ -434,7 +487,12 @@ describe("examCommands", () => {
           closeAt: null,
         }),
       );
-      const result = await publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        testQuestions,
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.status).toBe("published");
       expect(result.timingMode).toBe("untimed");
     });
@@ -447,18 +505,18 @@ describe("examCommands", () => {
           closeAt: null,
         }),
       );
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /timed_sync/,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/timed_sync/);
     });
 
     // EXSEM-019: `random` selection is reserved vocabulary — readable in
     // storage/enum terms but never publishable (the gate requires manual).
     it("rejects publish of a random-selection draft (latent mode)", async () => {
       const repo = makeRepo(makeExam({ questionSelectionMode: "random" }));
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /random|manual/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/random|manual/i);
     });
 
     // #1039 (R-T2-1): a historically persisted duplicate in questionIds
@@ -483,9 +541,9 @@ describe("examCommands", () => {
           return persisted;
         },
       };
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /duplicate/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/duplicate/i);
       // No half-frozen snapshot: the exam stays a draft with an empty
       // snapshot after the rejection.
       expect(persisted.status).toBe("draft");
@@ -494,7 +552,12 @@ describe("examCommands", () => {
 
     it("captures questionSnapshot with real data", async () => {
       const repo = makeRepo(makeExam());
-      const result = await publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        testQuestions,
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.questionSnapshot.length).toBe(2);
       expect(result.questionSnapshot[0]?.content).toBe("Question q1");
       expect(result.questionSnapshot[0]?.standardAnswer).toBe("a");
@@ -503,27 +566,32 @@ describe("examCommands", () => {
     it("throws for non-existent exam", async () => {
       const repo = makeRepo(makeExam());
       await expect(
-        publishExam(repo, "nonexistent", testQuestions),
+        publishExam(repo, "nonexistent", testQuestions, STANDARD_DEPLOYMENT),
       ).rejects.toThrow(ValidationError);
     });
 
     it("throws for invalid transition (published → published)", async () => {
       const repo = makeRepo(makeExam({ status: "published" }));
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        InvalidStateTransitionError,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(InvalidStateTransitionError);
     });
 
     it("throws when no questions", async () => {
       const repo = makeRepo(makeExam({ questionIds: [] }));
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        ValidationError,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(ValidationError);
     });
 
     it("publishes when passingScore is 0 (zero-pass valid)", async () => {
       const repo = makeRepo(makeExam({ passingScore: 0 }));
-      const result = await publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        testQuestions,
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.status).toBe("published");
       expect(result.passingScore).toBe(0);
     });
@@ -537,9 +605,9 @@ describe("examCommands", () => {
 
     it("throws when passingScore exceeds effective question total", async () => {
       const repo = makeRepo(makeExam({ passingScore: 101, totalScore: 100 }));
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /passing score cannot exceed total score/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/passing score cannot exceed total score/i);
     });
 
     // ── P7-M1: publish revalidation of stale/invalid drafts ─────────
@@ -554,16 +622,16 @@ describe("examCommands", () => {
           closeAt: new Date("2025-01-01T00:00:00Z"),
         }),
       );
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /openAt must be before closeAt/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/openAt must be before closeAt/i);
     });
 
     it("rejects publish when durationMinutes <= 0 (no DB CHECK backs it)", async () => {
       for (const durationMinutes of [0, -30]) {
         const repo = makeRepo(makeExam({ durationMinutes }));
         await expect(
-          publishExam(repo, "exam-1", testQuestions),
+          publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
         ).rejects.toThrow(/duration must be positive/i);
       }
     });
@@ -576,18 +644,18 @@ describe("examCommands", () => {
           interruptionGracePerAttemptSeconds: 300,
         }),
       );
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /require null caps/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/require null caps/i);
     });
 
     it("rejects publish when retakePolicy max_attempts carries maxAttempts < 1", async () => {
       const repo = makeRepo(
         makeExam({ retakePolicy: "max_attempts", maxAttempts: 0 }),
       );
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /max_attempts.*requires maxAttempts/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/max_attempts.*requires maxAttempts/i);
     });
 
     // ── #516 product truthfulness: unsupported control flags ───────
@@ -604,9 +672,9 @@ describe("examCommands", () => {
         },
       });
       const repo = makeRepo(stale);
-      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
-        /not currently supported/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", testQuestions, STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/not currently supported/i);
       // The rejection never rewrites the row: historical data stays readable,
       // verbatim (no silent true→false coercion).
       const reread = await repo.findById("exam-1");
@@ -627,9 +695,9 @@ describe("examCommands", () => {
         rubric: null,
         score: 20,
       });
-      await expect(publishExam(repo, "exam-1", [textQ])).rejects.toThrow(
-        /rubric/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [textQ], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/rubric/i);
     });
 
     it("rejects text_response publish when rubric is a placeholder ('暂无')", async () => {
@@ -644,9 +712,9 @@ describe("examCommands", () => {
         rubric: "暂无",
         score: 20,
       });
-      await expect(publishExam(repo, "exam-1", [textQ])).rejects.toThrow(
-        /rubric/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [textQ], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/rubric/i);
     });
 
     // ── P2 authoring closeout: text_response publish clarity + freeze ──
@@ -671,9 +739,9 @@ describe("examCommands", () => {
         rubric: "",
         score: 20,
       });
-      await expect(publishExam(repo, "exam-1", [textQ])).rejects.toThrow(
-        /q-text-7/,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [textQ], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/q-text-7/);
     });
 
     it("freezes the optional text_response reference answer into the snapshot", async () => {
@@ -688,7 +756,12 @@ describe("examCommands", () => {
         rubric: "按论证完整性给分",
         score: 20,
       });
-      const result = await publishExam(repo, "exam-1", [textQ]);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        [textQ],
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.status).toBe("published");
       expect(result.questionSnapshot[0]?.standardAnswer).toBe(
         "参考要点一\n参考要点二",
@@ -708,7 +781,12 @@ describe("examCommands", () => {
         rubric: "原始评分标准",
         score: 20,
       });
-      const published = await publishExam(repo, "exam-1", [textQ]);
+      const published = await publishExam(
+        repo,
+        "exam-1",
+        [textQ],
+        STANDARD_DEPLOYMENT,
+      );
       const frozen = published.questionSnapshot[0];
 
       // Simulate a post-publish live edit: content, rubric, and reference
@@ -744,7 +822,12 @@ describe("examCommands", () => {
         rubric: "按逻辑完整性、关键概念、论证质量给分",
         score: 20,
       });
-      const result = await publishExam(repo, "exam-1", [textQ]);
+      const result = await publishExam(
+        repo,
+        "exam-1",
+        [textQ],
+        STANDARD_DEPLOYMENT,
+      );
       expect(result.status).toBe("published");
       expect(result.questionSnapshot[0]?.rubric).toBe(
         "按逻辑完整性、关键概念、论证质量给分",
@@ -760,9 +843,9 @@ describe("examCommands", () => {
         standardAnswer: null,
         score: 50,
       });
-      await expect(publishExam(repo, "exam-1", [autoQ])).rejects.toThrow(
-        /standardAnswer/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [autoQ], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/standardAnswer/i);
     });
 
     it("rejects auto-question publish when standardAnswer is a placeholder ('暂无')", async () => {
@@ -774,9 +857,9 @@ describe("examCommands", () => {
         standardAnswer: "暂无",
         score: 50,
       });
-      await expect(publishExam(repo, "exam-1", [autoQ])).rejects.toThrow(
-        /standardAnswer/i,
-      );
+      await expect(
+        publishExam(repo, "exam-1", [autoQ], STANDARD_DEPLOYMENT),
+      ).rejects.toThrow(/standardAnswer/i);
     });
   });
 

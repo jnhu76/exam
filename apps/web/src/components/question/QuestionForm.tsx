@@ -27,11 +27,14 @@ import { Plus, Trash2 } from "lucide-react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { FieldRow, FieldGroup, Field } from "@/components/shared/FieldGroup";
 import {
+  capabilityForQuestionType,
   plainTextProjection,
   plainTextToDocument,
   type ContentDocumentV1,
+  type QuestionType,
 } from "@exam/domain";
 import { RichContentEditorLazy } from "@/components/shared/content/RichContentEditorLazy";
+import { useProductProjection } from "@/contexts/ProductProjectionContext";
 import { CourseSearchSelect } from "./CourseSearchSelect";
 
 /** A single option within a question, with an ID, display content, and correctness flag. */
@@ -109,6 +112,25 @@ const defaultForm: QuestionFormData = {
 };
 
 /**
+ * Ordered NEW-question type options. Rendering filters this list through the
+ * deployment projection via `capabilityForQuestionType` — the SINGLE domain
+ * type→capability authority; no local second table.
+ */
+const QUESTION_TYPE_OPTIONS = [
+  { value: "single_choice", labelKey: "admin.forms.question.typeSingleChoice" },
+  {
+    value: "multiple_choice",
+    labelKey: "admin.forms.question.typeMultipleChoice",
+  },
+  { value: "fill_blank", labelKey: "admin.forms.question.typeFillBlank" },
+  { value: "true_false", labelKey: "admin.forms.question.typeTrueFalse" },
+  {
+    value: "text_response",
+    labelKey: "admin.forms.question.typeTextResponse",
+  },
+] as const satisfies ReadonlyArray<{ value: QuestionType; labelKey: string }>;
+
+/**
  * True when the document carries anything the plain textarea cannot
  * represent (structure, math, marks). hardBreak projects to a newline, so it
  * is not lossy.
@@ -136,6 +158,13 @@ export function QuestionForm({
   onChange,
 }: QuestionFormProps) {
   const { t } = useTranslation();
+  // Deployment product ceiling (ADR-022 Phase 3): prunes NEW-commitment
+  // authoring only, while existing legacy Rich material keeps an explicit
+  // Rich→Plain conversion (the eliminating edit — the one write path the
+  // server's whole-material guard admits under a closed Rich slot). The
+  // Plain→Rich direction stays closed; the server write guard owns final
+  // acceptance either way (ADR-022 D5).
+  const { allows } = useProductProjection();
   const [form, setForm] = useState<QuestionFormData>({
     ...defaultForm,
     ...initial,
@@ -338,21 +367,20 @@ export function QuestionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="single_choice">
-                {t("admin.forms.question.typeSingleChoice")}
-              </SelectItem>
-              <SelectItem value="multiple_choice">
-                {t("admin.forms.question.typeMultipleChoice")}
-              </SelectItem>
-              <SelectItem value="fill_blank">
-                {t("admin.forms.question.typeFillBlank")}
-              </SelectItem>
-              <SelectItem value="true_false">
-                {t("admin.forms.question.typeTrueFalse")}
-              </SelectItem>
-              <SelectItem value="text_response">
-                {t("admin.forms.question.typeTextResponse")}
-              </SelectItem>
+              {/* INVARIANT: the CURRENT type always stays listed (displaying
+                legacy material is not a new commitment, ADR-022 D5); types
+                beyond the deployment ceiling are never OFFERED for new
+                authoring. Verdicts come from the projection via the single
+                domain mapping — never from the preset name. */}
+              {QUESTION_TYPE_OPTIONS.filter(
+                (option) =>
+                  option.value === form.type ||
+                  allows(capabilityForQuestionType(option.value)),
+              ).map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
@@ -361,29 +389,49 @@ export function QuestionForm({
       <Field>
         <div className="flex items-center justify-between">
           <Label>{t("admin.forms.question.content")}</Label>
-          {form.type !== "fill_blank" && (
-            <Select
-              value={form.contentDocument ? "rich" : "plain"}
-              onValueChange={(v) => {
-                if (v === "rich" && !form.contentDocument) {
-                  upgradePromptToRich();
-                } else if (v === "plain" && form.contentDocument) {
-                  requestPromptToPlain();
-                }
-              }}
-            >
-              <SelectTrigger
-                className="h-8 w-28 text-sm"
-                aria-label={t("content.mode.label")}
+          {form.type !== "fill_blank" &&
+            (allows("content.prompt.rich") ? (
+              <Select
+                value={form.contentDocument ? "rich" : "plain"}
+                onValueChange={(v) => {
+                  if (v === "rich" && !form.contentDocument) {
+                    upgradePromptToRich();
+                  } else if (v === "plain" && form.contentDocument) {
+                    requestPromptToPlain();
+                  }
+                }}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="plain">{t("content.mode.plain")}</SelectItem>
-                <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
+                <SelectTrigger
+                  className="h-8 w-28 text-sm"
+                  aria-label={t("content.mode.label")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="plain">
+                    {t("content.mode.plain")}
+                  </SelectItem>
+                  <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              form.contentDocument && (
+                // Legacy Rich prompt under a ceiling without
+                // content.prompt.rich: the whole-material write guard
+                // rejects every non-eliminating edit, so the Rich→Plain
+                // downgrade stays an EXPLICIT action (with its lossy
+                // confirmation) while the Plain→Rich direction stays
+                // closed — never a dead-end editor that cannot save.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={requestPromptToPlain}
+                >
+                  {t("content.convertToPlain")}
+                </Button>
+              )
+            ))}
         </div>
         {form.type === "fill_blank" ? (
           <Textarea
@@ -483,33 +531,54 @@ export function QuestionForm({
                     disabled={form.type === "true_false"}
                   />
                 )}
-                {optionTypesWithRich && (
-                  <Select
-                    value={opt.contentDocument ? "rich" : "plain"}
-                    onValueChange={(v) => {
-                      if (v === "rich" && !opt.contentDocument) {
-                        upgradeOptionToRich(i);
-                      } else if (v === "plain" && opt.contentDocument) {
-                        requestOptionToPlain(i);
-                      }
-                    }}
-                  >
-                    <SelectTrigger
-                      className="h-8 w-20 text-sm"
-                      aria-label={t("content.mode.optionLabel", { id: opt.id })}
+                {optionTypesWithRich &&
+                  (allows("content.option.rich") ? (
+                    <Select
+                      value={opt.contentDocument ? "rich" : "plain"}
+                      onValueChange={(v) => {
+                        if (v === "rich" && !opt.contentDocument) {
+                          upgradeOptionToRich(i);
+                        } else if (v === "plain" && opt.contentDocument) {
+                          requestOptionToPlain(i);
+                        }
+                      }}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="plain">
-                        {t("content.mode.plain")}
-                      </SelectItem>
-                      <SelectItem value="rich">
-                        {t("content.mode.rich")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
+                      <SelectTrigger
+                        className="h-8 w-20 text-sm"
+                        aria-label={t("content.mode.optionLabel", {
+                          id: opt.id,
+                        })}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="plain">
+                          {t("content.mode.plain")}
+                        </SelectItem>
+                        <SelectItem value="rich">
+                          {t("content.mode.rich")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    opt.contentDocument && (
+                      // Legacy Rich option under a ceiling without
+                      // content.option.rich: same directional contract as
+                      // the prompt — explicit downgrade only, upgrade stays
+                      // closed (the write guard owns final acceptance).
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={t("content.convertToPlainOption", {
+                          id: opt.id,
+                        })}
+                        onClick={() => requestOptionToPlain(i)}
+                      >
+                        {t("content.convertToPlain")}
+                      </Button>
+                    )
+                  ))}
                 {form.type !== "true_false" && form.options.length > 2 && (
                   <Button
                     type="button"
@@ -560,26 +629,53 @@ export function QuestionForm({
             </p>
           </Field>
 
-          <Field>
-            <Label>{t("admin.forms.question.answerMode")}</Label>
-            <Select
-              value={form.answerMode}
-              onValueChange={(v) =>
-                update({ answerMode: v as QuestionFormData["answerMode"] })
-              }
-            >
-              <SelectTrigger aria-label={t("admin.forms.question.answerMode")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="plain">{t("content.mode.plain")}</SelectItem>
-                <SelectItem value="rich">{t("content.mode.rich")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="type-metadata">
-              {t("admin.forms.question.answerModeHint")}
-            </p>
-          </Field>
+          {/* answer.text.rich beyond the deployment ceiling: only the plain
+            answer mode exists, so the selector (and its hint) is omitted for
+            NEW authoring. An existing rich-answer legacy question keeps its
+            field with an EXPLICIT conversion to plain — the final-material
+            write guard rejects a kept answerMode:"rich", so the field must
+            never dead-end the legacy edit. */}
+          {(allows("answer.text.rich") || form.answerMode === "rich") && (
+            <Field>
+              <Label>{t("admin.forms.question.answerMode")}</Label>
+              {allows("answer.text.rich") ? (
+                <Select
+                  value={form.answerMode}
+                  onValueChange={(v) =>
+                    update({ answerMode: v as QuestionFormData["answerMode"] })
+                  }
+                >
+                  <SelectTrigger
+                    aria-label={t("admin.forms.question.answerMode")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="plain">
+                      {t("content.mode.plain")}
+                    </SelectItem>
+                    <SelectItem value="rich">
+                      {t("content.mode.rich")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => update({ answerMode: "plain" })}
+                >
+                  {t("content.convertToPlainAnswer")}
+                </Button>
+              )}
+              <p className="type-metadata">
+                {allows("answer.text.rich")
+                  ? t("admin.forms.question.answerModeHint")
+                  : t("content.convertToPlainHint")}
+              </p>
+            </Field>
+          )}
 
           <Field>
             <Label>{t("admin.forms.question.referenceAnswer")}</Label>

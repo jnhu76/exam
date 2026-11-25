@@ -35,6 +35,13 @@
 #   REDIS_HOST_PORT     dev compose Redis 宿主端口，默认 6379；与 DB_HOST_PORT
 #                       配合 REDIS_URL=redis://localhost:<port> 可在其它 worktree
 #                       的 dev 栈占用默认端口时并行运行本脚本
+#   PRODUCT_PRESET      本部署的产品上限预设（ADR-022 Phase 3）：standard（默认）
+#                       或 minimal。与其他拓扑配置值一样由调用方 shell 传入，
+#                       透传给 API server（组合根唯一取值点），Playwright 配置
+#                       读同一值做套件分配（testing.md §4.1）：standard 运行除
+#                       minimal-* 外的全部 spec；minimal 仅运行 minimal-* spec
+#                       （它们断言 presentation === "minimal"）。跨预设点名 spec
+#                       会在发现阶段失败（no tests found），不会跑错部署。
 #   KEEP_SERVER=1     等价于 --keep-server
 #   E2E_WORKERS       并行 shard 数；--keep-server / --no-reseed 仅支持 =1
 #
@@ -762,6 +769,7 @@ launch_api() {
   DEV_API_PORT="$port" APP_PORT="$port" TEST_DATABASE_URL="$db_url" \
     PUBLIC_WEB_ORIGIN="http://localhost:${port}" \
     APP_MODE=e2e \
+    PRODUCT_PRESET="${PRODUCT_PRESET:-standard}" \
     HEARTBEAT_TIMEOUT_MS=15000 HEARTBEAT_SCAN_INTERVAL_MS=5000 DEADLINE_SCAN_INTERVAL_MS=5000 \
     setsid "${cmd[@]}" >"$logfile" 2>&1 &
   LAUNCHED_PID=$!

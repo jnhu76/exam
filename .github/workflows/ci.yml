@@ -505,6 +505,212 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ADR-022 Phase 3 (#678): the browser suite is allocated between presets
+  # (testing.md §4.2) — the standard lanes above never discover minimal-*
+  # specs, and this lane boots the REAL production entrypoint under the
+  # Minimal ceiling (PRODUCT_PRESET=minimal: startup preflight + the same
+  # public-config projection the browser fetches) so the Minimal spec family
+  # keeps its preset assertions against continuous coverage. No sharding:
+  # the minimal-* family is small and file-serial. The lane is two-phase
+  # (#678 review): the server first boots Standard and seeds the legacy-Rich
+  # material through the real authoring API, then restarts Minimal against
+  # the SAME database — the static-preset switch moment the minimal-rich
+  # downgrade spec drives in the browser.
+  e2e-minimal:
+    name: E2E (minimal preset)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.verify-build.outputs.playwright_image }}
+      options: --ipc=host
+    timeout-minutes: 20
+    needs: verify-build
+
+    services:
+      postgres:
+        image: postgres:18.4-bookworm
+        env:
+          POSTGRES_USER: exam
+          POSTGRES_PASSWORD: exam
+          POSTGRES_DB: exam_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U exam -d exam_e2e"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://exam:exam@postgres:5432/exam_e2e
+      TEST_DATABASE_URL: postgresql://exam:exam@postgres:5432/exam_e2e
+      JWT_SECRET: e2e-test-secret
+      NODE_ENV: test
+      APP_MODE: e2e
+      DEPLOYMENT_MODE: singleTenant
+      E2E_BASE_URL: http://localhost:3000
+      PUBLIC_WEB_ORIGIN: http://localhost:3000
+      RATE_LIMIT_MAX: "1000"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      HEARTBEAT_TIMEOUT_MS: "15000"
+      HEARTBEAT_SCAN_INTERVAL_MS: "5000"
+      DEADLINE_SCAN_INTERVAL_MS: "5000"
+      # The one topology difference from the standard E2E lanes: the API
+      # server boots with the Minimal deployment ceiling, and the Playwright
+      # config reads the same value to select the minimal-* spec family.
+      PRODUCT_PRESET: minimal
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restore Turbo cache
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
+            turbo-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace outputs
+        run: pnpm build
+
+      - name: Verify preinstalled Playwright browser
+        run: node scripts/ci/playwright-runtime.mjs verify
+
+      - name: Stage web assets for API static serving
+        run: |
+          rm -rf apps/api/public
+          mkdir -p apps/api/public
+          cp -R apps/web/dist/. apps/api/public/
+          test -f apps/api/public/index.html
+
+      - name: Run migrations
+        run: pnpm --filter @exam/db db:migrate
+
+      - name: Seed E2E data
+        run: pnpm --filter @exam/api db:seed:e2e
+
+      # ── Phase 1 (Standard): the legacy-Rich switch story starts from a
+      # deployment that authored Rich under Standard. The seeding spec writes
+      # the legacy material through the real authoring API (rich question +
+      # published exam + enrolled candidate) so Phase 2 proves conversions
+      # against authentic Standard-authored rows, not fixture shortcuts.
+      - name: Start API server (standard phase)
+        env:
+          PRODUCT_PRESET: standard
+        run: |
+          pnpm --filter @exam/api start > server.log 2>&1 &
+          echo "API_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "API is healthy"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api/health || (echo "API failed to start" && cat server.log && exit 1)
+          curl -sf http://localhost:3000/api/system/public-config | grep -q '"presentation":"standard"' \
+            || (echo "server did not boot the Standard preset" && cat server.log && exit 1)
+
+      - name: Seed the Standard-authored legacy Rich material
+        env:
+          PRODUCT_PRESET: standard
+        run: pnpm --filter @exam/e2e exec playwright test legacy-rich-material
+
+      # ── Phase 2 (Minimal): restart the REAL entrypoint against the SAME
+      # database with the Minimal ceiling — the static-preset switch moment
+      # (server boot) the browser specs then drive in the browser.
+      - name: Restart API server (minimal preset)
+        run: |
+          # Cross-step process control: the phase-1 `pnpm start` wrapper may
+          # be an unreaped zombie (`kill -0` succeeds on zombies), and its
+          # node child survives the wrapper's TERM while still holding :3000
+          # — the new server then fails EADDRINUSE and the health poll keeps
+          # answering the OLD Standard server (the exact failure class
+          # scripts/e2e/run.sh owns with process-group teardown, #256-A).
+          # The observable resource here is the PORT: terminate the tree,
+          # then wait until :3000 STOPS answering before rebinding it.
+          kill $API_PID 2>/dev/null || true
+          pkill -TERM -f "node dist/server.js" 2>/dev/null || true
+          for i in $(seq 1 30); do
+            if ! curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+            echo "old API server still holds :3000 after TERM" && exit 1
+          fi
+          pnpm --filter @exam/api start > server-minimal.log 2>&1 &
+          echo "API_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "API is healthy"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api/health || (echo "API failed to start" && cat server-minimal.log && exit 1)
+          # The Minimal preset must actually be live before the specs run:
+          # public-config is the same resolver output the startup preflight
+          # enforced, so a silent fallback to Standard fails here, not in
+          # thirty scattered spec assertions.
+          curl -sf http://localhost:3000/api/system/public-config | grep -q '"presentation":"minimal"' \
+            || (echo "server did not boot the Minimal preset" && cat server-minimal.log && exit 1)
+
+      - name: Run E2E tests (minimal preset)
+        run: pnpm --filter @exam/e2e exec playwright test
+
+      - name: Stop servers
+        if: always()
+        run: |
+          kill $API_PID 2>/dev/null || true
+          pkill -TERM -f "node dist/server.js" 2>/dev/null || true
+
+      - name: Write E2E failure summary
+        # Same zero-artifact failure contract as the standard E2E lanes: text
+        # diagnostics in the step summary only.
+        if: failure()
+        run: |
+          {
+            echo "## E2E (minimal preset) Failure Summary"
+            echo ""
+            echo "### Server log tails (standard phase, then minimal phase)"
+            echo '```text'
+            tail -80 server.log || true
+            tail -120 server-minimal.log || true
+            echo '```'
+            echo ""
+            echo "### Playwright error contexts"
+            find apps/e2e/test-results -name "error-context.md" -print 2>/dev/null | while IFS= read -r f; do
+              if [ -f "$f" ]; then
+                echo ""
+                echo "#### $f"
+                echo '```text'
+                sed -n '1,160p' "$f" || true
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Browser-level transport gate for the LAN HTTP contract: the host-native
   # E2E stack runs APP_MODE=e2e on http://localhost — a browser secure
   # context where a Secure cookie is accepted anyway — so it cannot observe

@@ -10,7 +10,7 @@
 1. [核心问题与四种关系](#1-核心问题与四种关系)
 2. [配置 authority DAG](#2-配置-authority-dag)
 3. [物理来源、profile 与优先级](#3-物理来源profile-与优先级)
-4. [权威归属总表（24 类事实）](#4-权威归属总表24-类事实)
+4. [权威归属总表（24 类审计事实 + #678 新增行）](#4-权威归属总表原始-registry-25-行现表-25-行含-678-phase-3-新增-1-行)
 5. [配置变量 → 解析者 → 消费者索引](#5-配置变量--解析者--消费者索引)
 6. [真实执行路径与关键隔离](#6-真实执行路径与关键隔离)
 7. [反例与可观察验证](#7-反例与可观察验证)
@@ -176,9 +176,9 @@ flowchart TD
 
 **关键边界**：当 `APP_MODE` **仅写在根 `.env` 内**且进程没有提前导出 mode，loader 的准入判断会先把进程视为 development，读取文件，后续 runtime resolver 再看到文件内的模式。这是 #733 审计承认的**当前法律**，不是 managed runner 的受支持启动方式；managed test/e2e/ci/production 必须由自己的启动 owner 提前注入 `APP_MODE`。
 
-## 4. 权威归属总表（原始 registry 25 行；现表 24 行）
+## 4. 权威归属总表（原始 registry 25 行；现表 25 行，含 #678 Phase 3 新增 1 行）
 
-本节逐行保留 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 中的 registry 记录。该证据正文与 #733 closeout 摘要均标称“24”，但实际表格有 25 个数据行；计数差异是**证据的记录不一致**，这里显式披露，不能为了让统计漂亮而把本来不同的两个 owner 合并。原第 25 行（`ALLOW_UNSAFE_EVIDENCE_TEST_DB`，owner 为 backup-evidence CLI）已随该子系统整体移除，不再属于运行时配置事实；其余 24 行仍逐行保留。**分组复合事实**只是审计分类，不暗示一个 env key 必然等于一个 fact。
+本节逐行保留 [#744 Artifact 1](https://github.com/jnhu76/exam/issues/744#issuecomment-6050737949) 中的 registry 记录。该证据正文与 #733 closeout 摘要均标称“24”，但实际表格有 25 个数据行；计数差异是**证据的记录不一致**，这里显式披露，不能为了让统计漂亮而把本来不同的两个 owner 合并。原第 25 行（`ALLOW_UNSAFE_EVIDENCE_TEST_DB`，owner 为 backup-evidence CLI）已随该子系统整体移除，不再属于运行时配置事实；其余 24 行仍逐行保留。第 25 行是 #678 ADR-022 Phase 3（静态部署产品预设）按 §9 维护流程新增的事实行，不属于被审计的原始 registry。**分组复合事实**只是审计分类，不暗示一个 env key 必然等于一个 fact。
 
 | 语义事实 / 族 | 唯一权威（或明确 owner pair） | 主要实际消费者 |
 | --- | --- | --- |
@@ -206,6 +206,7 @@ flowchart TD
 | 22. APP_TIMEZONE / HOST / DEPLOYMENT_MODE / NODE_ENV(AppEnv) / API_DOCS | settings app leaves + runtimeConfig | server、docs UI、timezone、tenant/public-config 投影 |
 | 23. CAPACITY_RESEARCH | `lib/capacityResearch::isCapacityResearchEnabled`（N-01 P4 例外） | DB plugin instrumentation、capacityResearch route、route registration |
 | 24. SEED_* values | API seed entrypoint 的 admission + DB seed mechanism 自有默认 | dev/E2E seed CLIs、seed orchestrator |
+| 25. DEPLOYMENT_PRODUCT_PRESET（#678 Phase 3 新增） | settings `PRODUCT_PRESET` leaf（standard/minimal 枚举）+ runtimeConfig `product.preset` | 组合根（唯一消费者）→ 唯一 resolver；`GET /system/public-config` 投影、server 启动 preflight（切换检查） |
 
 第 24 行属于 seed mechanism 的独立配置事实，不与其他行共享 resolver。原第 25 行（evidence CLI 的 `ALLOW_UNSAFE_EVIDENCE_TEST_DB`）已随 backup-evidence 子系统移除，与 seed mechanism 的差异不再构成运行时事实。原始资料的“24”计数与 25 行表格的不一致在证据 issue 内未统一，属历史记录，不因本次移除而改写。此外 `NODE_ENV` 的宽松 `AppEnv` 展示投影，与 authoritative `RUNTIME_MODE` 也是不同事实，不能误合并。
 
@@ -221,6 +222,7 @@ flowchart TD
 | `APP_MODE` | **委托** `@exam/db::parseAppMode` → `app.mode` | runtimeConfig mode/profile、seed safety（seed/demo-seed guard）、DB routing |
 | `NODE_ENV` | settings 的 lenient AppEnv → `env`；mode fallback **另由 parseAppMode 拥有** | build/fallback 展示投影；不得用它取代 RUNTIME_MODE |
 | `DEPLOYMENT_MODE` | settings（仅 `singleTenant`）→ `mode/tenancy` | 租户运行边界、public config；`multiTenant` 不可运行 |
+| `PRODUCT_PRESET` | settings 枚举 leaf（`standard` 默认 / `minimal`）→ `product.preset` | **组合根唯一消费**：映射 canonical 配置后经唯一 resolver 解析；投影进 public-config，启动期 preflight 读同一实例；Phase 4 前仅 bootstrap 读取（ADR-022 §8） |
 | `HOST` | settings → `host` | `server.ts app.listen` |
 | `APP_PORT` | settings TCP port leaf → `resolveApiBindPort` → `port` | `server.ts app.listen`，prod/test-like owner |
 | `DEV_API_PORT` | settings TCP port leaf → `resolveApiBindPort` → `port` | development API bind / test-like backup fallback；Web Vite proxy **另有 tooling 读取** |

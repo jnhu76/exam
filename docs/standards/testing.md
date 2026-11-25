@@ -574,6 +574,7 @@ dependencies (`docker-compose.dev.yml`).
 | **TEST_DATABASE_URL** | Explicit per-DB URL (`…/exam_e2e[_w{N}]`); `DATABASE_URL`/`TEST_DB_URL` unset |
 | **Compose topology** | Runner-owned: `COMPOSE_DISABLE_ENV_FILE=1` prevents Compose from reading root `.env`; `DB_HOST_PORT`/`REDIS_HOST_PORT`/`TZ`/`APP_TIMEZONE` are frozen once from shell input (or managed defaults) and exported. Developer root `.env` has ZERO authority over managed E2E Compose interpolation. |
 | **Topology overrides** | Shell env vars only: `DB_HOST_PORT=25432 bash scripts/e2e/run.sh` |
+| **Deployment product preset** | `PRODUCT_PRESET` (shell input, default `standard`; ADR-022 Phase 3) — passed through to every shard API server, and read by the Playwright config to ALLOCATE the suite between presets: `standard` runs every spec except `minimal-*.spec.ts`; `minimal` runs ONLY `minimal-*.spec.ts` (they assert `product.presentation === "minimal"`). Minimal-deployment specs therefore run via `PRODUCT_PRESET=minimal bash scripts/e2e/run.sh` (file keys optional — the config selects the family); naming an out-of-preset spec fails loud at discovery instead of running it against the wrong deployment. The runner is the E2E env authority; the composition-root startup preflight validates the value at boot |
 | **Sharding** | Supported (`E2E_WORKERS`, default 2) |
 | **Blob reports** | Merged locally after run |
 | **Cleanup** | Stops shard servers → bounded wait → drops worker DBs → temp logs |
@@ -595,6 +596,28 @@ second repository-owned application topology.
 | **fail-fast** | `true` (the sibling shards are cancelled after a shard failure) |
 | **Test command** | `pnpm --filter @exam/e2e exec playwright test --shard={index}/{total}` |
 | **Failure diagnostics** | Each failing shard writes a step summary (server log tail + Playwright error contexts). No artifact is uploaded — CI is zero-artifact (§1.2). |
+
+### 4.2.1 CI Minimal-preset lane (`e2e-minimal`)
+
+The browser suite is allocated between the two shipped presets: the standard
+shards above never discover `minimal-*.spec.ts`, and a dedicated
+`E2E (minimal preset)` job runs ONLY the `minimal-*` family (no matrix —
+the family is small and file-serial). The lane is TWO-PHASE, reproducing the
+static-preset switch story against one database: the server first boots
+Standard and a seeding spec authors the legacy Rich material through the
+real authoring API (`legacy-rich-material.spec.ts`, fixed LEGACY-RICH-678
+markers), then the server restarts with `PRODUCT_PRESET=minimal` and the
+minimal specs run — including `minimal-rich-downgrade.spec.ts`, which drives
+the legacy Rich→Plain conversions in the browser and re-checks the published
+paper's frozen Rich snapshot. Both server-start steps fail loud when
+`/api/system/public-config` does not report the booted preset, so a silent
+fallback can never reach the specs. Local equivalent of the pair:
+
+```bash
+E2E_WORKERS=1 bash scripts/e2e/run.sh legacy-rich-material        # Standard, reseed
+PRODUCT_PRESET=minimal E2E_WORKERS=1 \
+  bash scripts/e2e/run.sh --no-reseed                             # Minimal, reuse
+```
 
 ### 4.3 CI E2E Build/Input Contract
 
@@ -794,11 +817,18 @@ E2E_WORKERS=4 bash scripts/e2e/run.sh
 |---------|-------|------|----|
 | `postgres` | `postgres:18.4-bookworm` | `5432:5432` | `exam_e2e` |
 
+### Lanes
+
+| Lane | Preset | Spec selection |
+|------|--------|----------------|
+| `E2E (shard i/2)` ×2 | `standard` (default) | every spec except `minimal-*.spec.ts` (config `testIgnore`) |
+| `E2E (minimal preset)` | `PRODUCT_PRESET=minimal` | only `minimal-*.spec.ts` (config `testMatch`); server start asserts the Minimal public-config projection |
+
 ### Shard Configuration
 
 | Parameter | Value |
 |-----------|-------|
-| `matrix.shardIndex` | `[1, 2]` |
+| `matrix.shardIndex` | `[1, 2]` (standard lanes only; the minimal lane is unsharded) |
 | `matrix.shardTotal` | `[2]` |
 | `fail-fast` | `true` |
 | `build input` | job-local: `.turbo` cache restore + `pnpm build` (§1.2); no cross-job artifact |

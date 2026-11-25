@@ -25,6 +25,11 @@ import {
   assertRichContentUpdateAllowed,
   resolveQuestionContentWrite,
 } from "./questionContent.js";
+import {
+  assertQuestionWriteCapabilities,
+  findQuestionWriteCapabilityViolations,
+  questionWriteCeilingViolationMessage,
+} from "../product/questionWriteCapabilityGuard.js";
 import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
@@ -313,6 +318,16 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         options: data.options,
       });
 
+      // ADR-022 Phase 2: the deployment product ceiling judges the FINAL
+      // material before the repository write, so a disabled capability
+      // cannot become a new commitment (D5) and a rejection leaves no row.
+      assertQuestionWriteCapabilities({
+        type: data.type,
+        contentDocument: resolved.contentDocument,
+        answerMode: resolved.answerMode,
+        options: resolved.options,
+      });
+
       const question = await createQuestionRepo(fastify.db).create(ctx, {
         courseId: data.courseId,
         type: data.type,
@@ -455,6 +470,18 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         contentDocument: validated.contentDocument,
         answerMode: validated.answerMode,
         options: validated.options,
+      });
+      // ADR-022 Phase 2: the merged FINAL material (stored row + patch) is
+      // judged against the deployment product ceiling before the repository
+      // write. Whole-material semantics: any non-eliminating edit that keeps
+      // a disabled capability in the final material is a new commitment of
+      // it; the legal paths out are the eliminating edit (rich slots
+      // cleared) and delete — both stay ungated (D5).
+      assertQuestionWriteCapabilities({
+        type: validated.type,
+        contentDocument: resolved.contentDocument,
+        answerMode: resolved.answerMode,
+        options: resolved.options,
       });
       const updated = await createQuestionRepo(fastify.db).update(ctx, id, {
         courseId: validated.courseId,
@@ -678,6 +705,33 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           const data = parsedRow.data;
+          // ADR-022 Phase 2 (#678): the import seam shares the single-write
+          // ceiling derivation (product-capability-composition.md §7 layer 3,
+          // D5). Import final material is Plain BY CONSTRUCTION — the manual
+          // mapping above carries no prompt document, no answer mode and no
+          // option documents — so the document/answer-mode inputs are null.
+          // Judged on preview AND confirm alike (before the confirm branch):
+          // a row beyond the deployment ceiling joins the existing per-row
+          // error contract (details[].status, non-authoritative message,
+          // #417 C2: no stable per-row machine code) and is never created,
+          // while the remaining rows of the batch keep their usual verdict.
+          const violations = findQuestionWriteCapabilityViolations({
+            type: data.type,
+            contentDocument: null,
+            answerMode: null,
+            options: (data.options ?? []).map((option) => ({
+              contentDocument: option.contentDocument ?? null,
+            })),
+          });
+          if (violations.length > 0) {
+            errors++;
+            details.push({
+              row: i + 1,
+              status: "error",
+              message: questionWriteCeilingViolationMessage(violations),
+            });
+            continue;
+          }
           if (body.confirm) {
             // #301: import is Plain-only BY CONSTRUCTION — the seam persists
             // content_document = NULL and derives contents from the plain

@@ -41,17 +41,28 @@ this document stops applying.
   institution. `organizationId` is an internal data-ownership boundary;
   the product is single-tenant. Multi-tenant platform features
   (tenant login, tenant switcher, SuperAdmin) are not implemented.
-- **Standard-only product composition.** The only delivered product
-  configuration is "Standard" ([ADR-022](../adr/ADR-022-product-capability-composition.md)
-  Phase 1). A "Minimal" preset exists as accepted design, not as a
-  selectable runtime.
+- **Standard-only product composition.** The capability catalog this
+  document describes is the shipped "Standard" set
+  ([ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 1).
+  Since the Phase 2 write guards and the Phase 3 static ceiling, a
+  deployment may run a bounded subset of that catalog or the `minimal`
+  preset (`PRODUCT_PRESET`, bootstrap-only) — the catalog itself is
+  unchanged; a smaller ceiling only disables NEW commitments, and accepted
+  obligations (pending manual grading, recovery, historical Rich reads)
+  stay fulfillable. The Minimal web presentation has landed: authoring
+  surfaces and nav prune by the `GET /system/public-config` projection
+  (UX-only — the backend write guards stay authoritative), the rich
+  editor stays lazy-loaded, and legacy Rich decode, manual grading,
+  recovery and result reads stay reachable under every ceiling.
 - **Language.** The shipped web UI is Simplified Chinese (zh-CN) only.
   There is no English UI locale and no language switcher.
 - **When this document stops applying.** Treat it as stale when any of
   these happen: a newer master state or release tag supersedes
   `511e6e60` with behavior changes; [ADR-022](../adr/ADR-022-product-capability-composition.md)
   Phase 2–4 land (write guards, Minimal runtime, persisted deployment
-  configuration); the [#293](https://github.com/jnhu76/exam/issues/293)
+  configuration) — Phase 2 write guards, the Phase 3 static
+  `minimal` ceiling and its web presentation have landed, so the
+  "Standard-only runtime" reading of this document no longer applies; the [#293](https://github.com/jnhu76/exam/issues/293)
   Controlled/Strict profiles land; the R4 reliability decisions
   ([#813](https://github.com/jnhu76/exam/issues/813),
   [#827](https://github.com/jnhu76/exam/issues/827),
@@ -170,14 +181,25 @@ API routes; capability authority:
 - **Static catalog, not switches.** The 13 `ProductCapabilityId`s in
   `packages/domain/src/productCapabilities.ts` are a **read-only
   projection of what Standard supports** — not 13 deployment toggles.
-  The resolver is fail-closed and admits only the complete Standard
-  set; no write path consults the catalog today (Phase 2 write guards
-  are not implemented). The two per-exam knobs (`requireQueue`,
-  `resultPublicationMode`) are exam policy choices, not deployment
-  capability toggles.
-- **Not implemented:** Minimal/subset composition (Phase 3), persisted
-  deployment configuration with revision/CAS (Phase 4), any per-item
-  capability switch.
+  The resolver is fail-closed and accepts the complete Standard set, a
+  guarded bounded subset, or the `minimal` preset (ADR-022 Phase 2/3;
+  preset↔presentation pairing enforced, unknown names fail closed).
+  Write paths do consult the resolved catalog: the composition root
+  resolves `PRODUCT_PRESET` once at bootstrap, and the authoritative
+  new-commitment boundaries (question create/update/import, exam
+  publish), `GET /system/public-config` and the startup
+  deployment-switch preflight all consume that single instance. Exam
+  publish judges the whole new commitment: question material AND the
+  exam's own frozen admission policy — a `requireQueue` draft is an
+  `admission.queue` commitment that a ceiling without it (Minimal) must
+  reject at publish, while already-published queue exams keep admitting.
+  The two
+  per-exam knobs (`requireQueue`, `resultPublicationMode`) are exam
+  policy choices, not deployment capability toggles.
+- **Not implemented:** persisted deployment configuration with
+  revision/CAS and draining (ADR-022 Phase 4 — the static
+  `PRODUCT_PRESET` is bootstrap-only with a startup preflight), and any
+  per-item capability switch.
 
 ## 5. Answer save semantics
 
@@ -268,10 +290,13 @@ Each item states what the product does **not** promise today:
 7. **No multi-tenant platform.** Single deployment = single institution;
    no tenant switcher, SuperAdmin, or `organizationSlug` login.
 8. **No arbitrary per-capability toggling.** The 13-capability catalog
-   is read-only; no deployment-level switches exist (ADR-022 Phase 2/4
-   not implemented).
-9. **No implemented Minimal deployment.** The Minimal preset is accepted
-   design, not a selectable runtime.
+   is read-only; the only deployment-level selection is the static
+   bootstrap preset (`PRODUCT_PRESET`, standard/minimal — ADR-022
+   Phase 2/3); runtime per-item switches remain unimplemented
+   (ADR-022 Phase 4).
+9. **No persisted deployment configuration.** The preset is read once
+   at bootstrap (startup preflight) and has no in-app write path,
+   revision/CAS, or draining (ADR-022 Phase 4).
 10. **No shipped Controlled/Strict assurance.** No lockdown browser,
     device/session binding, secondary identity verification, or
     continuous monitoring runtime
@@ -315,7 +340,8 @@ commit.
 | TLS/HTTPS ingress | PARTIAL | operator cert + nginx override | 511e6e60 (post-v0.0.10) | SOURCE_INSPECTED | deployment README "Network / TLS" | no certificate automation; template must be applied per image |
 | Admission `timed_sync` timing mode | DEFERRED | B2 product decision | 511e6e60 (post-v0.0.10) | NOT_VERIFIED | [timed-sync-semantics.md](../contracts/timed-sync-semantics.md) | frozen contract, not activated |
 | Durable local answer draft / offline client | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-012](../adr/ADR-012-candidate-recovery-contract.md) (target), [ADR-016](../adr/ADR-016-future-offline-resilient-client-data-and-recovery-model.md) (deferred), #827 (research) | research/decision stage |
-| Minimal / subset composition, per-capability toggles | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 2–4, #678 | design accepted, not implemented |
+| Minimal / bounded subset composition (static `PRODUCT_PRESET`) | SUPPORTED (static bootstrap) | standard/minimal preset, bootstrap-only | feat/678-capability-composition (#678 W2/W3) | TEST_ASSERTED + SOURCE_INSPECTED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 2–3, #678 | startup preflight (skipped while no obligation class is capability-gated — kernel fulfillment ruling); publish gate judges question material + per-exam `requireQueue` (`admission.queue`); accepted obligations stay fulfillable; Minimal web prunes authoring/nav only, obligation faces stay visible; legacy Rich questions keep an explicit Rich→Plain conversion |
+| Per-capability runtime toggles | NOT_SUPPORTED | — | — | NOT_VERIFIED | [ADR-022](../adr/ADR-022-product-capability-composition.md) Phase 4, #678 | no in-app capability switch, no revision/CAS writes |
 | Controlled/Strict high-assurance (device binding, lockdown, continuous monitoring) | NOT_SUPPORTED | — | — | NOT_VERIFIED | [#293](https://github.com/jnhu76/exam/issues/293) | umbrella tracker; #315/#316/#317 not started |
 | Multi-tenant platform | NOT_SUPPORTED | — | — | NOT_VERIFIED | [SPEC](../SPEC.md), Phase 4 roadmap | — |
 | HA / multi-instance | NOT_SUPPORTED | — | — | SOURCE_INSPECTED | runbook §16 | single API owner by design |

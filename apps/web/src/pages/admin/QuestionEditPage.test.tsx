@@ -4,9 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
+import { ProductProjectionProvider } from "@/contexts/ProductProjectionContext";
 import { QuestionEditPage } from "./QuestionEditPage";
 import { permissionsForRole } from "@exam/authz";
+import { SUPPORTED_PRODUCT_CAPABILITIES } from "@exam/domain";
+import type { ProductProjection } from "@/lib/productProjection";
 import { ApiError } from "@/lib/api";
+
+// Full Standard ceiling: these tests own REAL authoring flows (create/update
+// payloads across all five types); the projection pruning authority is
+// covered by QuestionForm.productPresentation.test.tsx.
+const standardCeiling: ProductProjection = {
+  revision: 1,
+  presentation: "standard",
+  enabled: [...SUPPORTED_PRODUCT_CAPABILITIES],
+};
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -94,13 +106,18 @@ function renderNew(apiImpl?: (...args: unknown[]) => Promise<unknown>) {
         }}
       >
         <BrandProvider>
-          <Routes>
-            <Route path="/admin/questions/new" element={<QuestionEditPage />} />
-            <Route
-              path="/admin/questions"
-              element={<div>questions list</div>}
-            />
-          </Routes>
+          <ProductProjectionProvider initialProjection={standardCeiling}>
+            <Routes>
+              <Route
+                path="/admin/questions/new"
+                element={<QuestionEditPage />}
+              />
+              <Route
+                path="/admin/questions"
+                element={<div>questions list</div>}
+              />
+            </Routes>
+          </ProductProjectionProvider>
         </BrandProvider>
       </AuthProvider>
     </MemoryRouter>,
@@ -127,16 +144,18 @@ function renderEdit() {
         }}
       >
         <BrandProvider>
-          <Routes>
-            <Route
-              path="/admin/questions/:id/edit"
-              element={<QuestionEditPage />}
-            />
-            <Route
-              path="/admin/questions"
-              element={<div>questions list</div>}
-            />
-          </Routes>
+          <ProductProjectionProvider initialProjection={standardCeiling}>
+            <Routes>
+              <Route
+                path="/admin/questions/:id/edit"
+                element={<QuestionEditPage />}
+              />
+              <Route
+                path="/admin/questions"
+                element={<div>questions list</div>}
+              />
+            </Routes>
+          </ProductProjectionProvider>
         </BrandProvider>
       </AuthProvider>
     </MemoryRouter>,

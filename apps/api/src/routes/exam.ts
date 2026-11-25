@@ -85,6 +85,7 @@ import {
   recordBestEffortAudit,
 } from "../audit/auditWriter.js";
 import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
+import { getResolvedProductConfiguration } from "../product/compositionRoot.js";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
@@ -1461,7 +1462,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             ).filter(
               (q): q is NonNullable<typeof q> => q !== null,
             ) as Question[];
-            return publishExam(repo, id, questions);
+            // ADR-022 Phase 2 (#678): the composition root's resolved
+            // configuration is consulted per call and handed to the engine
+            // freeze gate, so publish judges the current draft material
+            // against the deployment ceiling no matter which channel built
+            // the draft (authoring UI, template, direct API, republish).
+            return publishExam(
+              repo,
+              id,
+              questions,
+              getResolvedProductConfiguration(),
+            );
           },
           request,
           () => [

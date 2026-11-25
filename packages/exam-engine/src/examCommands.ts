@@ -1,9 +1,13 @@
 import type { Exam, Question, QuestionSnapshot } from "@exam/domain";
 import {
   InvalidStateTransitionError,
+  SUPPORTED_PRODUCT_CAPABILITIES,
   ValidationError,
+  deriveQuestionRequiredCapabilities,
   plainTextProjection,
   type ContentDocumentV1,
+  type ProductCapabilityId,
+  type ResolvedProductConfiguration,
 } from "@exam/domain";
 import { classifyPersistedQuestionContent } from "@exam/contracts";
 import { assertTransition } from "./examStateMachine.js";
@@ -158,13 +162,22 @@ function assertPublishableRichDocument(
 }
 
 /**
- * Publishes an exam: validates all preconditions (questions, scores, timing, policies),
- * builds the question snapshot, and transitions the exam to published status.
+ * Publishes an exam: validates all preconditions (questions, scores, timing,
+ * policies), judges the deployment product ceiling against the CURRENT
+ * question material, builds the question snapshot, and transitions the exam
+ * to published status.
+ *
+ * `deployment` is the caller-resolved product configuration (server
+ * composition root, ADR-022 D4) and is REQUIRED: publish creates NEW frozen
+ * commitments (product-capability-composition.md §7 layer 4), so a ceiling
+ * that was never handed in must fail the compile-time contract instead of
+ * silently admitting every material.
  */
 export async function publishExam(
   repo: ExamRepository,
   examId: string,
   questions: Question[],
+  deployment: ResolvedProductConfiguration,
 ): Promise<Exam> {
   const exam = await repo.findById(examId);
   if (!exam) {
@@ -307,6 +320,39 @@ export async function publishExam(
     // Any other type: publish validation is intentionally permissive here;
     // future subjective types will add their own rubric-style guard as needed.
   }
+  // ADR-022 Phase 2 (#678): publish is an authoritative new-commitment
+  // boundary, so the deployment ceiling judges the CURRENT material (the
+  // rows re-read inside the publish transaction) through the single shared
+  // derivation authority — question type and Rich slots, PLUS the exam's
+  // own admission policy: freezing `requireQueue` commits the deployment
+  // to the queue admission path for this exam's whole lifecycle, so it is
+  // judged here exactly like a material requirement. `grading.manual` is
+  // transitively enforced by the resolver's question.text_response
+  // dependency, never derived from material. Required-but-unadmitted
+  // capabilities fail closed as a typed rejection.
+  // INVARIANT (validation-before-freeze, D5.1): this gate and every
+  // per-question check above run BEFORE buildQuestionSnapshot and the single
+  // repo.update, so a rejected publish materializes no snapshot, writes no
+  // exam row, and EXSEM-004 residue cannot bypass re-acceptance.
+  const requiredCapabilities = new Set<ProductCapabilityId>();
+  for (const question of questions) {
+    for (const capability of deriveQuestionRequiredCapabilities(question)) {
+      requiredCapabilities.add(capability);
+    }
+  }
+  if (exam.controlFlags.requireQueue) {
+    requiredCapabilities.add("admission.queue");
+  }
+  const unadmitted = SUPPORTED_PRODUCT_CAPABILITIES.filter(
+    (capability) =>
+      requiredCapabilities.has(capability) && !deployment.allows(capability),
+  );
+  if (unadmitted.length > 0) {
+    throw new ValidationError(
+      `exam publish exceeds the deployment product ceiling: ${unadmitted.join(", ")}`,
+    );
+  }
+
   // INVARIANT (D5.1 validation-before-freeze): the frozen snapshot is built
   // only after every per-question trust/invariant check above passes — a
   // corrupt Rich row is never materialized into a provisional snapshot.

@@ -13,6 +13,7 @@ import { ExamLayout } from "@/components/layout/ExamLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
 import { DateTimeProvider } from "@/contexts/DateTimeContext";
+import { ProductProjectionProvider } from "@/contexts/ProductProjectionContext";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { getDocumentTitle } from "@/lib/pageMeta";
 import { LoginPage } from "@/pages/LoginPage";
@@ -184,9 +185,14 @@ export default function App() {
         <BrandProvider loadRemote>
           <AuthProvider restoreSession>
             <DateTimeProvider>
-              <AppTitle />
-              <AppRoutes />
-              <Toaster />
+              {/* Deployment product ceiling (ADR-022 Phase 3): one fetch for
+                the whole shell; consumers prune NEW-commitment surfaces via
+                allows(). Obligation faces never consult it. */}
+              <ProductProjectionProvider>
+                <AppTitle />
+                <AppRoutes />
+                <Toaster />
+              </ProductProjectionProvider>
             </DateTimeProvider>
           </AuthProvider>
         </BrandProvider>

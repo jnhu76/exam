@@ -26,31 +26,37 @@ export type ProductCapabilityId =
   (typeof SUPPORTED_PRODUCT_CAPABILITIES)[number];
 
 /**
- * Phase 1 deliberately admits only the shipped Standard configuration.
- * Minimal is an ACCEPTED design preset, not a selectable runtime until
- * Phase 2's server write guards and Phase 3's UI/obligation proof exist.
+ * Phase 1 shipped the Standard configuration; Phase 2 added BOUNDED subsets
+ * of it (ADR-022 authoritative write guards); Phase 3 adds the Minimal
+ * preset (ADR-022 "Presets accepted for initial design") as the second
+ * static bootstrap configuration. The preset name only picks a canonical
+ * default configuration and its presentation; it is never a runtime
+ * semantic discriminator after resolution.
  *
  * Every field is a closed literal so an internal TypeScript caller cannot
  * construct a configuration the resolver would reject. External input stays
  * `unknown` at the resolver boundary because JSON/config/deployment sources
  * are not type-checked.
  */
+export type ProductPreset = "standard" | "minimal";
+export type ProductPresentation = "standard" | "minimal";
+
 export type DeploymentProductConfiguration = Readonly<{
-  preset: "standard";
+  preset: ProductPreset;
   revision: 1;
-  presentation: "standard";
+  presentation: ProductPresentation;
   enabled: readonly ProductCapabilityId[];
 }>;
 
 export interface ResolvedProductConfiguration {
   /**
-   * Catalog/configuration FORMAT revision for the Phase 1 static Standard
+   * Catalog/configuration FORMAT revision for the static deployment
    * configuration. It is NOT a deployment-configuration state revision and
    * MUST NOT be used as an optimistic-concurrency token; Phase 4 introduces
    * transactional revisions when persisted configuration writes exist.
    */
   readonly revision: 1;
-  readonly presentation: "standard";
+  readonly presentation: ProductPresentation;
   readonly enabled: readonly ProductCapabilityId[];
   /**
    * Product availability only: may this deployment make a NEW product
@@ -71,14 +77,60 @@ export const STANDARD_PRODUCT_CONFIGURATION = Object.freeze({
   enabled: SUPPORTED_PRODUCT_CAPABILITIES,
 } as const satisfies DeploymentProductConfiguration);
 
+/**
+ * ADR-022 Phase 3 Minimal preset (product-capability-composition.md §10
+ * table, row by row): single_choice + true_false + Plain text_response with
+ * basic manual grading (the §5 dependency), account admission ("当前
+ * Account + Candidate") and the existing result publication authority.
+ * `multiple_choice` stays opt-in ("可批准"), `fill_blank` is not listed, the
+ * three Rich slots stay off ("默认 Plain；不要求 Rich editor"),
+ * `admission.queue` stays off ("默认不要求 queue") and `operator.monitoring`
+ * stays off ("不要求数字监考"). Pending manual/recovery/incident work
+ * remaining reachable is a §4.4 presentation obligation, NOT an entry in
+ * this set.
+ */
+const MINIMAL_ENABLED = Object.freeze([
+  "question.single_choice",
+  "question.true_false",
+  "question.text_response",
+  "grading.manual",
+  "admission.account",
+  "result.publication",
+] as const satisfies readonly ProductCapabilityId[]);
+
+export const MINIMAL_PRODUCT_CONFIGURATION = Object.freeze({
+  preset: "minimal",
+  revision: 1,
+  presentation: "minimal",
+  enabled: MINIMAL_ENABLED,
+} as const satisfies DeploymentProductConfiguration);
+
 const supported = new Set<string>(SUPPORTED_PRODUCT_CAPABILITIES);
 const configFields = new Set(["preset", "revision", "presentation", "enabled"]);
 
 /**
- * Pure, deterministic, fail-closed resolver. It intentionally DOES NOT accept
- * a subset of Standard yet: without Phase 2's authoritative CRUD/import/
- * publish guards, treating a disabled capability as effective would be a lie.
- * No DB state, environment variables, permissions or UI flags enter here.
+ * Each preset owns exactly one canonical presentation; a configuration
+ * claiming the other pairing is incoherent and fails closed. This is a
+ * validation pairing only — there is no runtime branch on the preset name
+ * after resolution (§6: consumers read `allows()`/projection, never the
+ * preset name).
+ */
+const PRESENTATION_BY_PRESET: Record<ProductPreset, ProductPresentation> = {
+  standard: "standard",
+  minimal: "minimal",
+};
+
+/**
+ * Pure, deterministic, fail-closed resolver (ADR-022 Phase 2/3). Accepts the
+ * full Standard catalog, any guarded subset of it, or the Minimal preset
+ * configuration. `enabled` lists the capabilities this deployment may make
+ * NEW commitments with; every omitted catalog capability is disabled at the
+ * authoritative write boundaries. Fail-closed invariants are unchanged:
+ * unknown/future names, duplicates, structural violations, unshipped
+ * presets and preset/presentation mismatches never resolve. In-catalog
+ * dependency: subjective questions cannot be enabled without their manual
+ * completion path. No DB state, environment variables, permissions or UI
+ * flags enter here.
  */
 export function resolveDeploymentProductConfiguration(
   input: unknown,
@@ -94,12 +146,19 @@ export function resolveDeploymentProductConfiguration(
   ) {
     throw new Error("Unknown or missing product configuration field");
   }
-  if (
-    raw.preset !== "standard" ||
-    raw.revision !== 1 ||
-    raw.presentation !== "standard"
-  ) {
-    throw new Error("Product preset, revision or presentation not supported");
+  if (raw.revision !== 1) {
+    throw new Error("Product configuration revision not supported");
+  }
+  if (raw.preset !== "standard" && raw.preset !== "minimal") {
+    throw new Error(
+      "Product preset not supported: standard and minimal are the shipped presets",
+    );
+  }
+  const preset = raw.preset;
+  if (raw.presentation !== PRESENTATION_BY_PRESET[preset]) {
+    throw new Error(
+      `Product presentation must be "${PRESENTATION_BY_PRESET[preset]}" for preset "${preset}"`,
+    );
   }
   if (!Array.isArray(raw.enabled)) {
     throw new Error("Product capability list must be an array");
@@ -115,19 +174,26 @@ export function resolveDeploymentProductConfiguration(
     }
     seen.add(value);
   }
-  if (seen.size !== supported.size) {
+  if (seen.has("question.text_response") && !seen.has("grading.manual")) {
+    // product-capability-composition.md §5: 不能开启主观题却关闭其
+    // completion path. The message names the missing dependency so a broken
+    // deployment fails with an actionable cause.
     throw new Error(
-      "Partial product configurations require authoritative write guards",
+      "question.text_response requires grading.manual (a deployment cannot enable subjective questions without their manual completion path)",
     );
   }
 
-  // Stable catalog order, independent of caller ordering; no exposed mutable
-  // set, and no runtime branch on the preset name after resolution.
-  const enabled = Object.freeze([...SUPPORTED_PRODUCT_CAPABILITIES]);
+  // Stable catalog-order projection of the VALIDATED subset, independent of
+  // caller ordering; a disabled capability must never appear as effective.
+  // No exposed mutable set, and no runtime branch on the preset name after
+  // resolution.
+  const enabled = Object.freeze(
+    SUPPORTED_PRODUCT_CAPABILITIES.filter((capability) => seen.has(capability)),
+  );
   const allowed = new Set<string>(enabled);
   return Object.freeze({
     revision: 1 as const,
-    presentation: "standard" as const,
+    presentation: PRESENTATION_BY_PRESET[preset],
     enabled,
     allows(capability: ProductCapabilityId): boolean {
       return allowed.has(capability);

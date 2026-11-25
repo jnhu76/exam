@@ -13,18 +13,30 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
- * EXSEM-014 lifecycle-state write boundary — permanent counterfactual
- * regression gate for the two name-anchored write funnels
- * (EXSEM014_LIFECYCLE_STATE_SEAM / EXSEM014_ASSIGNMENT_REVOKE_FUNNEL).
+ * Lifecycle write-funnel boundary — permanent counterfactual regression
+ * gate for the four name-anchored write funnels in
+ * config/architecture-policy.mjs:
  *
- * Lifecycle state columns (`status`, `gradingStatus`) are written only
- * through the engine command funnel (EXSEM-014; ADR-005
- * lock-reconcile-assert-mutate). The repo layer narrows the generic
- * `update` input and exposes the named `updateIncludingLifecycleState`
- * seam; `pnpm lint:arch` anchors the seam (and the assignment-revoke
- * funnel) to a reviewed file allowlist so a future route or script that
- * grabs a repo handle cannot silently acquire a lifecycle writer. This
- * suite converts that rule into tests:
+ *   - EXSEM014_LIFECYCLE_STATE_SEAM / EXSEM014_ASSIGNMENT_REVOKE_FUNNEL —
+ *     lifecycle state columns (`status`, `gradingStatus`) are written only
+ *     through the engine command funnel (EXSEM-014; ADR-005
+ *     lock-reconcile-assert-mutate). The repo layer narrows the generic
+ *     `update` input and exposes the named `updateIncludingLifecycleState`
+ *     seam;
+ *   - EXSEM007_ANSWER_RECEIPT_FUNNEL /
+ *     EXSEM007_ANSWER_SAVE_RECEIPT_FUNNEL — answer save receipts are the
+ *     idempotency ledger of the draft-answer acceptance protocol
+ *     (EXSEM-007); the adapter method `appendAnswerReceipt` is issued only
+ *     inside the answer save protocol's one-transaction commit
+ *     (answerProtocol.ts, #669), and the repository method
+ *     `appendAnswerSaveReceipt` is only called by the ctx-binding adapter
+ *     (repoAdapters.ts) on the protocol's behalf (#678 r3 §8 first static
+ *     gate: ordinary AND optional-chained route calls must be rejected).
+ *
+ * `pnpm lint:arch` anchors each funnel to a reviewed file allowlist so a
+ * future route or script that grabs a repo or adapter handle cannot
+ * silently acquire one of these writers. This suite converts the rules
+ * into tests:
  *
  *   - the policy table is pinned (rule names, member-call anchored
  *     patterns, exact allowlists), so shrinking a list or renaming a
@@ -59,11 +71,17 @@ const CHECKER_PATH = join(REPO_ROOT, "scripts", "check-architecture.mjs");
 
 const SEAM_RULE = "EXSEM014_LIFECYCLE_STATE_SEAM";
 const REVOKE_RULE = "EXSEM014_ASSIGNMENT_REVOKE_FUNNEL";
+const RECEIPT_RULE = "EXSEM007_ANSWER_RECEIPT_FUNNEL";
+const SAVE_RECEIPT_RULE = "EXSEM007_ANSWER_SAVE_RECEIPT_FUNNEL";
 
 /**
  * The ratified allowlists, hardcoded as the normative expectation on
  * purpose: the test must fail if a rule silently grows or loses a
- * reviewed caller (or if a list is deleted outright).
+ * reviewed caller (or if a list is deleted outright). The receipt
+ * funnels are allowlisted per owner — the adapter method's only caller
+ * is the answer save protocol, the repository method's only caller is
+ * the ctx-binding adapter — so neither owner's file may appear in the
+ * other rule's list.
  */
 const SEAM_ALLOWED = [
   "apps/api/src/adapters/repoAdapters.ts",
@@ -74,6 +92,8 @@ const REVOKE_ALLOWED = [
   "apps/api/src/routes/teacherAssignments.admin.ts",
   "apps/api/src/routes/graderAssignments.admin.ts",
 ];
+const RECEIPT_ALLOWED = ["packages/exam-engine/src/answerProtocol.ts"];
+const SAVE_RECEIPT_ALLOWED = ["apps/api/src/adapters/repoAdapters.ts"];
 
 interface LifecycleStateWriteRule {
   readonly rule: string;
@@ -101,16 +121,25 @@ function violationsFor(path: string, text: string): string[] {
   return policy.lifecycleStateWriteViolations([{ path, text }]);
 }
 
-describe("policy table pins the EXSEM-014 write funnels", () => {
-  it("declares exactly the two anchored rules with their allowlists", () => {
-    expect(policy.LIFECYCLE_STATE_WRITE_RULES).toHaveLength(2);
-    const [seam, revoke] = policy.LIFECYCLE_STATE_WRITE_RULES;
+describe("policy table pins the EXSEM-014 and EXSEM-007 write funnels", () => {
+  it("declares exactly the four anchored rules with their allowlists", () => {
+    expect(policy.LIFECYCLE_STATE_WRITE_RULES).toHaveLength(4);
+    const [seam, revoke, receipt, saveReceipt] =
+      policy.LIFECYCLE_STATE_WRITE_RULES;
     expect(seam?.rule).toBe(SEAM_RULE);
     expect(seam?.pattern.source).toContain("updateIncludingLifecycleState");
     expect([...(seam?.allowedFiles ?? [])]).toEqual([...SEAM_ALLOWED]);
     expect(revoke?.rule).toBe(REVOKE_RULE);
     expect(revoke?.pattern.source).toContain("revokeAssignment");
     expect([...(revoke?.allowedFiles ?? [])]).toEqual([...REVOKE_ALLOWED]);
+    expect(receipt?.rule).toBe(RECEIPT_RULE);
+    expect(receipt?.pattern.source).toContain("appendAnswerReceipt");
+    expect([...(receipt?.allowedFiles ?? [])]).toEqual([...RECEIPT_ALLOWED]);
+    expect(saveReceipt?.rule).toBe(SAVE_RECEIPT_RULE);
+    expect(saveReceipt?.pattern.source).toContain("appendAnswerSaveReceipt");
+    expect([...(saveReceipt?.allowedFiles ?? [])]).toEqual([
+      ...SAVE_RECEIPT_ALLOWED,
+    ]);
   });
 
   it("scans every server-side source root", () => {
@@ -146,6 +175,35 @@ describe("synthetic route-shaped witnesses are violations", () => {
     return toAssignmentResponse(revoked);
   });
   `;
+  // #678 r3 §8 first static gate: a route that grabs the attempt adapter or
+  // repo handle and issues a save receipt directly — outside the answer save
+  // protocol's one-transaction commit (EXSEM-007 / #669) — is the bypass
+  // shape the receipt funnels exist to surface.
+  const ROUTE_RECEIPT_WITNESS = `
+  fastify.post("/attempts/:id/answers", async (request, reply) => {
+    const adapter = createAttemptRepoAdapter(fastify.db);
+    await adapter.appendAnswerReceipt(ctx, request.params.id, request.body);
+    return { saved: true };
+  });
+  `;
+  const ROUTE_SAVE_RECEIPT_WITNESS = `
+  fastify.post("/attempts/:id/answer-receipts", async (request, reply) => {
+    const repo = createAttemptRepo(fastify.db);
+    await repo.appendAnswerSaveReceipt(ctx, {
+      attemptId: request.params.id,
+      questionId: request.body.questionId,
+      clientSeq: request.body.clientSeq,
+    });
+    return { ok: true };
+  });
+  `;
+  const ROUTE_OPTIONAL_CHAIN_SAVE_RECEIPT_WITNESS = `
+  fastify.post("/attempts/:id/answer-receipts", async (request, reply) => {
+    const repo = maybeAttemptRepo(fastify.db);
+    await repo?.appendAnswerSaveReceipt(ctx, { attemptId: request.params.id });
+    return { ok: true };
+  });
+  `;
 
   it("a route-shaped direct seam write is a SEAM violation", () => {
     const findings = violationsFor(
@@ -166,6 +224,34 @@ describe("synthetic route-shaped witnesses are violations", () => {
     expect(findings[0]).toContain(REVOKE_RULE);
   });
 
+  it("a route-shaped direct adapter receipt call is a RECEIPT violation", () => {
+    const findings = violationsFor(
+      "apps/api/src/routes/synthetic.route.ts",
+      ROUTE_RECEIPT_WITNESS,
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain("apps/api/src/routes/synthetic.route.ts");
+    expect(findings[0]).toContain(RECEIPT_RULE);
+  });
+
+  it("a route-shaped direct repository save-receipt call is a SAVE_RECEIPT violation", () => {
+    const findings = violationsFor(
+      "apps/api/src/routes/synthetic.route.ts",
+      ROUTE_SAVE_RECEIPT_WITNESS,
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain(SAVE_RECEIPT_RULE);
+  });
+
+  it("an optional-chained save-receipt call is a SAVE_RECEIPT violation (#678 r3 §8)", () => {
+    const findings = violationsFor(
+      "apps/api/src/routes/synthetic.route.ts",
+      ROUTE_OPTIONAL_CHAIN_SAVE_RECEIPT_WITNESS,
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain(SAVE_RECEIPT_RULE);
+  });
+
   it("both witnesses together produce both findings", () => {
     const findings = violationsFor(
       "apps/api/src/orchestrators/synthetic.ts",
@@ -176,6 +262,16 @@ describe("synthetic route-shaped witnesses are violations", () => {
     expect(findings.map((f) => f).join("\n")).toContain(REVOKE_RULE);
   });
 
+  it("both receipt witnesses together produce both receipt findings", () => {
+    const findings = violationsFor(
+      "apps/api/src/orchestrators/synthetic.ts",
+      `${ROUTE_RECEIPT_WITNESS}\n${ROUTE_SAVE_RECEIPT_WITNESS}`,
+    );
+    expect(findings).toHaveLength(2);
+    expect(findings.map((f) => f).join("\n")).toContain(RECEIPT_RULE);
+    expect(findings.map((f) => f).join("\n")).toContain(SAVE_RECEIPT_RULE);
+  });
+
   it("the as-built compliant call sites are not findings", () => {
     for (const file of SEAM_ALLOWED) {
       expect(violationsFor(file, ROUTE_SEAM_WITNESS), file).toEqual([]);
@@ -183,6 +279,30 @@ describe("synthetic route-shaped witnesses are violations", () => {
     for (const file of REVOKE_ALLOWED) {
       expect(violationsFor(file, ROUTE_REVOKE_WITNESS), file).toEqual([]);
     }
+    for (const file of RECEIPT_ALLOWED) {
+      expect(violationsFor(file, ROUTE_RECEIPT_WITNESS), file).toEqual([]);
+    }
+    for (const file of SAVE_RECEIPT_ALLOWED) {
+      expect(violationsFor(file, ROUTE_SAVE_RECEIPT_WITNESS), file).toEqual([]);
+    }
+  });
+
+  it("each receipt allowlist names only its own owner", () => {
+    // repoAdapters.ts owns appendAnswerSaveReceipt, answerProtocol.ts owns
+    // appendAnswerReceipt — neither file is a blanket exemption for the
+    // other receipt method.
+    expect(
+      violationsFor(
+        "apps/api/src/adapters/repoAdapters.ts",
+        ROUTE_RECEIPT_WITNESS,
+      ),
+    ).toHaveLength(1);
+    expect(
+      violationsFor(
+        "packages/exam-engine/src/answerProtocol.ts",
+        ROUTE_SAVE_RECEIPT_WITNESS,
+      ),
+    ).toHaveLength(1);
   });
 
   it("definitions and prose mentions are not member-call matches", () => {
@@ -202,6 +322,21 @@ describe("synthetic route-shaped witnesses are violations", () => {
     expect(
       violationsFor("packages/db/src/repository/syntheticRepo.ts", defs),
     ).toEqual([]);
+    const receiptDefs = [
+      // engine port declaration (attemptCommands.ts shape)
+      "  appendAnswerReceipt(attemptId: string, receipt: AnswerReceipt): Promise<void>;",
+      // repo method definition (attemptRepo.ts shape) and adapter property
+      // definition (repoAdapters.ts shape) — no member-call dot
+      "  async appendAnswerSaveReceipt(ctx, input) {",
+      "  appendAnswerReceipt: async (attemptId, receipt) => {",
+      "// see appendAnswerSaveReceipt docs",
+    ].join("\n");
+    expect(
+      violationsFor("packages/db/src/repository/syntheticRepo.ts", receiptDefs),
+    ).toEqual([]);
+    expect(
+      violationsFor("apps/api/src/adapters/syntheticAdapter.ts", receiptDefs),
+    ).toEqual([]);
   });
 
   it("is textual: a comment carrying the call shape does match", () => {
@@ -211,6 +346,15 @@ describe("synthetic route-shaped witnesses are violations", () => {
     );
     expect(findings).toHaveLength(1);
     expect(findings[0]).toContain(REVOKE_RULE);
+  });
+
+  it("is textual: a comment carrying a receipt call shape does match", () => {
+    const findings = violationsFor(
+      "apps/api/src/routes/synthetic.route.ts",
+      "// repo.appendAnswerSaveReceipt(ctx, { attemptId }); — example",
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toContain(SAVE_RECEIPT_RULE);
   });
 
   it("test files stay exempt from the boundary", () => {
@@ -224,6 +368,18 @@ describe("synthetic route-shaped witnesses are violations", () => {
       violationsFor(
         "packages/db/src/repository/testHelpers.ts",
         ROUTE_REVOKE_WITNESS,
+      ),
+    ).toEqual([]);
+    expect(
+      violationsFor(
+        "apps/api/src/adapters/repoAdapters.test.ts",
+        ROUTE_SAVE_RECEIPT_WITNESS,
+      ),
+    ).toEqual([]);
+    expect(
+      violationsFor(
+        "packages/exam-engine/src/attemptMutation.testHelpers.ts",
+        ROUTE_RECEIPT_WITNESS,
       ),
     ).toEqual([]);
   });
@@ -370,6 +526,30 @@ describe("real lint:arch entry rejects the witnesses (disposable worktree)", () 
     expect(run.code, run.stderr).toBe(1);
     expect(run.stderr).toContain("apps/api/src/routes/exam.ts");
     expect(run.stderr).toContain(REVOKE_RULE);
+    git(["checkout", "--", "apps/api/src/routes/exam.ts"], worktree);
+  }, 60_000);
+
+  it("a route-shaped adapter receipt call fails as EXSEM007_ANSWER_RECEIPT_FUNNEL", async () => {
+    await appendWitness(
+      "apps/api/src/routes/exam.ts",
+      `void fakeAttemptAdapter.appendAnswerReceipt("x", { version: 1 });`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("apps/api/src/routes/exam.ts");
+    expect(run.stderr).toContain(RECEIPT_RULE);
+    git(["checkout", "--", "apps/api/src/routes/exam.ts"], worktree);
+  }, 60_000);
+
+  it("a route-shaped repository save-receipt call fails as EXSEM007_ANSWER_SAVE_RECEIPT_FUNNEL", async () => {
+    await appendWitness(
+      "apps/api/src/routes/exam.ts",
+      `void fakeRepo.appendAnswerSaveReceipt(ctx, { attemptId: "x" });`,
+    );
+    const run = runChecker();
+    expect(run.code, run.stderr).toBe(1);
+    expect(run.stderr).toContain("apps/api/src/routes/exam.ts");
+    expect(run.stderr).toContain(SAVE_RECEIPT_RULE);
     git(["checkout", "--", "apps/api/src/routes/exam.ts"], worktree);
   }, 60_000);
 

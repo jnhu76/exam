@@ -3,6 +3,7 @@ import {
   SUPPORTED_PRODUCT_CAPABILITIES,
   STANDARD_PRODUCT_CONFIGURATION,
   resolveDeploymentProductConfiguration,
+  type ProductCapabilityId,
 } from "./productCapabilities.js";
 
 describe("ADR-022 Phase 1 — Standard product resolver", () => {
@@ -67,23 +68,6 @@ describe("ADR-022 Phase 1 — Standard product resolver", () => {
     }
   });
 
-  it("rejects partial configuration before guarded writes exist", () => {
-    expect(() =>
-      resolveDeploymentProductConfiguration({
-        ...STANDARD_PRODUCT_CONFIGURATION,
-        enabled: SUPPORTED_PRODUCT_CAPABILITIES.filter(
-          (capability) => capability !== "grading.manual",
-        ),
-      }),
-    ).toThrow("authoritative write guards");
-    expect(() =>
-      resolveDeploymentProductConfiguration({
-        ...STANDARD_PRODUCT_CONFIGURATION,
-        enabled: [],
-      }),
-    ).toThrow("authoritative write guards");
-  });
-
   it("refuses duplicate capabilities and invalid input structure", () => {
     expect(() =>
       resolveDeploymentProductConfiguration({
@@ -125,5 +109,100 @@ describe("ADR-022 Phase 1 — Standard product resolver", () => {
       "presentation",
       "revision",
     ]);
+  });
+});
+
+/**
+ * ADR-022 Phase 2: with the authoritative write guards in place, a bounded
+ * subset of Standard is a legal deployment configuration. This describe
+ * supersedes the Phase 1 contract "partial configurations require
+ * authoritative write guards", which was removed once the guards existed
+ * (question write boundary); the fail-closed surface above (unknown/
+ * duplicate/structure) is unchanged.
+ */
+describe("ADR-022 Phase 2 — guarded bounded configurations", () => {
+  /** Standard minus the capabilities the guard tests disable. */
+  const BOUNDED_SUBSET: readonly ProductCapabilityId[] =
+    SUPPORTED_PRODUCT_CAPABILITIES.filter(
+      (capability) =>
+        capability !== "question.multiple_choice" &&
+        capability !== "content.prompt.rich" &&
+        capability !== "content.option.rich" &&
+        capability !== "answer.text.rich",
+    );
+
+  it("resolves a subset of Standard into a bounded ceiling", () => {
+    const resolved = resolveDeploymentProductConfiguration({
+      ...STANDARD_PRODUCT_CONFIGURATION,
+      enabled: BOUNDED_SUBSET,
+    });
+    expect(resolved.revision).toBe(1);
+    expect(resolved.presentation).toBe("standard");
+    expect(resolved.allows("question.single_choice")).toBe(true);
+    expect(resolved.allows("question.text_response")).toBe(true);
+    expect(resolved.allows("grading.manual")).toBe(true);
+    expect(resolved.allows("question.multiple_choice")).toBe(false);
+    expect(resolved.allows("content.prompt.rich")).toBe(false);
+    expect(resolved.allows("content.option.rich")).toBe(false);
+    expect(resolved.allows("answer.text.rich")).toBe(false);
+  });
+
+  it("projects enabled as the validated subset in catalog order", () => {
+    // Caller ordering is normalized away, and the projection is the SUBSET —
+    // returning the full catalog for a bounded configuration would present a
+    // disabled capability as effective (the lie Phase 1's resolver comment
+    // warns about).
+    const resolved = resolveDeploymentProductConfiguration({
+      ...STANDARD_PRODUCT_CONFIGURATION,
+      enabled: [...BOUNDED_SUBSET].reverse(),
+    });
+    expect(resolved.enabled).toEqual(BOUNDED_SUBSET);
+    expect(resolved.enabled).not.toEqual(SUPPORTED_PRODUCT_CAPABILITIES);
+    for (const capability of SUPPORTED_PRODUCT_CAPABILITIES) {
+      expect(resolved.allows(capability)).toBe(
+        BOUNDED_SUBSET.includes(capability),
+      );
+    }
+  });
+
+  it("keeps the Standard full catalog projection unchanged", () => {
+    // Behavior-equivalence gate (ADR-022 :252): the full-Standard resolution
+    // keeps projecting the entire catalog in catalog order.
+    const resolved = resolveDeploymentProductConfiguration(
+      STANDARD_PRODUCT_CONFIGURATION,
+    );
+    expect(resolved.enabled).toEqual(SUPPORTED_PRODUCT_CAPABILITIES);
+  });
+
+  it("rejects question.text_response without its manual completion path", () => {
+    // product-capability-composition.md §5: 不能开启主观题却关闭其 completion
+    // path. The failure must name the missing dependency, not the generic
+    // partial-configuration guard.
+    expect(() =>
+      resolveDeploymentProductConfiguration({
+        ...STANDARD_PRODUCT_CONFIGURATION,
+        enabled: SUPPORTED_PRODUCT_CAPABILITIES.filter(
+          (capability) =>
+            capability !== "grading.manual" &&
+            capability !== "content.prompt.rich" &&
+            capability !== "content.option.rich" &&
+            capability !== "answer.text.rich",
+        ),
+      }),
+    ).toThrow(/grading\.manual/);
+  });
+
+  it("accepts an empty bounded configuration with every capability disabled", () => {
+    // An all-disabled deployment is legal: the semantic kernel (lifecycle,
+    // grading, result authority, operator work) is not a product capability,
+    // and the write boundaries reject every NEW product commitment.
+    const resolved = resolveDeploymentProductConfiguration({
+      ...STANDARD_PRODUCT_CONFIGURATION,
+      enabled: [],
+    });
+    expect(resolved.enabled).toEqual([]);
+    for (const capability of SUPPORTED_PRODUCT_CAPABILITIES) {
+      expect(resolved.allows(capability)).toBe(false);
+    }
   });
 });
